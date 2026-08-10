@@ -1,0 +1,55 @@
+[ai]
+# AI / NLP
+openai>=1.0.0
+langchain>=0.2.0
+langchain-openai>=0.1.0
+langchain-community>=0.2.0
+langchain-core>=0.2.0
+chromadb>=0.5.0
+pytesseract>=0.3.10
+pdf2image>=1.16.3
+Pillow>=10.0.0
+whisper==1.0
+gTTS>=2.5.0
+
+[browser-use]
+# Browser automation
+selenium>=4.0.0
+
+[core]
+# Core
+fastapi>=0.110.0
+uvicorn[standard]>=0.29.0
+pydantic>=2.0.0
+pydantic-settings>=2.0.0
+pydantic[email]>=2.0.0
+python-jose[cryptography]>=3.3.0
+passlib[bcrypt]>=4.1.0
+python-multipart>=0.0.9
+aiofiles>=23.0.0
+httpx>=0.27.0
+
+[database]
+# Database
+SQLAlchemy>=2.0.0
+asyncpg>=0.29.0
+psycopg2-binary>=2.9.0
+alembic>=1.13.0
+
+[cache]
+# Redis
+redis>=5.0.0
+aioredis>=2.0.0
+
+[celery]
+# Background tasks
+celery>=5.3.0
+
+[dev]
+# Development
+pytest>=8.0.0
+pytest-asyncio>=0.23.0
+httpx>=0.27.0
+black>=24.0.0
+ruff>=0.4.0
+mypy>=1.0.0

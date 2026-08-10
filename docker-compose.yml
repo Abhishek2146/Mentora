@@ -1,0 +1,84 @@
+version: "3.8"
+
+services:
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: ../docker/frontend.Dockerfile
+    container_name: mentora_frontend
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://backend:8000
+      - NEXT_PUBLIC_APP_NAME=Mentora
+    depends_on:
+      - backend
+    networks:
+      - mentora-network
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: ../docker/backend.Dockerfile
+    container_name: mentora_backend
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    volumes:
+      - ./uploads:/app/uploads
+      - ./chromadb:/app/chromadb
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - mentora-network
+
+  postgres:
+    image: postgres:15-alpine
+    container_name: mentora_postgres
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_USER=mentora
+      - POSTGRES_PASSWORD=mentora123
+      - POSTGRES_DB=mentora
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - mentora-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: mentora_redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    networks:
+      - mentora-network
+
+  nginx:
+    image: nginx:alpine
+    container_name: mentora_nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./docker/nginx.conf:/etc/nginx/nginx.conf
+      - ./uploads:/app/uploads:ro
+    depends_on:
+      - frontend
+      - backend
+    networks:
+      - mentora-network
+
+volumes:
+  postgres_data:
+
+networks:
+  mentora-network:
+    driver: bridge
