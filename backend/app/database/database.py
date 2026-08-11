@@ -30,18 +30,13 @@ Base = declarative_base()
 
 
 async def init_db():
-    """Initialize database - create tables if using SQLite, ensure connection for PostgreSQL."""
-    if "sqlite" in settings.DATABASE_URL:
+    """Initialize database - create tables for both SQLite and PostgreSQL."""
+    try:
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
-        logger.info("SQLite database tables created")
-    else:
-        try:
-            conn = await asyncpg.connect(settings.DATABASE_URL)
-            await conn.close()
-            logger.info("PostgreSQL database connection successful")
-        except Exception as e:
-            logger.error(f"Database connection failed: {e}")
+        logger.info("Database tables initialized successfully")
+    except Exception as e:
+        logger.error(f"Database initialization/connection check failed: {e}")
 
 
 async def get_db() -> AsyncSession:

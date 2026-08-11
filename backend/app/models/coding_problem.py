@@ -53,6 +53,7 @@
 #     class Config:
 #         from_attributes = True
 
+
 """
 Coding Problem models
 """
@@ -291,3 +292,4 @@ class CodingSubmission(BaseModel):
         "User",
         backref="coding_submissions",
     )
+

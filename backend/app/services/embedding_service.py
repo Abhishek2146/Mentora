@@ -16,14 +16,25 @@ logger = get_logger(__name__)
 
 class EmbeddingService:
     def __init__(self):
-        self.embeddings = OpenAIEmbeddings(
-            api_key=settings.OPENAI_API_KEY,
-            model="text-embedding-3-small",
-        )
+        self._embeddings = None
         self.text_splitter = RecursiveCharacterTextSplitter(
             chunk_size=1000,
             chunk_overlap=200,
         )
+
+    @property
+    def embeddings(self):
+        if self._embeddings is None:
+            if not settings.OPENAI_API_KEY or settings.OPENAI_API_KEY.startswith("your_"):
+                raise RuntimeError(
+                    "OPENAI_API_KEY is not configured. "
+                    "Add it to your backend .env file before using AI features."
+                )
+            self._embeddings = OpenAIEmbeddings(
+                api_key=settings.OPENAI_API_KEY,
+                model="text-embedding-3-small",
+            )
+        return self._embeddings
 
     def split_text(self, text: str) -> List[Document]:
         """Split text into chunks for embedding."""
@@ -39,4 +50,4 @@ class EmbeddingService:
 
     def get_embeddings(self, texts: List[str]) -> List[List[float]]:
         """Generate embeddings for multiple texts."""
-        return self.embeddings.embed_queries(texts)
+        return self.embeddings.embed_documents(texts)

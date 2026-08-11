@@ -15,24 +15,7 @@ from app.core.logger import get_logger
 logger = get_logger(__name__)
 
 
-class EmbeddingService:
-    def __init__(self):
-        self.embeddings = OpenAIEmbeddings(
-            api_key=settings.OPENAI_API_KEY,
-            model="text-embedding-3-small",
-        )
-        self.text_splitter = RecursiveCharacterTextSplitter(
-            chunk_size=1000,
-            chunk_overlap=200,
-        )
-
-    def split_text(self, text: str) -> List[Document]:
-        """Split text into chunks for embedding."""
-        return self.text_splitter.create_documents([text])
-
-    def get_embedding(self, text: str) -> List[float]:
-        """Generate embedding for a single text."""
-        return self.embeddings.embed_query(text)
+from app.services.embedding_service import EmbeddingService
 
 
 class VectorService:

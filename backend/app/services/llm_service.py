@@ -5,7 +5,7 @@ import json
 from typing import Optional, Dict, Any, List
 
 from langchain_openai import ChatOpenAI
-from langchain_core.prompts import ChatPromptTemplate, SystemMessagePromptTemplate, HumanMessagePromptTemplate
+from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 
 from app.core.config import settings
@@ -15,15 +15,41 @@ logger = get_logger(__name__)
 
 
 class LLMService:
+    """
+    Service for interacting with OpenAI models.
+
+    The OpenAI client is initialized lazily so that the
+    backend can start even when OPENAI_API_KEY is not
+    configured.
+    """
+
     def __init__(self):
-        self.api_key = settings.OPENAI_API_KEY
-        self.model = ChatOpenAI(
-            api_key=self.api_key,
-            model_name="gpt-4-turbo-preview",
-            temperature=0.7,
-            max_tokens=4096,
-        )
+        self.model: Optional[ChatOpenAI] = None
         self.parser = StrOutputParser()
+
+    def _get_model(self, temperature: float = 0.7) -> ChatOpenAI:
+        """
+        Initialize the OpenAI model only when it is needed.
+        """
+        if self.model is None:
+            if not settings.OPENAI_API_KEY or settings.OPENAI_API_KEY.startswith("your_"):
+                raise RuntimeError(
+                    "OPENAI_API_KEY is not configured. "
+                    "Add it to your backend .env file before using AI features."
+                )
+
+            self.model = ChatOpenAI(
+                model="gpt-4o-mini",
+                api_key=settings.OPENAI_API_KEY,
+                temperature=temperature,
+            )
+        return self.model
+
+    async def generate(self, prompt: str) -> str:
+        """Generate a response from the LLM."""
+        model = self._get_model()
+        response = await model.ainvoke(prompt)
+        return response.content
 
     async def parse_syllabus_content(self, text: str) -> dict:
         """Parse syllabus text into structured data using LLM."""
@@ -49,15 +75,12 @@ You are an expert educational content analyzer. Extract the following informatio
 }
 """
         human_prompt = f"Parse this syllabus content:\n\n{text}"
-
         prompt = ChatPromptTemplate.from_messages([
             ("system", system_prompt),
             ("human", human_prompt),
         ])
-
-        chain = prompt | self.model | self.parser
+        chain = prompt | self._get_model() | self.parser
         result = await chain.ainvoke({})
-
         try:
             return json.loads(result.replace("```json", "").replace("```", "").strip())
         except json.JSONDecodeError:
@@ -78,15 +101,12 @@ from the given content at {difficulty} difficulty. Each question should have:
 Return as JSON array.
 """
         human_prompt = f"Generate questions from:\n\n{content}"
-
         prompt = ChatPromptTemplate.from_messages([
             ("system", system_prompt),
             ("human", human_prompt),
         ])
-
-        chain = prompt | self.model | self.parser
+        chain = prompt | self._get_model() | self.parser
         result = await chain.ainvoke({})
-
         try:
             return json.loads(result.replace("```json", "").replace("```", "").strip())
         except json.JSONDecodeError:
@@ -100,15 +120,12 @@ Each flashcard should have a front (term/question) and back (definition/answer).
 Return as JSON array of objects with 'front' and 'back' fields.
 """
         human_prompt = f"Generate flashcards from:\n\n{content}"
-
         prompt = ChatPromptTemplate.from_messages([
             ("system", system_prompt),
             ("human", human_prompt),
         ])
-
-        chain = prompt | self.model | self.parser
+        chain = prompt | self._get_model() | self.parser
         result = await chain.ainvoke({})
-
         try:
             return json.loads(result.replace("```json", "").replace("```", "").strip())
         except json.JSONDecodeError:
@@ -128,15 +145,12 @@ Create a study plan from this syllabus: {json.dumps(syllabus_data)}
 Start date: {start_date}
 End date: {end_date}
 """
-
         prompt = ChatPromptTemplate.from_messages([
             ("system", system_prompt),
             ("human", human_prompt),
         ])
-
-        chain = prompt | self.model | self.parser
+        chain = prompt | self._get_model() | self.parser
         result = await chain.ainvoke({})
-
         try:
             return json.loads(result.replace("```json", "").replace("```", "").strip())
         except json.JSONDecodeError:
@@ -154,15 +168,12 @@ Return as JSON with 'items' array containing topic, scheduled_date, and difficul
 Create revision schedule from: {json.dumps(syllabus_data)}
 Start: {start_date}, End: {end_date}
 """
-
         prompt = ChatPromptTemplate.from_messages([
             ("system", system_prompt),
             ("human", human_prompt),
         ])
-
-        chain = prompt | self.model | self.parser
+        chain = prompt | self._get_model() | self.parser
         result = await chain.ainvoke({})
-
         try:
             return json.loads(result.replace("```json", "").replace("```", "").strip())
         except json.JSONDecodeError:
@@ -172,9 +183,8 @@ Start: {start_date}, End: {end_date}
         self, messages: List[Dict[str, str]], temperature: float = 0.7
     ) -> str:
         """Generate a chat completion."""
-        self.model.temperature = temperature
         prompt = ChatPromptTemplate.from_messages(messages)
-        chain = prompt | self.model | self.parser
+        chain = prompt | self._get_model(temperature) | self.parser
         result = await chain.ainvoke({})
         return result
 
@@ -190,15 +200,12 @@ Return JSON array of objects with: topic_name, accuracy, confidence_level, recom
 Quiz results: {json.dumps(quiz_results)}
 Syllabus: {json.dumps(syllabus_data)}
 """
-
         prompt = ChatPromptTemplate.from_messages([
             ("system", system_prompt),
             ("human", human_prompt),
         ])
-
-        chain = prompt | self.model | self.parser
+        chain = prompt | self._get_model() | self.parser
         result = await chain.ainvoke({})
-
         try:
             return json.loads(result.replace("```json", "").replace("```", "").strip())
         except json.JSONDecodeError:
