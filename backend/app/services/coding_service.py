@@ -1,89 +1,86 @@
 """
-Coding Service - handles code execution and problem management
+Coding Service - problem execution helper.
+
+NOTE: Executing arbitrary user code directly on the API host is unsafe.
+For production, run this service inside an isolated sandbox/container.
 """
 import os
 import subprocess
 import tempfile
-import resource
-from typing import Dict, Any, Optional
-
-from app.core.logger import get_logger
-
-logger = get_logger(__name__)
+import time
+from typing import Dict, Any
 
 
 class CodingService:
     def __init__(self):
         self.supported_languages = {
-            "python": {"ext": "py", "cmd": "python"},
-            "javascript": {"ext": "js", "cmd": "node"},
-            "java": {"ext": "java", "cmd": "javac"},
-            "cpp": {"ext": "cpp", "cmd": "g++"},
-            "c": {"ext": "c", "cmd": "gcc"},
-            "go": {"ext": "go", "cmd": "go"},
-            "rust": {"ext": "rs", "cmd": "rustc"},
+            "python": {"ext": "py", "cmd": ["python"]},
+            "javascript": {"ext": "js", "cmd": ["node"]},
+            "java": {"ext": "java", "cmd": ["java"]},
+            "cpp": {"ext": "cpp", "cmd": ["g++"]},
+            "c": {"ext": "c", "cmd": ["gcc"]},
+            "go": {"ext": "go", "cmd": ["go"]},
+            "rust": {"ext": "rs", "cmd": ["rustc"]},
         }
 
-    async def execute_code(
-        self,
-        problem_id: int,
-        code: str,
-        language: str,
-    ) -> Dict[str, Any]:
-        """Execute code and return result."""
-        lang_info = self.supported_languages.get(language.lower())
-        if not lang_info:
-            return {
-                "status": "error",
-                "output": f"Language '{language}' not supported",
-                "passed": False,
-            }
+    async def execute_code(self, problem_id: int, code: str, language: str) -> Dict[str, Any]:
+        language = language.lower().strip()
+        info = self.supported_languages.get(language)
+        if not info:
+            return {"status": "error", "output": f"Language '{language}' not supported", "passed": False}
 
-        with tempfile.TemporaryDirectory() as tmpdir:
-            ext = lang_info["ext"]
-            cmd = lang_info["cmd"]
-            file_path = os.path.join(tmpdir, f"main.{ext}")
+        start = time.perf_counter()
 
-            with open(file_path, "w") as f:
-                f.write(code)
+        try:
+            with tempfile.TemporaryDirectory() as tmpdir:
+                ext = info["ext"]
+                source = os.path.join(tmpdir, f"Main.{ext}" if language == "java" else f"main.{ext}")
+                with open(source, "w", encoding="utf-8") as fh:
+                    fh.write(code)
 
-            try:
-                if language.lower() == "cpp":
+                if language in {"cpp", "c"}:
+                    binary = os.path.join(tmpdir, "main.exe" if os.name == "nt" else "main")
+                    compiler = info["cmd"][0]
+                    compile_cmd = [compiler, source, "-o", binary]
+                    if language == "cpp":
+                        compile_cmd.insert(1, "-std=c++17")
                     compile_result = subprocess.run(
-                        [cmd, "-std=c++17", file_path, "-o", os.path.join(tmpdir, "a.out")],
-                        capture_output=True,
-                        text=True,
-                        timeout=10,
+                        compile_cmd, capture_output=True, text=True, timeout=10, cwd=tmpdir
                     )
                     if compile_result.returncode != 0:
                         return {
                             "status": "error",
                             "output": compile_result.stderr,
                             "passed": False,
+                            "execution_time": int((time.perf_counter() - start) * 1000),
+                            "error_message": compile_result.stderr,
                         }
-                    run_cmd = [os.path.join(tmpdir, "a.out")]
-                elif language.lower() == "c":
+                    run_cmd = [binary]
+                elif language == "java":
                     compile_result = subprocess.run(
-                        [cmd, file_path, "-o", os.path.join(tmpdir, "a.out")],
-                        capture_output=True,
-                        text=True,
-                        timeout=10,
+                        ["javac", source], capture_output=True, text=True, timeout=10, cwd=tmpdir
                     )
                     if compile_result.returncode != 0:
                         return {
                             "status": "error",
                             "output": compile_result.stderr,
                             "passed": False,
+                            "execution_time": int((time.perf_counter() - start) * 1000),
+                            "error_message": compile_result.stderr,
                         }
-                    run_cmd = [os.path.join(tmpdir, "a.out")]
-                elif language.lower() == "java":
-                    run_cmd = [cmd, "Main"]
-                    os.chdir(tmpdir)
-                    class_file = file_path.replace(".java", ".class")
-                    if os.path.exists(class_file):
-                        run_cmd = ["java", "Main"]
+                    run_cmd = ["java", "-cp", tmpdir, "Main"]
+                elif language == "rust":
+                    binary = os.path.join(tmpdir, "main.exe" if os.name == "nt" else "main")
+                    subprocess.run(
+                        ["rustc", source, "-o", binary],
+                        capture_output=True, text=True, timeout=10, cwd=tmpdir, check=True,
+                    )
+                    run_cmd = [binary]
+                elif language == "go":
+                    # go run executes and compiles the source in one step.
+                    run_cmd = ["go", "run", source]
                 else:
-                    run_cmd = [cmd, file_path]
+                    run_cmd = info["cmd"] + [source]
 
                 result = subprocess.run(
                     run_cmd,
@@ -92,46 +89,44 @@ class CodingService:
                     timeout=30,
                     cwd=tmpdir,
                 )
+                elapsed = int((time.perf_counter() - start) * 1000)
+                output = (result.stdout or "") + (result.stderr or "")
+                passed = result.returncode == 0
+                return {
+                    "status": "passed" if passed else "failed",
+                    "output": output,
+                    "passed": passed,
+                    "score": 100 if passed else 0,
+                    "execution_time": elapsed,
+                    "error_message": result.stderr or None,
+                    "passed_test_cases": 0,
+                    "total_test_cases": 0,
+                }
+        except subprocess.TimeoutExpired:
+            return {"status": "timeout", "output": "Execution timed out", "passed": False}
+        except Exception as exc:
+            return {"status": "error", "output": str(exc), "passed": False, "error_message": str(exc)}
 
-                return {
-                    "status": "passed" if result.returncode == 0 else "failed",
-                    "output": result.stdout + result.stderr,
-                    "passed": result.returncode == 0,
-                    "execution_time": result.returncode,
-                    "memory_used": 0,
-                }
-            except subprocess.TimeoutExpired:
-                return {
-                    "status": "timeout",
-                    "output": "Execution timed out",
-                    "passed": False,
-                }
-            except Exception as e:
-                return {
-                    "status": "error",
-                    "output": str(e),
-                    "passed": False,
-                }
-
-    async def generate_coding_problem(
-        self, topic: str, difficulty: str = "medium"
-    ) -> Dict[str, Any]:
-        """Generate a coding problem using AI."""
+    async def generate_coding_problem(self, topic: str, difficulty: str = "medium") -> Dict[str, Any]:
+        import json
         from app.services.llm_service import LLMService
-        llm = LLMService()
 
-        prompt = f"""
-Generate a coding problem about {topic} at {difficulty} difficulty.
-Include: title, description, starter_code (in Python), test_cases (JSON array), and solution.
-Return as JSON.
-"""
+        llm = LLMService()
+        prompt = (
+            f"Generate a coding problem about {topic} at {difficulty} difficulty. "
+            "Return JSON with title, description, starter_code, test_cases, solution_code."
+        )
         response = await llm.chat_completion([
             {"role": "system", "content": "You are a coding problem generator."},
             {"role": "user", "content": prompt},
         ])
-
-        import json
         try:
             return json.loads(response.replace("```json", "").replace("```", "").strip())
         except json.JSONDecodeError:
-            return {"title": topic, "description": response, "starter_code": "", "test_cases": [], "solution": ""}
+            return {
+                "title": topic,
+                "description": response,
+                "starter_code": "",
+                "test_cases": [],
+                "solution_code": "",
+            }

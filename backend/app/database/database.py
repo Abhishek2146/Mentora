@@ -1,12 +1,16 @@
 """
-Database connection and initialization
+Database connection and initialization.
 """
-import asyncpg
-from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine, AsyncSession
-from sqlalchemy.orm import sessionmaker, declarative_base
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, create_async_engine
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy import text
 
 from app.core.config import settings
 from app.core.logger import get_logger
+from app.database.base import Base
+
+# Import all models so SQLAlchemy registers their tables before create_all.
+from app import models  # noqa: F401
 
 logger = get_logger(__name__)
 
@@ -23,27 +27,22 @@ AsyncSessionLocal = sessionmaker(
     class_=AsyncSession,
     expire_on_commit=False,
     autoflush=False,
-    autocommit=False,
 )
 
-Base = declarative_base()
 
-
-async def init_db():
-    """Initialize database - create tables if using SQLite, ensure connection for PostgreSQL."""
-    if "sqlite" in settings.DATABASE_URL:
+async def init_db() -> None:
+    """Create application tables and verify the database connection."""
+    try:
         async with engine.begin() as conn:
+            await conn.execute(text("SELECT 1"))
             await conn.run_sync(Base.metadata.create_all)
-        logger.info("SQLite database tables created")
-    else:
-        try:
-            conn = await asyncpg.connect(settings.DATABASE_URL)
-            await conn.close()
-            logger.info("PostgreSQL database connection successful")
-        except Exception as e:
-            logger.error(f"Database connection failed: {e}")
+        logger.info("Database initialized successfully")
+    except Exception as exc:
+        logger.exception("Database initialization failed: %s", exc)
+        raise
 
 
-async def get_db() -> AsyncSession:
+async def get_db():
+    """Yield an async database session."""
     async with AsyncSessionLocal() as session:
         yield session

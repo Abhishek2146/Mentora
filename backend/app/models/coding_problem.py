@@ -67,8 +67,15 @@ from sqlalchemy import (
     JSON,
 )
 from sqlalchemy.orm import relationship
+from enum import Enum
 
 from app.database.base import BaseModel
+
+
+class Difficulty(str, Enum):
+    EASY = "easy"
+    MEDIUM = "medium"
+    HARD = "hard"
 
 
 class CodingProblem(BaseModel):

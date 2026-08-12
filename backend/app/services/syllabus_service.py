@@ -1,59 +1,63 @@
-"""
-Syllabus processing service
-"""
-import os
-import tempfile
-from typing import Optional, Any
 
+"""
+Syllabus service for Mentora.
+
+Handles syllabus-related business logic.
+SQLAlchemy models are defined in app.models.syllabus.
+"""
+
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.config import settings
-from app.core.logger import get_logger
 from app.models.syllabus import Syllabus, Subject, Chapter
-from app.services.ocr_service import OCRService
-from app.services.llm_service import LLMService
-
-logger = get_logger(__name__)
 
 
 class SyllabusService:
-    def __init__(self):
-        self.ocr_service = OCRService()
-        self.llm_service = LLMService()
+    """
+    Service class for syllabus-related operations.
+    """
 
-    async def process_syllabus(self, syllabus: Syllabus) -> dict:
-        """Process uploaded syllabus file: OCR extraction + LLM parsing."""
-        try:
-            extracted_text = await self.ocr_service.extract_text(
-                syllabus.file_path, syllabus.file_type
+    async def get_syllabus(
+        self,
+        db: AsyncSession,
+        syllabus_id: int,
+    ):
+        """Get a syllabus by ID."""
+
+        result = await db.execute(
+            select(Syllabus).where(
+                Syllabus.id == syllabus_id
             )
+        )
 
-            syllabus.extracted_text = extracted_text
-            syllabus.status = "processing"
+        return result.scalars().first()
 
-            parsed_data = await self.llm_service.parse_syllabus_content(extracted_text)
-            syllabus.parsed_data = parsed_data
-            syllabus.status = "parsed"
+    async def get_syllabus_subjects(
+        self,
+        db: AsyncSession,
+        syllabus_id: int,
+    ):
+        """Get all subjects belonging to a syllabus."""
 
-            await self._create_subjects_chapters(syllabus, parsed_data)
+        result = await db.execute(
+            select(Subject)
+            .where(Subject.syllabus_id == syllabus_id)
+            .order_by(Subject.subject_order)
+        )
 
-            logger.info(f"Syllabus {syllabus.id} processed successfully")
-            return parsed_data
-        except Exception as e:
-            logger.error(f"Error processing syllabus {syllabus.id}: {e}")
-            syllabus.status = "failed"
-            raise
+        return result.scalars().all()
 
-    async def _create_subjects_chapters(self, syllabus: Syllabus, parsed_data: dict):
-        """Create subjects and chapters from parsed data."""
-        subjects_data = parsed_data.get("subjects", [])
-        order = 0
-        for subj_data in subjects_data:
-            subject = Subject(
-                syllabus_id=syllabus.id,
-                name=subj_data.get("name", f"Subject {order + 1}"),
-                description=subj_data.get("description"),
-                order=order,
-            )
-            order += 1
-        logger.info(f"Created subjects/chapters for syllabus {syllabus.id}")
+    async def get_subject_chapters(
+        self,
+        db: AsyncSession,
+        subject_id: int,
+    ):
+        """Get all chapters belonging to a subject."""
+
+        result = await db.execute(
+            select(Chapter)
+            .where(Chapter.subject_id == subject_id)
+            .order_by(Chapter.chapter_order)
+        )
+
+        return result.scalars().all()

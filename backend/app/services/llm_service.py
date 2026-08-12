@@ -1,205 +1,459 @@
 """
-LLM Service - handles AI language model interactions
+LLM Service - handles AI language model interactions using Groq.
 """
+
 import json
 from typing import Optional, Dict, Any, List
 
-from langchain_openai import ChatOpenAI
-from langchain_core.prompts import ChatPromptTemplate, SystemMessagePromptTemplate, HumanMessagePromptTemplate
+from langchain_groq import ChatGroq
+from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 
 from app.core.config import settings
 from app.core.logger import get_logger
 
+
 logger = get_logger(__name__)
 
 
 class LLMService:
+    """
+    Service for interacting with Groq LLMs.
+    """
+
     def __init__(self):
-        self.api_key = settings.OPENAI_API_KEY
-        self.model = ChatOpenAI(
+        if not settings.GROQ_API_KEY:
+            raise ValueError(
+                "GROQ_API_KEY is not configured in the environment."
+            )
+
+        self.api_key = settings.GROQ_API_KEY
+        self.model_name = settings.GROQ_MODEL
+
+        self.model = ChatGroq(
             api_key=self.api_key,
-            model_name="gpt-4-turbo-preview",
-            temperature=0.7,
-            max_tokens=4096,
+            model=self.model_name,
+            temperature=settings.GROQ_TEMPERATURE,
+            max_tokens=settings.GROQ_MAX_TOKENS,
         )
+
         self.parser = StrOutputParser()
 
-    async def parse_syllabus_content(self, text: str) -> dict:
-        """Parse syllabus text into structured data using LLM."""
+        logger.info(
+            "LLM service initialized with Groq model: %s",
+            self.model_name,
+        )
+
+    @staticmethod
+    def _clean_json_response(result: str) -> str:
+        """
+        Remove Markdown code fences from LLM JSON responses.
+        """
+        result = result.strip()
+
+        if result.startswith("```json"):
+            result = result[7:]
+
+        elif result.startswith("```"):
+            result = result[3:]
+
+        if result.endswith("```"):
+            result = result[:-3]
+
+        return result.strip()
+
+    async def parse_syllabus_content(
+        self,
+        text: str,
+    ) -> dict:
+        """
+        Parse syllabus text into structured academic data.
+        """
+
         system_prompt = """
-You are an expert educational content analyzer. Extract the following information:
-1. List of subjects with their names and descriptions
-2. For each subject, list of chapters with names and descriptions
-3. Identify topic names within each chapter
-4. Return as valid JSON with structure: {
-  "subjects": [
-    {
-      "name": "Subject Name",
-      "description": "Description",
-      "chapters": [
+You are an expert educational content analyzer.
+
+Analyze the provided syllabus and extract:
+
+1. Subjects
+2. Subject descriptions
+3. Chapters for each subject
+4. Chapter descriptions
+5. Topics inside each chapter
+
+Return ONLY valid JSON.
+
+Required structure:
+
+{
+    "subjects": [
         {
-          "name": "Chapter Name",
-          "description": "Description",
-          "topics": ["Topic 1", "Topic 2"]
+            "name": "Subject Name",
+            "description": "Subject description",
+            "chapters": [
+                {
+                    "name": "Chapter Name",
+                    "description": "Chapter description",
+                    "topics": [
+                        "Topic 1",
+                        "Topic 2"
+                    ]
+                }
+            ]
         }
-      ]
-    }
-  ]
+    ]
 }
 """
-        human_prompt = f"Parse this syllabus content:\n\n{text}"
 
-        prompt = ChatPromptTemplate.from_messages([
-            ("system", system_prompt),
-            ("human", human_prompt),
-        ])
+        human_prompt = f"""
+Parse the following syllabus content:
+
+{text}
+"""
+
+        prompt = ChatPromptTemplate.from_messages(
+            [
+                ("system", system_prompt),
+                ("human", human_prompt),
+            ]
+        )
 
         chain = prompt | self.model | self.parser
+
         result = await chain.ainvoke({})
 
         try:
-            return json.loads(result.replace("```json", "").replace("```", "").strip())
+            cleaned = self._clean_json_response(result)
+            return json.loads(cleaned)
+
         except json.JSONDecodeError:
-            return {"subjects": [], "raw_text": result}
+            logger.warning(
+                "Groq returned invalid JSON while parsing syllabus."
+            )
+
+            return {
+                "subjects": [],
+                "raw_text": result,
+            }
 
     async def generate_quiz_questions(
-        self, content: str, num_questions: int = 10, difficulty: str = "medium"
+        self,
+        content: str,
+        num_questions: int = 10,
+        difficulty: str = "medium",
     ) -> List[Dict[str, Any]]:
-        """Generate quiz questions from content."""
+        """
+        Generate multiple-choice quiz questions.
+        """
+
         system_prompt = f"""
-You are an expert quiz generator. Generate {num_questions} multiple choice questions 
-from the given content at {difficulty} difficulty. Each question should have:
-- question_text: the question
-- options: list of 4 options (A, B, C, D)
-- correct_answer: the correct option letter
-- explanation: detailed explanation
+You are an expert educational quiz generator.
 
-Return as JSON array.
+Generate {num_questions} multiple-choice questions
+from the provided content.
+
+Difficulty: {difficulty}
+
+Each question must contain:
+
+- question_text
+- options
+- correct_answer
+- explanation
+
+The options must contain exactly four choices.
+
+Return ONLY a valid JSON array.
+
+Example:
+
+[
+    {{
+        "question_text": "Example question?",
+        "options": ["A", "B", "C", "D"],
+        "correct_answer": "A",
+        "explanation": "Explanation"
+    }}
+]
 """
-        human_prompt = f"Generate questions from:\n\n{content}"
 
-        prompt = ChatPromptTemplate.from_messages([
-            ("system", system_prompt),
-            ("human", human_prompt),
-        ])
+        human_prompt = f"""
+Generate quiz questions from:
+
+{content}
+"""
+
+        prompt = ChatPromptTemplate.from_messages(
+            [
+                ("system", system_prompt),
+                ("human", human_prompt),
+            ]
+        )
 
         chain = prompt | self.model | self.parser
+
         result = await chain.ainvoke({})
 
         try:
-            return json.loads(result.replace("```json", "").replace("```", "").strip())
+            cleaned = self._clean_json_response(result)
+            return json.loads(cleaned)
+
         except json.JSONDecodeError:
+            logger.warning(
+                "Groq returned invalid JSON for quiz generation."
+            )
             return []
 
-    async def generate_flashcards(self, content: str, num_cards: int = 10) -> List[Dict[str, str]]:
-        """Generate flashcards from content."""
-        system_prompt = f"""
-You are an expert flashcard creator. Create {num_cards} flashcards from the given content.
-Each flashcard should have a front (term/question) and back (definition/answer).
-Return as JSON array of objects with 'front' and 'back' fields.
-"""
-        human_prompt = f"Generate flashcards from:\n\n{content}"
+    async def generate_flashcards(
+        self,
+        content: str,
+        num_cards: int = 10,
+    ) -> List[Dict[str, str]]:
+        """
+        Generate flashcards from educational content.
+        """
 
-        prompt = ChatPromptTemplate.from_messages([
-            ("system", system_prompt),
-            ("human", human_prompt),
-        ])
+        system_prompt = f"""
+You are an expert flashcard creator.
+
+Create {num_cards} useful educational flashcards
+from the provided content.
+
+Each flashcard must contain:
+
+- front
+- back
+
+Return ONLY a valid JSON array.
+"""
+
+        human_prompt = f"""
+Generate flashcards from:
+
+{content}
+"""
+
+        prompt = ChatPromptTemplate.from_messages(
+            [
+                ("system", system_prompt),
+                ("human", human_prompt),
+            ]
+        )
 
         chain = prompt | self.model | self.parser
+
         result = await chain.ainvoke({})
 
         try:
-            return json.loads(result.replace("```json", "").replace("```", "").strip())
+            cleaned = self._clean_json_response(result)
+            return json.loads(cleaned)
+
         except json.JSONDecodeError:
+            logger.warning(
+                "Groq returned invalid JSON for flashcards."
+            )
             return []
 
     async def generate_study_plan(
-        self, syllabus_data: dict, start_date: str, end_date: Optional[str] = None
+        self,
+        syllabus_data: dict,
+        start_date: str,
+        end_date: Optional[str] = None,
     ) -> dict:
-        """Generate a study plan from syllabus data."""
+        """
+        Generate a personalized study plan.
+        """
+
         system_prompt = """
-You are an expert study planner. Create a detailed study plan from the given syllabus.
-Plan should include daily tasks, study sessions, and completion goals.
-Return as JSON object with 'tasks' array and 'summary' string.
-"""
-        human_prompt = f"""
-Create a study plan from this syllabus: {json.dumps(syllabus_data)}
-Start date: {start_date}
-End date: {end_date}
+You are an expert educational study planner.
+
+Create a detailed study plan based on the syllabus.
+
+The plan should contain:
+
+- daily tasks
+- study sessions
+- completion goals
+
+Return ONLY valid JSON with:
+
+{
+    "tasks": [],
+    "summary": ""
+}
 """
 
-        prompt = ChatPromptTemplate.from_messages([
-            ("system", system_prompt),
-            ("human", human_prompt),
-        ])
+        human_prompt = f"""
+Syllabus:
+
+{json.dumps(syllabus_data)}
+
+Start date:
+{start_date}
+
+End date:
+{end_date}
+"""
+
+        prompt = ChatPromptTemplate.from_messages(
+            [
+                ("system", system_prompt),
+                ("human", human_prompt),
+            ]
+        )
 
         chain = prompt | self.model | self.parser
+
         result = await chain.ainvoke({})
 
         try:
-            return json.loads(result.replace("```json", "").replace("```", "").strip())
+            cleaned = self._clean_json_response(result)
+            return json.loads(cleaned)
+
         except json.JSONDecodeError:
-            return {"tasks": [], "summary": result}
+            return {
+                "tasks": [],
+                "summary": result,
+            }
 
     async def generate_revision_schedule(
-        self, syllabus_data: dict, start_date: str, end_date: Optional[str] = None
+        self,
+        syllabus_data: dict,
+        start_date: str,
+        end_date: Optional[str] = None,
     ) -> dict:
-        """Generate a revision schedule."""
+        """
+        Generate a spaced-repetition revision schedule.
+        """
+
         system_prompt = """
-You are an expert revision planner. Create a spaced repetition revision schedule.
-Return as JSON with 'items' array containing topic, scheduled_date, and difficulty.
-"""
-        human_prompt = f"""
-Create revision schedule from: {json.dumps(syllabus_data)}
-Start: {start_date}, End: {end_date}
+You are an expert educational revision planner.
+
+Create a spaced repetition revision schedule.
+
+Return ONLY valid JSON:
+
+{
+    "items": [
+        {
+            "topic": "Topic name",
+            "scheduled_date": "YYYY-MM-DD",
+            "difficulty": "easy/medium/hard"
+        }
+    ]
+}
 """
 
-        prompt = ChatPromptTemplate.from_messages([
-            ("system", system_prompt),
-            ("human", human_prompt),
-        ])
+        human_prompt = f"""
+Syllabus:
+
+{json.dumps(syllabus_data)}
+
+Start date:
+{start_date}
+
+End date:
+{end_date}
+"""
+
+        prompt = ChatPromptTemplate.from_messages(
+            [
+                ("system", system_prompt),
+                ("human", human_prompt),
+            ]
+        )
 
         chain = prompt | self.model | self.parser
+
         result = await chain.ainvoke({})
 
         try:
-            return json.loads(result.replace("```json", "").replace("```", "").strip())
+            cleaned = self._clean_json_response(result)
+            return json.loads(cleaned)
+
         except json.JSONDecodeError:
             return {"items": []}
 
     async def chat_completion(
-        self, messages: List[Dict[str, str]], temperature: float = 0.7
+        self,
+        messages: List[Dict[str, str]],
+        temperature: float = 0.7,
     ) -> str:
-        """Generate a chat completion."""
-        self.model.temperature = temperature
-        prompt = ChatPromptTemplate.from_messages(messages)
-        chain = prompt | self.model | self.parser
+        """
+        Generate a chat response using Groq.
+        """
+
+        prompt_messages = [
+            (
+                message.get("role", "user"),
+                message.get("content", ""),
+            )
+            for message in messages
+        ]
+
+        prompt = ChatPromptTemplate.from_messages(prompt_messages)
+
+        model = self.model.bind(
+            temperature=temperature
+        )
+
+        chain = prompt | model | self.parser
+
         result = await chain.ainvoke({})
+
         return result
 
     async def analyze_weak_topics(
-        self, quiz_results: List[dict], syllabus_data: dict
+        self,
+        quiz_results: List[dict],
+        syllabus_data: dict,
     ) -> List[dict]:
-        """Analyze quiz results to identify weak topics."""
+        """
+        Analyze quiz results and identify weak topics.
+        """
+
         system_prompt = """
-You are an educational analytics expert. Analyze the quiz results to identify weak topics.
-Return JSON array of objects with: topic_name, accuracy, confidence_level, recommended_action.
-"""
-        human_prompt = f"""
-Quiz results: {json.dumps(quiz_results)}
-Syllabus: {json.dumps(syllabus_data)}
+You are an educational analytics expert.
+
+Analyze quiz results and identify weak topics.
+
+For each weak topic return:
+
+- topic_name
+- accuracy
+- confidence_level
+- recommended_action
+
+Return ONLY a valid JSON array.
 """
 
-        prompt = ChatPromptTemplate.from_messages([
-            ("system", system_prompt),
-            ("human", human_prompt),
-        ])
+        human_prompt = f"""
+Quiz results:
+
+{json.dumps(quiz_results)}
+
+Syllabus:
+
+{json.dumps(syllabus_data)}
+"""
+
+        prompt = ChatPromptTemplate.from_messages(
+            [
+                ("system", system_prompt),
+                ("human", human_prompt),
+            ]
+        )
 
         chain = prompt | self.model | self.parser
+
         result = await chain.ainvoke({})
 
         try:
-            return json.loads(result.replace("```json", "").replace("```", "").strip())
+            cleaned = self._clean_json_response(result)
+            return json.loads(cleaned)
+
         except json.JSONDecodeError:
+            logger.warning(
+                "Groq returned invalid JSON for weak-topic analysis."
+            )
             return []

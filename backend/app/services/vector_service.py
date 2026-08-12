@@ -1,90 +1,63 @@
 """
-Embedding and Vector Service
+Vector store service for syllabus RAG.
 """
-import json
-from typing import List, Optional, Dict, Any
+import os
+import shutil
+from typing import List, Optional
 
-from langchain_openai import OpenAIEmbeddings
 from langchain_community.vectorstores import Chroma
-from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_core.documents import Document
 
 from app.core.config import settings
 from app.core.logger import get_logger
+from app.services.embedding_service import EmbeddingService
 
 logger = get_logger(__name__)
-
-
-class EmbeddingService:
-    def __init__(self):
-        self.embeddings = OpenAIEmbeddings(
-            api_key=settings.OPENAI_API_KEY,
-            model="text-embedding-3-small",
-        )
-        self.text_splitter = RecursiveCharacterTextSplitter(
-            chunk_size=1000,
-            chunk_overlap=200,
-        )
-
-    def split_text(self, text: str) -> List[Document]:
-        """Split text into chunks for embedding."""
-        return self.text_splitter.create_documents([text])
-
-    def get_embedding(self, text: str) -> List[float]:
-        """Generate embedding for a single text."""
-        return self.embeddings.embed_query(text)
 
 
 class VectorService:
     def __init__(self):
         self.embedding_service = EmbeddingService()
         self.persist_directory = settings.CHROMA_PERSIST_DIR
-        self._ensure_directory()
-
-    def _ensure_directory(self):
-        import os
         os.makedirs(self.persist_directory, exist_ok=True)
 
     def create_collection(self, collection_name: str, documents: List[Document]) -> Chroma:
-        """Create a ChromaDB collection with documents."""
-        vector_db = Chroma.from_documents(
+        if not documents:
+            raise ValueError("At least one document is required")
+        return Chroma.from_documents(
             documents=documents,
             embedding=self.embedding_service.embeddings,
             persist_directory=self.persist_directory,
             collection_name=collection_name,
         )
-        vector_db.persist()
-        logger.info(f"Created collection: {collection_name}")
-        return vector_db
 
     def get_collection(self, collection_name: str) -> Chroma:
-        """Get an existing ChromaDB collection."""
-        vector_db = Chroma(
-            embedding=self.embedding_service.embeddings,
+        return Chroma(
+            embedding_function=self.embedding_service.embeddings,
             persist_directory=self.persist_directory,
             collection_name=collection_name,
         )
-        return vector_db
 
     def add_documents(self, collection_name: str, documents: List[Document]) -> Chroma:
-        """Add documents to an existing collection."""
+        if not documents:
+            return self.get_collection(collection_name)
         vector_db = self.get_collection(collection_name)
         vector_db.add_documents(documents)
-        vector_db.persist()
         return vector_db
 
     def similarity_search(
-        self, collection_name: str, query: str, k: int = 5, filter: Optional[dict] = None
+        self,
+        collection_name: str,
+        query: str,
+        k: int = 5,
+        filter: Optional[dict] = None,
     ) -> List[Document]:
-        """Perform similarity search on a collection."""
         vector_db = self.get_collection(collection_name)
-        results = vector_db.similarity_search(query, k=k, filter=filter)
-        return results
+        return vector_db.similarity_search(query, k=k, filter=filter)
 
-    def delete_collection(self, collection_name: str):
-        """Delete a collection."""
-        import shutil
-        collection_path = os.path.join(self.persist_directory, collection_name)
-        if os.path.exists(collection_path):
-            shutil.rmtree(collection_path)
-        logger.info(f"Deleted collection: {collection_name}")
+    def delete_collection(self, collection_name: str) -> None:
+        # Chroma collections are stored inside a shared persistence directory;
+        # deleting a collection directory manually is unsafe. Use the Chroma API.
+        vector_db = self.get_collection(collection_name)
+        vector_db.delete_collection()
+        logger.info("Deleted collection: %s", collection_name)
