@@ -42,9 +42,8 @@ class Settings(BaseSettings):
     # GROQ LLM CONFIGURATION
     # =========================
 
-    GROQ_API_KEY: str = os.getenv("GROQ_API_KEY")
+    GROQ_API_KEY: str 
     GROQ_MODEL: str = "llama-3.3-70b-versatile"
-
     GROQ_TEMPERATURE: float = 0.7
     GROQ_MAX_TOKENS: int = 4096
     EMBEDDING_MODEL: str = "sentence-transformers/all-MiniLM-L6-v2"
