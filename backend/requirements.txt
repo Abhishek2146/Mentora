@@ -138,14 +138,16 @@ pytest-asyncio>=0.23.0
 black>=24.0.0
 ruff>=0.4.0
 mypy>=1.0.0
+bycrypt>=4.3.0
 
 
-fastapi
-uvicorn
-sqlalchemy
-pydantic
-pydantic-settings
+
+
 python-dotenv
 passlib[bcrypt]
 python-jose[cryptography]
 email-validator
+
+argon2-cffi
+python-jose[cryptography]
+ 

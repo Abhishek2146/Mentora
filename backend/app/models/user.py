@@ -86,9 +86,9 @@ class User(BaseModel):
     # New users are students by default.
     role = Column(
         String(20),
-        default=UserRole.STUDENT.value,
-        nullable=False
-    )
+         default=UserRole.STUDENT.value,
+         nullable=False
+     )
 
     # Account status
     is_active = Column(
