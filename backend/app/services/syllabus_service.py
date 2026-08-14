@@ -21,7 +21,7 @@ class SyllabusService:
         self.ocr_service = OCRService()
         self.llm_service = LLMService()
 
-    async def process_syllabus(self, syllabus: Syllabus) -> dict:
+    async def process_syllabus(self, db: AsyncSession, syllabus: Syllabus) -> dict:
         """Process uploaded syllabus file: OCR extraction + LLM parsing."""
         try:
             extracted_text = await self.ocr_service.extract_text(
@@ -31,11 +31,27 @@ class SyllabusService:
             syllabus.extracted_text = extracted_text
             syllabus.status = "processing"
 
-            parsed_data = await self.llm_service.parse_syllabus_content(extracted_text)
-            syllabus.parsed_data = parsed_data
-            syllabus.status = "parsed"
+            try:
+                parsed_data = await self.llm_service.parse_syllabus_content(
+                    extracted_text
+                )
+            except Exception as e:
+                logger.warning(
+                    f"LLM parsing failed for syllabus {syllabus.id}: {e}"
+                )
+                parsed_data = {}
 
-            await self._create_subjects_chapters(syllabus, parsed_data)
+            if parsed_data.get("subjects"):
+                syllabus.parsed_data = parsed_data
+                syllabus.status = "parsed"
+
+                await self._create_subjects_chapters(db, syllabus, parsed_data)
+            else:
+                syllabus.status = "uploaded"
+                logger.warning(
+                    f"Syllabus {syllabus.id} uploaded but could not be "
+                    "parsed by the LLM"
+                )
 
             logger.info(f"Syllabus {syllabus.id} processed successfully")
             return parsed_data
@@ -44,16 +60,33 @@ class SyllabusService:
             syllabus.status = "failed"
             raise
 
-    async def _create_subjects_chapters(self, syllabus: Syllabus, parsed_data: dict):
-        """Create subjects and chapters from parsed data."""
+    async def _create_subjects_chapters(
+        self, db: AsyncSession, syllabus: Syllabus, parsed_data: dict
+    ):
+        """Create and persist subjects and chapters from parsed data."""
         subjects_data = parsed_data.get("subjects", [])
-        order = 0
-        for subj_data in subjects_data:
+
+        for order, subj_data in enumerate(subjects_data):
             subject = Subject(
                 syllabus_id=syllabus.id,
                 name=subj_data.get("name", f"Subject {order + 1}"),
                 description=subj_data.get("description"),
-                order=order,
+                subject_order=order,
             )
-            order += 1
+            db.add(subject)
+            await db.flush()
+
+            for chapter_order, chapter_data in enumerate(
+                subj_data.get("chapters", [])
+            ):
+                chapter = Chapter(
+                    subject_id=subject.id,
+                    name=chapter_data.get("name", f"Chapter {chapter_order + 1}"),
+                    description=chapter_data.get("description"),
+                    chapter_order=chapter_order,
+                    topics=chapter_data.get("topics"),
+                )
+                db.add(chapter)
+
+        await db.commit()
         logger.info(f"Created subjects/chapters for syllabus {syllabus.id}")

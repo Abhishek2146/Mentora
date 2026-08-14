@@ -2,6 +2,7 @@ import AppLayout from "@/components/layout/AppLayout";
 import { Brain, CreditCard, Trophy, Flame, Clock, Target, Calendar, Star, Upload, FileText, ArrowRight } from "lucide-react";
 import { Link } from "react-router-dom";
 import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, RadarChart, PolarGrid, PolarAngleAxis, Radar } from "recharts";
+import { useAuthStore } from "@/store/authStore";
 
 const weeklyData = [
   { day: "Mon", score: 72 }, { day: "Tue", score: 85 }, { day: "Wed", score: 68 },
@@ -28,6 +29,9 @@ const quickActions = [
 ];
 
 export default function Dashboard() {
+  const { user } = useAuthStore();
+  const firstName = user?.full_name?.split(" ")[0] || user?.username || "there";
+
   return (
     <AppLayout title="Dashboard">
       <div className="max-w-7xl mx-auto space-y-6">
@@ -51,7 +55,7 @@ export default function Dashboard() {
           <div className="flex items-start justify-between">
             <div>
               <p className="text-primary-100 text-sm font-medium">Good morning 👋</p>
-              <h2 className="text-2xl font-bold mt-1">Welcome back, Dipeesh!</h2>
+              <h2 className="text-2xl font-bold mt-1">Welcome back, {firstName}!</h2>
               <p className="text-primary-100 mt-1 text-sm">You have 3 tasks due today. Keep up the streak! 🔥</p>
             </div>
             <div className="hidden sm:flex flex-col items-end gap-1">

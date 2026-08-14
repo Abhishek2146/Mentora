@@ -58,21 +58,21 @@ You are an expert educational content analyzer. Extract the following informatio
 1. List of subjects with their names and descriptions
 2. For each subject, list of chapters with names and descriptions
 3. Identify topic names within each chapter
-4. Return as valid JSON with structure: {
+4. Return as valid JSON with structure: {{
   "subjects": [
-    {
+    {{
       "name": "Subject Name",
       "description": "Description",
       "chapters": [
-        {
+        {{
           "name": "Chapter Name",
           "description": "Description",
           "topics": ["Topic 1", "Topic 2"]
-        }
+        }}
       ]
-    }
+    }}
   ]
-}
+}}
 """
         human_prompt = f"Parse this syllabus content:\n\n{text}"
         prompt = ChatPromptTemplate.from_messages([

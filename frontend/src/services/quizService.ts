@@ -4,7 +4,7 @@ import { mockQuizQuestions } from "@/data/mockData";
 export const quizService = {
   async getDailyQuiz() {
     try {
-      const res = await apiClient.get("/api/quiz/daily");
+      const res = await apiClient.get("/api/v1/quizzes/daily");
       return res.data;
     } catch {
       return mockQuizQuestions;
@@ -13,7 +13,7 @@ export const quizService = {
 
   async generateMCQ(topic: string, difficulty: string, count = 5) {
     try {
-      const res = await apiClient.post("/api/quiz/generate-mcq", { topic, difficulty, count });
+      const res = await apiClient.post("/api/v1/quizzes/generate-mcq", { topic, difficulty, count });
       return res.data;
     } catch {
       return mockQuizQuestions.slice(0, count);
@@ -22,7 +22,7 @@ export const quizService = {
 
   async submitQuiz(quizId: number, answers: { question_id: number; selected: number }[], timeTaken: number) {
     try {
-      const res = await apiClient.post(`/api/quiz/${quizId}/submit`, { answers, time_taken_seconds: timeTaken });
+      const res = await apiClient.post(`/api/v1/quizzes/${quizId}/submit`, { answers, time_taken_seconds: timeTaken });
       return res.data;
     } catch {
       const correct = Math.floor(answers.length * 0.75);

@@ -7,6 +7,8 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useUIStore } from "@/store/uiStore";
+import { useAuthStore } from "@/store/authStore";
+import { getInitials } from "@/lib/utils";
 
 const navGroups = [
   {
@@ -49,7 +51,9 @@ const navGroups = [
 
 export default function Sidebar() {
   const { sidebarOpen, setSidebarOpen } = useUIStore();
+  const { user } = useAuthStore();
   const { pathname } = useLocation();
+  const userName = user?.full_name || user?.username || "Student";
 
   return (
     <aside
@@ -118,6 +122,21 @@ export default function Sidebar() {
           </div>
         ))}
       </nav>
+
+      {/* User */}
+      <div className="border-t border-slate-100 dark:border-slate-700/50 p-3">
+        <Link to="/profile" className={cn("flex items-center gap-3 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-700/50 transition-colors", sidebarOpen ? "px-3 py-2" : "px-1 py-2 justify-center")}>
+          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-primary-500 to-secondary-500 flex items-center justify-center text-white text-sm font-bold shadow-md flex-shrink-0">
+            {user?.full_name ? getInitials(user.full_name) : user?.username?.[0]?.toUpperCase() ?? "U"}
+          </div>
+          {sidebarOpen && (
+            <div className="leading-tight min-w-0">
+              <p className="text-sm font-bold text-slate-800 dark:text-slate-100 truncate">{userName}</p>
+              <p className="text-[11px] text-slate-400 capitalize">{user?.role || "student"}</p>
+            </div>
+          )}
+        </Link>
+      </div>
 
       {/* Footer */}
       {sidebarOpen && (

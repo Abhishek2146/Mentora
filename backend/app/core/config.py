@@ -152,6 +152,7 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: str = ""
     ANTHROPIC_API_KEY: str = ""
     GOOGLE_API_KEY: str = ""
+    GROQ_API_KEY: str=""
 
     # ============================================================
     # ChromaDB
@@ -168,6 +169,11 @@ class Settings(BaseSettings):
     UPLOAD_DIR: str = "./uploads"
 
     MAX_UPLOAD_SIZE: int = 52428800
+
+    TESSERACT_CMD: str = os.getenv(
+        "TESSERACT_CMD",
+        "tesseract"
+    )
 
     ALLOWED_EXTENSIONS: str = (
         "pdf,png,jpg,jpeg,gif,mp3,wav"
@@ -200,7 +206,7 @@ class Settings(BaseSettings):
 
         origins_str = os.getenv(
             "ALLOWED_ORIGINS",
-            "http://localhost:3000,http://localhost:8000"
+            "http://localhost:3000,http://localhost:5173,http://localhost:8000"
         )
 
         return [

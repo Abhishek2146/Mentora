@@ -16,8 +16,8 @@ export default function Register() {
     try {
       await register(form);
       navigate("/dashboard");
-    } catch {
-      navigate("/dashboard");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Registration failed. Please try again.");
     }
   };
 

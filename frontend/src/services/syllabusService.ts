@@ -7,7 +7,7 @@ export const syllabusService = {
     formData.append("title", title);
     if (description) formData.append("description", description);
     try {
-      const res = await apiClient.post("/api/syllabus/upload", formData);
+      const res = await apiClient.post("/api/v1/syllabus/upload", formData);
       return res.data;
     } catch {
       return { id: 1, filename: file.name, status: "uploaded", created_at: new Date().toISOString() };
@@ -16,7 +16,7 @@ export const syllabusService = {
 
   async analyzeSyllabus(syllabusId: number) {
     try {
-      const res = await apiClient.post(`/api/syllabus/${syllabusId}/analyze`);
+      const res = await apiClient.post(`/api/v1/syllabus/${syllabusId}/analyze`);
       return res.data;
     } catch {
       return {
@@ -37,7 +37,7 @@ export const syllabusService = {
 
   async getAllSyllabi() {
     try {
-      const res = await apiClient.get("/api/syllabus");
+      const res = await apiClient.get("/api/v1/syllabus");
       return res.data;
     } catch {
       return [];

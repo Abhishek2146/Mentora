@@ -4,7 +4,7 @@ import { mockStudyPlan } from "@/data/mockData";
 export const studyPlanService = {
   async getStudyPlan() {
     try {
-      const res = await apiClient.get("/api/study-plan");
+      const res = await apiClient.get("/api/v1/study-plan");
       return res.data;
     } catch {
       return mockStudyPlan;
@@ -13,7 +13,7 @@ export const studyPlanService = {
 
   async generatePlan(syllabusId: number, examDate: string, dailyHours: number) {
     try {
-      const res = await apiClient.post("/api/study-plan/generate", {
+      const res = await apiClient.post("/api/v1/study-plan/generate", {
         syllabus_id: syllabusId,
         exam_date: examDate,
         daily_hours: dailyHours,

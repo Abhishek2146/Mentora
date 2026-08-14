@@ -10,7 +10,7 @@ export interface ChatMessage {
 export const tutorService = {
   async sendMessage(message: string, conversationId?: string, syllabusId?: number) {
     try {
-      const res = await apiClient.post("/api/ai/chat", {
+      const res = await apiClient.post("/api/v1/tutor/chat", {
         message,
         conversation_id: conversationId,
         syllabus_id: syllabusId,

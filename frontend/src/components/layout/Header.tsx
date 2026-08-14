@@ -1,14 +1,15 @@
 import { Link } from "react-router-dom";
-import { Bell, Search, Sun, Moon, Menu, Upload } from "lucide-react";
+import { Bell, Search, Sun, Moon, Menu, Upload, LogOut, User, ChevronDown } from "lucide-react";
 import { useUIStore } from "@/store/uiStore";
 import { useAuthStore } from "@/store/authStore";
-import { getInitials } from "@/lib/utils";
+import { cn, getInitials } from "@/lib/utils";
 import { useState } from "react";
 
 export default function Header({ title }: { title?: string }) {
   const { setSidebarOpen, sidebarOpen } = useUIStore();
-  const { user } = useAuthStore();
+  const { user, logout } = useAuthStore();
   const [dark, setDark] = useState(document.documentElement.classList.contains("dark"));
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
 
   const toggleDark = () => {
     document.documentElement.classList.toggle("dark");
@@ -79,9 +80,61 @@ export default function Header({ title }: { title?: string }) {
           <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-danger-500 rounded-full ring-2 ring-white dark:ring-slate-900" />
         </button>
 
-        {/* Avatar */}
-        <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-primary-500 to-secondary-500 flex items-center justify-center text-white text-sm font-bold shadow-md cursor-pointer hover:scale-105 transition-transform">
-          {user?.full_name ? getInitials(user.full_name) : user?.username?.[0]?.toUpperCase() ?? "U"}
+        {/* User dropdown */}
+        <div className="relative">
+          <button
+            onClick={() => setUserMenuOpen(!userMenuOpen)}
+            className="flex items-center gap-2 px-2 py-1.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+            aria-haspopup="menu"
+            aria-expanded={userMenuOpen}
+          >
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-primary-500 to-secondary-500 flex items-center justify-center text-white text-sm font-bold shadow-md flex-shrink-0">
+              {user?.full_name ? getInitials(user.full_name) : user?.username?.[0]?.toUpperCase() ?? "U"}
+            </div>
+            <div className="hidden md:block text-left leading-tight">
+              <p className="text-sm font-bold text-slate-800 dark:text-slate-100 truncate max-w-[120px]">
+                {user?.full_name || user?.username || "Student"}
+              </p>
+              <p className="text-[11px] text-slate-400 capitalize">{user?.role || "student"}</p>
+            </div>
+            <ChevronDown
+              className={cn(
+                "w-4 h-4 text-slate-400 transition-transform",
+                userMenuOpen && "rotate-180"
+              )}
+            />
+          </button>
+
+          {userMenuOpen && (
+            <>
+              <div className="fixed inset-0 z-40" onClick={() => setUserMenuOpen(false)} />
+              <div className="absolute right-0 mt-2 w-48 z-50 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-lg py-1.5">
+                <div className="px-4 py-2 border-b border-slate-100 dark:border-slate-700">
+                  <p className="text-sm font-bold text-slate-800 dark:text-slate-100 truncate">
+                    {user?.full_name || user?.username || "Student"}
+                  </p>
+                  <p className="text-[11px] text-slate-400 truncate">{user?.email}</p>
+                </div>
+                <Link
+                  to="/profile"
+                  onClick={() => setUserMenuOpen(false)}
+                  className="flex items-center gap-2.5 px-4 py-2.5 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700/50 transition-colors"
+                >
+                  <User className="w-4 h-4 text-slate-400" /> Profile
+                </Link>
+                <div className="my-1 border-t border-slate-100 dark:border-slate-700" />
+                <button
+                  onClick={() => {
+                    setUserMenuOpen(false);
+                    logout();
+                  }}
+                  className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-danger-600 dark:text-red-400 hover:bg-danger-50 dark:hover:bg-red-900/20 transition-colors"
+                >
+                  <LogOut className="w-4 h-4" /> Logout
+                </button>
+              </div>
+            </>
+          )}
         </div>
       </div>
     </header>

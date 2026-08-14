@@ -172,6 +172,7 @@ class Syllabus(BaseModel):
         "Subject",
         back_populates="syllabus",
         cascade="all, delete-orphan",
+        lazy="selectin",
     )
 
 
@@ -227,7 +228,12 @@ class Subject(BaseModel):
         "Chapter",
         back_populates="subject",
         cascade="all, delete-orphan",
+        lazy="selectin",
     )
+
+    @property
+    def order(self) -> int:
+        return self.subject_order
 
 
 class Chapter(BaseModel):
@@ -272,3 +278,7 @@ class Chapter(BaseModel):
         "Subject",
         back_populates="chapters",
     )
+
+    @property
+    def order(self) -> int:
+        return self.chapter_order

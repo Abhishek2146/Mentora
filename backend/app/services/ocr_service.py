@@ -54,10 +54,15 @@ import pytesseract
 from pdf2image import convert_from_path
 from PIL import Image
 
+from app.core.config import settings
 from app.core.logger import get_logger
 
 
 logger = get_logger(__name__)
+
+
+if settings.TESSERACT_CMD:
+    pytesseract.pytesseract.tesseract_cmd = settings.TESSERACT_CMD
 
 
 class OCRService:
@@ -85,6 +90,13 @@ class OCRService:
 
             return await self._extract_from_image(file_path)
 
+        except pytesseract.TesseractNotFoundError:
+            logger.error(
+                "Tesseract OCR is not installed or not in PATH. "
+                "Install Tesseract and set TESSERACT_CMD in config."
+            )
+            raise
+
         except Exception as e:
             logger.error(
                 f"OCR extraction failed for {file_path}: {e}"
@@ -92,8 +104,46 @@ class OCRService:
             raise
 
     async def _extract_from_pdf(self, file_path: str) -> str:
-        """Extract text from PDF using OCR."""
+        """Extract text from PDF.
 
+        For digital (text-based) PDFs the text is read directly with pypdf,
+        which requires no external tools.  Only scanned/image-only PDFs fall
+        back to Tesseract OCR.
+        """
+
+        # 1. Direct text extraction (no Tesseract needed)
+        try:
+            from pypdf import PdfReader
+
+            reader = PdfReader(file_path)
+            text_parts = []
+
+            for page in reader.pages:
+                try:
+                    page_text = page.extract_text() or ""
+                except Exception:
+                    page_text = ""
+                if page_text.strip():
+                    text_parts.append(page_text.strip())
+
+            direct_text = "\n".join(text_parts).strip()
+            if direct_text:
+                logger.info(
+                    "Extracted text directly from PDF (OCR not required)"
+                )
+                return direct_text
+
+            logger.info(
+                "No selectable text found in PDF; falling back to OCR"
+            )
+
+        except Exception as e:
+            logger.warning(
+                f"Direct PDF text extraction failed: {e}; "
+                "falling back to OCR"
+            )
+
+        # 2. OCR fallback (requires Tesseract, only for scanned PDFs)
         pages = convert_from_path(
             file_path,
             dpi=300

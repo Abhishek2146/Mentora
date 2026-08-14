@@ -4,9 +4,11 @@ Syllabus API endpoints
 import os
 from typing import List, Optional
 
+import pytesseract
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, insert
+from sqlalchemy.orm import selectinload
 
 from app.core.auth import get_current_user_id
 from app.core.config import settings
@@ -55,9 +57,28 @@ async def upload_syllabus(
     await db.commit()
     await db.refresh(new_syllabus)
 
-    parsed_data = await syllabus_service.process_syllabus(new_syllabus)
+    try:
+        await syllabus_service.process_syllabus(db, new_syllabus)
+        await db.commit()
+    except pytesseract.TesseractNotFoundError:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=(
+                "OCR engine (Tesseract) is not installed or not configured. "
+                "Contact the administrator to enable syllabus processing."
+            ),
+        )
 
-    return new_syllabus
+    result = await db.execute(
+        select(Syllabus)
+        .where(Syllabus.id == new_syllabus.id)
+        .options(
+            selectinload(Syllabus.subjects).selectinload(Subject.chapters)
+        )
+    )
+    syllabus = result.scalars().first()
+
+    return syllabus
 
 
 @router.get("/", response_model=List[SyllabusOut])

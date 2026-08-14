@@ -66,10 +66,16 @@ export const useAuthStore = create<AuthState>()(
         set({ isLoading: true });
         try {
           await apiClient.post("/api/v1/auth/register", userData);
-          await get().login(userData.email, userData.password);
         } catch (error) {
           set({ isLoading: false });
           throw error;
+        }
+        try {
+          await get().login(userData.email, userData.password);
+        } catch {
+          // Account created; let the user sign in with their new credentials.
+        } finally {
+          set({ isLoading: false });
         }
       },
 
