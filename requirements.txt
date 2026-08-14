@@ -1,0 +1,75 @@
+# Mentora Project Requirements
+# A full-stack AI learning platform (FastAPI backend + Vite/React frontend)
+
+# ============================================================
+# System Prerequisites
+# ============================================================
+
+# Node.js (>= 18) - for frontend build and dev server
+#   https://nodejs.org/
+# npm (>= 9) - Node package manager
+#   Installed automatically with Node.js
+
+# Python (>= 3.12) - for backend
+#   https://www.python.org/downloads/
+
+# Docker (>= 24) - for containerized deployment
+#   https://docs.docker.com/get-docker/
+
+# PostgreSQL (>= 15) - database
+#   https://www.postgresql.org/download/
+
+# Redis (>= 7) - caching and background tasks
+#   https://redis.io/download/
+
+# ============================================================
+# Backend Python Dependencies (install via: pip install -r backend/requirements.txt)
+# ============================================================
+# fastapi>=0.110.0
+# uvicorn[standard]>=0.29.0
+# sqlalchemy>=2.0.0
+# asyncpg>=0.29.0
+# alembic>=1.13.0
+# pydantic>=2.0.0
+# pydantic-settings>=2.0.0
+# python-jose[cryptography]>=3.3.0
+# passlib[bcrypt]>=1.7.4
+# python-multipart>=0.0.9
+# aiofiles>=23.0.0
+# httpx>=0.27.0
+# redis>=5.0.0
+# celery>=5.3.0
+# langchain>=0.2.0
+# langchain-openai>=0.1.0
+# langchain-community>=0.2.0
+# langchain-core>=0.2.0
+# chromadb>=0.5.0
+# pytesseract>=0.3.10
+# pdf2image>=1.16.3
+# Pillow>=10.0.0
+# openai>=1.0.0
+# selenium>=4.0.0
+# gTTS>=2.5.0
+# whisper==1.0
+
+# ============================================================
+# Frontend Node Dependencies (install via: npm install, run in frontend/)
+# ============================================================
+# react>=18.3.1
+# react-dom>=18.3.1
+# react-router-dom>=6.23.1
+# axios>=1.7.2
+# zustand>=4.5.4
+# recharts>=2.12.7
+# date-fns>=3.6.0
+# framer-motion>=11.3.2
+# react-hook-form>=7.52.1
+# zod>=3.23.8
+# clsx>=2.1.1
+# lucide-react>=0.396.0
+# socket.io-client>=4.7.5
+# vite>=5.3.4
+# typescript>=5.5.3
+# tailwindcss>=3.4.6
+# postcss>=8.4.39
+# autoprefixer>=10.4.19
