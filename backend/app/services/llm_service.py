@@ -1,11 +1,14 @@
 """
-LLM Service - handles AI language model interactions using Groq.
+LLM Service - handles AI language model interactions.
+
+Supports both Groq and OpenAI providers. Prefers Groq if
+GROQ_API_KEY is configured, falls back to OpenAI if
+OPENAI_API_KEY is available.
 """
 
 import json
 from typing import Optional, Dict, Any, List
 
-from langchain_groq import ChatGroq
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 
@@ -18,31 +21,68 @@ logger = get_logger(__name__)
 
 class LLMService:
     """
-    Service for interacting with Groq LLMs.
+    Service for interacting with LLMs (Groq or OpenAI).
+
+    The model client is initialized lazily so the backend can
+    start even when no API key is configured. The actual error
+    is raised only when a generation is attempted.
     """
 
     def __init__(self):
-        if not settings.GROQ_API_KEY:
-            raise ValueError(
-                "GROQ_API_KEY is not configured in the environment."
+        self.parser = StrOutputParser()
+        self._model = None
+        self._provider: str = "unknown"
+
+    def _get_model(self, temperature: float = None):
+        """
+        Initialize the LLM model lazily based on available API keys.
+
+        Prefers Groq when GROQ_API_KEY is present, otherwise
+        falls back to OpenAI when OPENAI_API_KEY is present.
+        """
+        if self._model is not None:
+            if temperature is not None:
+                return self._model.bind(temperature=temperature)
+            return self._model
+
+        if settings.GROQ_API_KEY:
+            from langchain_groq import ChatGroq
+
+            self._provider = "groq"
+            model_kwargs: Dict[str, Any] = {
+                "api_key": settings.GROQ_API_KEY,
+                "model": settings.GROQ_MODEL,
+            }
+            if temperature is not None:
+                model_kwargs["temperature"] = temperature
+            else:
+                model_kwargs["temperature"] = settings.GROQ_TEMPERATURE
+            model_kwargs["max_tokens"] = settings.GROQ_MAX_TOKENS
+
+            self._model = ChatGroq(**model_kwargs)
+
+        elif settings.OPENAI_API_KEY and not settings.OPENAI_API_KEY.startswith("your_"):
+            from langchain_openai import ChatOpenAI
+
+            self._provider = "openai"
+            self._model = ChatOpenAI(
+                model="gpt-4o-mini",
+                api_key=settings.OPENAI_API_KEY,
+                temperature=temperature if temperature is not None else 0.7,
             )
 
-        self.api_key = settings.GROQ_API_KEY
-        self.model_name = settings.GROQ_MODEL
-
-        self.model = ChatGroq(
-            api_key=self.api_key,
-            model=self.model_name,
-            temperature=settings.GROQ_TEMPERATURE,
-            max_tokens=settings.GROQ_MAX_TOKENS,
-        )
-
-        self.parser = StrOutputParser()
+        else:
+            raise RuntimeError(
+                "No LLM API key configured. Set GROQ_API_KEY or "
+                "OPENAI_API_KEY in your environment."
+            )
 
         logger.info(
-            "LLM service initialized with Groq model: %s",
-            self.model_name,
+            "LLM service initialized with provider: %s",
+            self._provider,
         )
+
+        return self._model
 
     @staticmethod
     def _clean_json_response(result: str) -> str:
@@ -61,6 +101,23 @@ class LLMService:
             result = result[:-3]
 
         return result.strip()
+
+    async def generate(self, prompt: str, temperature: float = 0.7) -> str:
+        """Generate a response from the LLM."""
+        model = self._get_model(temperature=temperature)
+        response = await model.ainvoke(prompt)
+        return response.content
+
+    async def chat_completion(
+        self,
+        messages: List[Dict[str, str]],
+        temperature: float = 0.7,
+    ) -> str:
+        """Generate a chat response from a list of messages."""
+        prompt = ChatPromptTemplate.from_messages(messages)
+        model = self._get_model(temperature=temperature)
+        chain = prompt | model | self.parser
+        return await chain.ainvoke({})
 
     async def parse_syllabus_content(
         self,
@@ -118,17 +175,17 @@ Parse the following syllabus content:
             ]
         )
 
-        chain = prompt | self.model | self.parser
+        model = self._get_model()
+        chain = prompt | model | self.parser
 
         result = await chain.ainvoke({})
-
         try:
             cleaned = self._clean_json_response(result)
             return json.loads(cleaned)
 
         except json.JSONDecodeError:
             logger.warning(
-                "Groq returned invalid JSON while parsing syllabus."
+                "LLM returned invalid JSON while parsing syllabus."
             )
 
             return {
@@ -190,17 +247,17 @@ Generate quiz questions from:
             ]
         )
 
-        chain = prompt | self.model | self.parser
+        model = self._get_model()
+        chain = prompt | model | self.parser
 
         result = await chain.ainvoke({})
-
         try:
             cleaned = self._clean_json_response(result)
             return json.loads(cleaned)
 
         except json.JSONDecodeError:
             logger.warning(
-                "Groq returned invalid JSON for quiz generation."
+                "LLM returned invalid JSON for quiz generation."
             )
             return []
 
@@ -240,17 +297,17 @@ Generate flashcards from:
             ]
         )
 
-        chain = prompt | self.model | self.parser
+        model = self._get_model()
+        chain = prompt | model | self.parser
 
         result = await chain.ainvoke({})
-
         try:
             cleaned = self._clean_json_response(result)
             return json.loads(cleaned)
 
         except json.JSONDecodeError:
             logger.warning(
-                "Groq returned invalid JSON for flashcards."
+                "LLM returned invalid JSON for flashcards."
             )
             return []
 
@@ -302,10 +359,10 @@ End date:
             ]
         )
 
-        chain = prompt | self.model | self.parser
+        model = self._get_model()
+        chain = prompt | model | self.parser
 
         result = await chain.ainvoke({})
-
         try:
             cleaned = self._clean_json_response(result)
             return json.loads(cleaned)
@@ -363,45 +420,16 @@ End date:
             ]
         )
 
-        chain = prompt | self.model | self.parser
+        model = self._get_model()
+        chain = prompt | model | self.parser
 
         result = await chain.ainvoke({})
-
         try:
             cleaned = self._clean_json_response(result)
             return json.loads(cleaned)
 
         except json.JSONDecodeError:
             return {"items": []}
-
-    async def chat_completion(
-        self,
-        messages: List[Dict[str, str]],
-        temperature: float = 0.7,
-    ) -> str:
-        """
-        Generate a chat response using Groq.
-        """
-
-        prompt_messages = [
-            (
-                message.get("role", "user"),
-                message.get("content", ""),
-            )
-            for message in messages
-        ]
-
-        prompt = ChatPromptTemplate.from_messages(prompt_messages)
-
-        model = self.model.bind(
-            temperature=temperature
-        )
-
-        chain = prompt | model | self.parser
-
-        result = await chain.ainvoke({})
-
-        return result
 
     async def analyze_weak_topics(
         self,
@@ -444,16 +472,16 @@ Syllabus:
             ]
         )
 
-        chain = prompt | self.model | self.parser
+        model = self._get_model()
+        chain = prompt | model | self.parser
 
         result = await chain.ainvoke({})
-
         try:
             cleaned = self._clean_json_response(result)
             return json.loads(cleaned)
 
         except json.JSONDecodeError:
             logger.warning(
-                "Groq returned invalid JSON for weak-topic analysis."
+                "LLM returned invalid JSON for weak-topic analysis."
             )
             return []

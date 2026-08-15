@@ -1,6 +1,7 @@
 """
-Database connection and initialization.
+Database connection and initialization
 """
+
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy import text
@@ -14,6 +15,11 @@ from app import models  # noqa: F401
 
 logger = get_logger(__name__)
 
+
+# --------------------------------------------------
+# Database Engine
+# --------------------------------------------------
+
 engine: AsyncEngine = create_async_engine(
     settings.DATABASE_URL,
     echo=settings.DB_ECHO,
@@ -22,6 +28,11 @@ engine: AsyncEngine = create_async_engine(
     max_overflow=10,
 )
 
+
+# --------------------------------------------------
+# Async Session
+# --------------------------------------------------
+
 AsyncSessionLocal = sessionmaker(
     bind=engine,
     class_=AsyncSession,
@@ -29,6 +40,10 @@ AsyncSessionLocal = sessionmaker(
     autoflush=False,
 )
 
+
+# --------------------------------------------------
+# Initialize Database
+# --------------------------------------------------
 
 async def init_db() -> None:
     """Create application tables and verify the database connection."""
@@ -41,6 +56,10 @@ async def init_db() -> None:
         logger.exception("Database initialization failed: %s", exc)
         raise
 
+
+# --------------------------------------------------
+# Database Dependency
+# --------------------------------------------------
 
 async def get_db():
     """Yield an async database session."""

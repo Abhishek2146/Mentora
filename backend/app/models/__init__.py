@@ -6,7 +6,7 @@ from app.models.syllabus import Syllabus, Subject, Chapter
 from app.models.study_plan import StudyPlan, StudyTask
 from app.models.flashcard import FlashcardDeck, Flashcard
 from app.models.quiz import Quiz, Question, QuizAttempt, QuestionType
-from app.models.coding_problem import CodingProblem, CodingSubmission, Difficulty
+from app.models.coding_problem import CodingProblem, CodingSubmission
 from app.models.progress import Progress, WeakTopic
 from app.models.revision import RevisionSchedule, RevisionItem
 from app.models.chat_history import ChatSession, ChatMessage, VoiceSession, WeeklyReport

@@ -39,6 +39,7 @@ async def chat_with_tutor(
         message=request.message,
         syllabus_id=request.syllabus_id,
         session_id=request.session_id,
+        db=db,
     )
     return result
 

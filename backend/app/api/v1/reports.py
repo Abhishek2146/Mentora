@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from app.core.auth import get_current_user_id
+from app.database.database import get_db
 from app.models.chat_history import WeeklyReport
 from app.services.report_service import ReportService
 from app.database.database import get_db

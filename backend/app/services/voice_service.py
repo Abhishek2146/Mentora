@@ -26,6 +26,7 @@ class VoiceService:
         if not self.whisper_model:
             import whisper
             self.whisper_model = whisper.load_model(settings.WHISPER_MODEL_SIZE)
+        return self.whisper_model
 
     async def transcribe_audio(self, audio_content: bytes) -> str:
         """Transcribe audio to text using Whisper."""
