@@ -99,6 +99,11 @@ class Settings(BaseSettings):
     # File Uploads
     # ============================================================
 
+    TESSERACT_CMD: str = os.getenv(
+        "TESSERACT_CMD",
+        "tesseract"
+    )
+
     UPLOAD_DIR: str = "./uploads"
 
     MAX_UPLOAD_SIZE: int = 52428800
@@ -132,7 +137,7 @@ class Settings(BaseSettings):
 
         origins_str = os.getenv(
             "ALLOWED_ORIGINS",
-            "http://localhost:3000,http://localhost:8000",
+            "http://localhost:3000,http://localhost:5173,http://localhost:8000",
         )
 
         return [

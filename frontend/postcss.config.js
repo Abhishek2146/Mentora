@@ -1,4 +1,6 @@
-module.exports = () => ({
-  presets: [],
-  plugins: [],
-});
+export default {
+  plugins: {
+    tailwindcss: {},
+    autoprefixer: {},
+  },
+};

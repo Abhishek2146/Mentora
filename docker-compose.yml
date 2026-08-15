@@ -3,15 +3,15 @@ version: "3.8"
 services:
   frontend:
     build:
-      context: ./frontend
-      dockerfile: ../docker/frontend.Dockerfile
+      context: .
+      dockerfile: docker/frontend.Dockerfile
     container_name: mentora_frontend
     restart: unless-stopped
     ports:
-      - "3000:3000"
+      - "8080:80"
     environment:
-      - NEXT_PUBLIC_API_URL=http://backend:8000
-      - NEXT_PUBLIC_APP_NAME=Mentora
+      - VITE_API_URL=http://backend:8000
+      - VITE_APP_NAME=Mentora
     depends_on:
       - backend
     networks:
