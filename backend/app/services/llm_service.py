@@ -9,6 +9,7 @@ OPENAI_API_KEY is available.
 import json
 from typing import Optional, Dict, Any, List
 
+from langchain_groq import ChatGroq
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 
@@ -29,60 +30,27 @@ class LLMService:
     """
 
     def __init__(self):
+        self.model: Optional[ChatGroq] = None
         self.parser = StrOutputParser()
-        self._model = None
-        self._provider: str = "unknown"
-
-    def _get_model(self, temperature: float = None):
+        
+    
+    def _get_model(self, temperature: float = 0.7) -> ChatGroq:
         """
-        Initialize the LLM model lazily based on available API keys.
-
-        Prefers Groq when GROQ_API_KEY is present, otherwise
-        falls back to OpenAI when OPENAI_API_KEY is present.
+        Initialize the Groq model only when it is needed.
         """
-        if self._model is not None:
-            if temperature is not None:
-                return self._model.bind(temperature=temperature)
-            return self._model
+        if self.model is None:
+            if not settings.GROQ_API_KEY or settings.GROQ_API_KEY.startswith("your_"):
+                raise RuntimeError(
+                    "GROQ_API_KEY is not configured. "
+                    "Add it to your backend .env file before using AI features."
+                )
 
-        if settings.GROQ_API_KEY:
-            from langchain_groq import ChatGroq
-
-            self._provider = "groq"
-            model_kwargs: Dict[str, Any] = {
-                "api_key": settings.GROQ_API_KEY,
-                "model": settings.GROQ_MODEL,
-            }
-            if temperature is not None:
-                model_kwargs["temperature"] = temperature
-            else:
-                model_kwargs["temperature"] = settings.GROQ_TEMPERATURE
-            model_kwargs["max_tokens"] = settings.GROQ_MAX_TOKENS
-
-            self._model = ChatGroq(**model_kwargs)
-
-        elif settings.OPENAI_API_KEY and not settings.OPENAI_API_KEY.startswith("your_"):
-            from langchain_openai import ChatOpenAI
-
-            self._provider = "openai"
-            self._model = ChatOpenAI(
-                model="gpt-4o-mini",
-                api_key=settings.OPENAI_API_KEY,
-                temperature=temperature if temperature is not None else 0.7,
+            self.model = ChatGroq(
+                model=settings.GROQ_MODEL,
+                api_key=settings.GROQ_API_KEY,
+                temperature=temperature,
             )
-
-        else:
-            raise RuntimeError(
-                "No LLM API key configured. Set GROQ_API_KEY or "
-                "OPENAI_API_KEY in your environment."
-            )
-
-        logger.info(
-            "LLM service initialized with provider: %s",
-            self._provider,
-        )
-
-        return self._model
+        return self.model
 
     @staticmethod
     def _clean_json_response(result: str) -> str:
@@ -142,24 +110,24 @@ Return ONLY valid JSON.
 
 Required structure:
 
-{
+{{
     "subjects": [
-        {
+        {{
             "name": "Subject Name",
             "description": "Subject description",
             "chapters": [
-                {
+                {{
                     "name": "Chapter Name",
                     "description": "Chapter description",
                     "topics": [
                         "Topic 1",
                         "Topic 2"
                     ]
-                }
+                }}
             ]
-        }
+        }}
     ]
-}
+}}
 """
 
         human_prompt = f"""
@@ -334,10 +302,10 @@ The plan should contain:
 
 Return ONLY valid JSON with:
 
-{
+{{
     "tasks": [],
     "summary": ""
-}
+}}
 """
 
         human_prompt = f"""
@@ -390,15 +358,15 @@ Create a spaced repetition revision schedule.
 
 Return ONLY valid JSON:
 
-{
+{{
     "items": [
-        {
+        {{
             "topic": "Topic name",
             "scheduled_date": "YYYY-MM-DD",
             "difficulty": "easy/medium/hard"
-        }
+        }}
     ]
-}
+}}
 """
 
         human_prompt = f"""

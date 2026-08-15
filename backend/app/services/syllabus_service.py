@@ -14,8 +14,9 @@ from app.core.logger import get_logger
 from app.models.syllabus import Syllabus, Subject, Chapter
 from app.services.llm_service import LLMService
 from app.services.ocr_service import OCRService
-
-
+from app.services.embedding_service import EmbeddingService
+from app.services.vector_service import VectorService
+import os
 logger = get_logger(__name__)
 
 
@@ -30,6 +31,8 @@ class SyllabusService:
     def __init__(self):
         self.ocr_service = OCRService()
         self.llm_service = LLMService()
+        self.embedding_service = EmbeddingService()
+        self.vector_service = VectorService()
 
     # ============================================================
     # Query Methods
@@ -120,8 +123,58 @@ class SyllabusService:
             )
 
         await db.commit()
-        return {"status": syllabus.status, "parsed_data": syllabus.parsed_data}
 
+        await self._embed_for_rag(
+            syllabus,
+            extracted_text,
+            parsed_data,
+        )
+
+        return {"status": syllabus.status, "parsed_data": syllabus.parsed_data}
+    async def _embed_for_rag(
+        self, syllabus: Syllabus, extracted_text: str, parsed_data: dict
+    ) -> None:
+        """Chunk, embed, and store the syllabus text in Chroma."""
+
+        if not extracted_text or not extracted_text.strip():
+            logger.warning(
+                f"Syllabus {syllabus.id} has no extracted text; skipping RAG embedding"
+            )
+            return
+
+        base_metadata = {
+            "user_id": syllabus.user_id,
+            "syllabus_id": syllabus.id,
+            "source": os.path.basename(syllabus.file_path)
+            if syllabus.file_path
+            else "unknown",
+        }
+
+        try:
+            chunks = self.embedding_service.chunk_text_with_metadata(
+                extracted_text, base_metadata
+            )
+
+            if not chunks:
+                logger.warning(f"No chunks produced for syllabus {syllabus.id}")
+                return
+
+            collection_name = (
+                self.vector_service.collection_name_for_syllabus(syllabus.id)
+            )
+
+            self.vector_service.add_documents(collection_name, chunks)
+            syllabus.is_ai_processed = True
+
+            logger.info(
+                f"Embedded {len(chunks)} chunks for syllabus {syllabus.id} "
+                f"into collection '{collection_name}'"
+            )
+
+        except Exception as e:
+            logger.error(
+                f"RAG embedding failed for syllabus {syllabus.id}: {e}"
+            )
     async def _create_subjects_chapters(
         self, db: AsyncSession, syllabus: Syllabus, parsed_data: dict
     ):

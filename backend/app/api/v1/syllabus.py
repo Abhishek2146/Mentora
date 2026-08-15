@@ -5,7 +5,7 @@ import os
 from typing import List, Optional
 
 import pytesseract
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, insert
 from sqlalchemy.orm import selectinload
@@ -22,10 +22,11 @@ syllabus_service = SyllabusService()
 
 
 @router.post("/", response_model=SyllabusOut, status_code=status.HTTP_201_CREATED)
+@router.post("/upload", response_model=SyllabusOut, status_code=status.HTTP_201_CREATED)
 async def upload_syllabus(
-    title: str,
+    title: str = Form(...),
     file: UploadFile = File(...),
-    description: Optional[str] = None,
+    description: Optional[str] = Form(None),
     db: AsyncSession = Depends(get_db),
     user_id: int = Depends(get_current_user_id),
 ):
@@ -161,6 +162,43 @@ async def delete_syllabus(
     await db.delete(syllabus)
     await db.commit()
     return None
+
+
+@router.post("/{syllabus_id}/analyze", response_model=SyllabusOut)
+async def analyze_syllabus(
+    syllabus_id: int,
+    db: AsyncSession = Depends(get_db),
+    user_id: int = Depends(get_current_user_id),
+):
+    result = await db.execute(
+        select(Syllabus).where(Syllabus.id == syllabus_id, Syllabus.user_id == user_id)
+    )
+    syllabus = result.scalars().first()
+    if not syllabus:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Syllabus not found",
+        )
+
+    try:
+        await syllabus_service.process_syllabus(db, syllabus)
+    except pytesseract.TesseractNotFoundError:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=(
+                "OCR engine (Tesseract) is not installed or not configured. "
+                "Contact the administrator to enable syllabus processing."
+            ),
+        )
+
+    result = await db.execute(
+        select(Syllabus)
+        .where(Syllabus.id == syllabus.id)
+        .options(
+            selectinload(Syllabus.subjects).selectinload(Subject.chapters)
+        )
+    )
+    return result.scalars().first()
 
 
 @router.get("/{syllabus_id}/subjects", response_model=List)

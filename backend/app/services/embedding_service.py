@@ -1,13 +1,9 @@
 """
-Embedding Service for Mentora RAG.
-
-Uses a local Sentence Transformers model.
-No OpenAI API is required.
+Embedding Service
 """
+import os
+from typing import List, Optional
 
-from typing import List
-
-from sentence_transformers import SentenceTransformer
 from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_core.documents import Document
@@ -15,111 +11,64 @@ from langchain_core.documents import Document
 from app.core.config import settings
 from app.core.logger import get_logger
 
-
 logger = get_logger(__name__)
 
 
 class EmbeddingService:
-    """
-    Generates text embeddings locally using Sentence Transformers.
-    """
+    # Class-level cache: the HuggingFace model is loaded once per process
+    # and shared across every EmbeddingService instance (TutorService,
+    # SyllabusService, QuizService, etc. each create their own
+    # EmbeddingService, but they must not each trigger a separate model
+    # load/download).
+    _shared_embeddings: Optional[HuggingFaceEmbeddings] = None
 
     def __init__(self):
-        self.model_name = getattr(
-            settings,
-            "EMBEDDING_MODEL",
-            "sentence-transformers/all-MiniLM-L6-v2",
-        )
-
-        logger.info(
-            "Loading embedding model: %s",
-            self.model_name,
-        )
-
-        self.model = SentenceTransformer(self.model_name)
-
-        self._embeddings = HuggingFaceEmbeddings(
-            model_name=self.model_name,
-        )
-
         self.text_splitter = RecursiveCharacterTextSplitter(
-            chunk_size=1000,
-            chunk_overlap=200,
+            chunk_size=settings.RAG_CHUNK_SIZE,
+            chunk_overlap=settings.RAG_CHUNK_OVERLAP,
         )
-
-        logger.info("Embedding model loaded successfully.")
 
     @property
-    def embeddings(self):
-        """Return a langchain-compatible embeddings instance."""
-        return self._embeddings
-
-    def embed_text(self, text: str) -> List[float]:
-        """
-        Generate an embedding for a single text.
-        """
-
-        if not text or not text.strip():
-            return []
-
-        embedding = self.model.encode(
-            text,
-            convert_to_numpy=True,
-        )
-
-        return embedding.tolist()
-
-    def embed_documents(
-        self,
-        texts: List[str],
-    ) -> List[List[float]]:
-        """
-        Generate embeddings for multiple documents.
-        """
-
-        if not texts:
-            return []
-
-        embeddings = self.model.encode(
-            texts,
-            convert_to_numpy=True,
-            show_progress_bar=False,
-        )
-
-        return embeddings.tolist()
-
-    def get_embeddings(self, texts: List[str]) -> List[List[float]]:
-        """Generate embeddings for multiple texts."""
-        return self._embeddings.embed_documents(texts)
-
-    def similarity(
-        self,
-        text1: str,
-        text2: str,
-    ) -> float:
-        """
-        Calculate cosine similarity between two texts.
-        """
-
-        from sklearn.metrics.pairwise import cosine_similarity
-
-        embedding1 = self.model.encode(
-            [text1],
-            convert_to_numpy=True,
-        )
-
-        embedding2 = self.model.encode(
-            [text2],
-            convert_to_numpy=True,
-        )
-
-        return float(
-            cosine_similarity(
-                embedding1,
-                embedding2,
-            )[0][0]
-        )
+    def embeddings(self) -> HuggingFaceEmbeddings:
+        if EmbeddingService._shared_embeddings is None:
+            logger.info(f"Loading local embedding model: {settings.EMBEDDING_MODEL}")
+            EmbeddingService._shared_embeddings = HuggingFaceEmbeddings(
+                model_name=settings.EMBEDDING_MODEL,
+            )
+        return EmbeddingService._shared_embeddings
 
     def split_text(self, text: str) -> List[Document]:
         """Split text into chunks for embedding."""
         return self.text_splitter.create_documents([text])
+
+    def split_documents(self, documents: List[Document]) -> List[Document]:
+        """Split documents into smaller chunks."""
+        return self.text_splitter.split_documents(documents)
+
+    def chunk_text_with_metadata(
+        self, text: str, base_metadata: dict
+    ) -> List[Document]:
+        """Split raw text into chunks and attach shared metadata plus a
+        per-chunk ``chunk_index`` to each resulting Document.
+
+        ``base_metadata`` should only contain fields that genuinely exist
+        (e.g. user_id, syllabus_id, source) - this method does not invent
+        any values, it just stamps them onto every chunk along with the
+        chunk's position in the sequence.
+        """
+        if not text or not text.strip():
+            return []
+
+        chunks = self.text_splitter.create_documents([text])
+        for index, chunk in enumerate(chunks):
+            chunk.metadata.update(base_metadata)
+            chunk.metadata["chunk_index"] = index
+        return chunks
+
+    def get_embedding(self, text: str) -> List[float]:
+        """Generate embedding for a single text."""
+        return self.embeddings.embed_query(text)
+
+    def get_embeddings(self, texts: List[str]) -> List[List[float]]:
+        """Generate embeddings for multiple texts."""
+        return self.embeddings.embed_documents(texts)

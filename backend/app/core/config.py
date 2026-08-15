@@ -94,7 +94,16 @@ class Settings(BaseSettings):
     CHROMA_HOST: str = "localhost"
     CHROMA_PORT: int = 8001
     CHROMA_PERSIST_DIR: str = "./chromadb"
+    # ============================================================
+    # RAG (retrieval-augmented generation)
+    # ============================================================
 
+    RAG_CHUNK_SIZE: int = 1000
+    RAG_CHUNK_OVERLAP: int = 200
+    RAG_TOP_K: int = 5
+    # Minimum relevance score (0-1, higher = more similar) required
+    # for a retrieved chunk to be used as context.
+    RAG_SIMILARITY_THRESHOLD: float = 0.2
     # ============================================================
     # File Uploads
     # ============================================================
