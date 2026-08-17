@@ -1,7 +1,6 @@
 """
 Tutor (AI Chatbot) Service
 """
-import json
 from typing import Optional, List, Dict, Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -80,6 +79,15 @@ class TutorService:
                 )
             )
             session = session_result.scalars().first()
+            if session is None:
+                session = ChatSession(
+                    user_id=user_id,
+                    title=message[:50] + "..." if len(message) > 50 else message,
+                    syllabus_id=syllabus_id,
+                )
+                db.add(session)
+                await db.commit()
+                await db.refresh(session)
         else:
             session = ChatSession(
                 user_id=user_id,
@@ -90,10 +98,30 @@ class TutorService:
             await db.commit()
             await db.refresh(session)
 
-        messages = [{"role": "user", "content": message}]
+        # Load prior conversation history so the tutor has context for
+        # follow-up questions (e.g. "explain that again", "what about chapter 3?").
+        history_result = await db.execute(
+            select(ChatMessage).where(
+                ChatMessage.session_id == session.id
+            ).order_by(ChatMessage.sequence)
+        )
+        existing_messages: List[ChatMessage] = history_result.scalars().all()
+        next_sequence = len(existing_messages) + 1
+
+        history: List[Dict[str, str]] = []
+        for msg in existing_messages:
+            history.append({"role": msg.role, "content": msg.content})
+
+        messages: List[Dict[str, str]] = []
 
         context = ""
         if syllabus_id:
+            logger.debug(
+                "[Tutor] syllabus_id=%s, user_id=%s, query=%r",
+                syllabus_id,
+                user_id,
+                message[:100],
+            )
             owned = await self._verify_syllabus_ownership(db, syllabus_id, user_id)
             if not owned:
                 logger.warning(
@@ -114,6 +142,24 @@ class TutorService:
                 )
                 context = self.vector_service.format_context(context_docs)
 
+                logger.debug(
+                    "[Tutor] Retrieved %d documents from collection '%s'; "
+                    "context length=%d chars; context preview=%s",
+                    len(context_docs),
+                    collection_name,
+                    len(context),
+                    context[:500] if context else "(empty)",
+                )
+                for i, doc in enumerate(context_docs):
+                    logger.debug(
+                        "[Tutor] Doc %d: metadata=%s, content_len=%d, "
+                        "preview=%s",
+                        i,
+                        doc.metadata,
+                        len(doc.page_content),
+                        doc.page_content[:200],
+                    )
+
         personalization = await self._build_personalization_note(user_id, syllabus_id, db)
 
         system_parts = [
@@ -129,7 +175,10 @@ class TutorService:
             system_parts.append(personalization)
 
         if len(system_parts) > 1:
-            messages = [{"role": "system", "content": "\n\n".join(system_parts)}] + messages
+            messages.append({"role": "system", "content": "\n\n".join(system_parts)})
+
+        messages.extend(history)
+        messages.append({"role": "user", "content": message})
 
         ai_response = await self.llm_service.chat_completion(messages, temperature=0.7)
 
@@ -137,7 +186,7 @@ class TutorService:
             session_id=session.id,
             role="user",
             content=message,
-            sequence=1,
+            sequence=next_sequence,
         )
         db.add(user_msg)
 
@@ -145,7 +194,7 @@ class TutorService:
             session_id=session.id,
             role="assistant",
             content=ai_response,
-            sequence=2,
+            sequence=next_sequence + 1,
         )
         db.add(ai_msg)
 

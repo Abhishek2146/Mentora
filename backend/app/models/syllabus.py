@@ -273,6 +273,13 @@ class Chapter(BaseModel):
         nullable=True,
     )
 
+    # Estimated study hours parsed from the syllabus (e.g. "(3 Hrs.)")
+    estimated_hours = Column(
+        Integer,
+        default=0,
+        nullable=False,
+    )
+
     # Relationships
     subject = relationship(
         "Subject",
