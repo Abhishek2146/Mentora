@@ -1,6 +1,6 @@
 import { useState, useCallback } from "react";
 import AppLayout from "@/components/layout/AppLayout";
-import { Upload, FileText, CheckCircle2, Loader2 } from "lucide-react";
+import { Upload, FileText, CheckCircle2, Loader2, AlertCircle } from "lucide-react";
 import { syllabusService } from "@/services/syllabusService";
 
 export default function UploadSyllabus() {
@@ -8,6 +8,7 @@ export default function UploadSyllabus() {
   const [dragging, setDragging] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [result, setResult] = useState<any>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const onDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault(); setDragging(false);
@@ -18,10 +19,29 @@ export default function UploadSyllabus() {
   const upload = async () => {
     if (!file) return;
     setUploading(true);
-    const res = await syllabusService.uploadSyllabus(file, file.name);
-    const analysis = await syllabusService.analyzeSyllabus(res.id || 1);
-    setResult(analysis);
-    setUploading(false);
+    setError(null);
+    try {
+      const res = await syllabusService.uploadSyllabus(file, file.name);
+      setResult(res);
+    } catch (e: any) {
+      const msg =
+        e?.response?.data?.detail ||
+        "Upload failed. Please try again.";
+      setError(msg);
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    if (f) setFile(f);
+  };
+
+  const handleRetry = () => {
+    setFile(null);
+    setError(null);
+    setResult(null);
   };
 
   return (
@@ -49,13 +69,32 @@ export default function UploadSyllabus() {
               <span className="text-sm font-medium">{file.name}</span>
             </div>
           )}
-          <input id="file-input" type="file" className="hidden" accept=".pdf,.docx,.png,.jpg,.jpeg" onChange={e => e.target.files?.[0] && setFile(e.target.files[0])} />
+          <input
+            id="file-input"
+            type="file"
+            className="hidden"
+            accept=".pdf,.docx,.png,.jpg,.jpeg"
+            onChange={handleFileChange}
+          />
         </div>
 
-        {file && !result && (
+        {file && !result && !error && (
           <button onClick={upload} disabled={uploading} className="btn-primary btn-lg w-full">
             {uploading ? <><Loader2 className="w-5 h-5 animate-spin" /> Analyzing…</> : <>Analyze Syllabus</>}
           </button>
+        )}
+
+        {error && (
+          <div className="card p-6 space-y-4">
+            <div className="flex items-center gap-3">
+              <AlertCircle className="w-6 h-6 text-red-500" />
+              <h3 className="font-bold text-slate-800 dark:text-slate-100">Upload Failed</h3>
+            </div>
+            <p className="text-sm text-slate-600 dark:text-slate-300">{error}</p>
+            <button onClick={handleRetry} className="btn-ghost btn-sm">
+              Try Again
+            </button>
+          </div>
         )}
 
         {result && (

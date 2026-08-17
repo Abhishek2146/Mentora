@@ -1,79 +1,5 @@
-# """
-# Application Configuration
-# """
-# import os
-# from typing import List
-
-# from pydantic_settings import BaseSettings, SettingsConfigDict
-
-
-# class Settings(BaseSettings):
-#     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
-
-#     APP_NAME: str = "Mentora AI Learning Companion"
-#     ENVIRONMENT: str = "development"
-#     DEBUG: bool = True
-
-#     API_PREFIX: str = "/api/v1"
-#     API_VERSION: str = "v1"
-
-#     BACKEND_HOST: str = "0.0.0.0"
-#     BACKEND_PORT: int = 8000
-#     BACKEND_RELOAD: bool = True
-
-#     DATABASE_URL: str = "postgresql+asyncpg://mentora:mentora123@localhost:5432/mentora"
-#     DB_ECHO: bool = False
-
-#     REDIS_URL: str = "redis://localhost:6379/0"
-
-#     SECRET_KEY: str = "supersecretkeychangeinproduction"
-#     JWT_ALGORITHM: str = "HS256"
-#     JWT_EXPIRE_MINUTES: int = 1440
-#     JWT_REFRESH_EXPIRE_MINUTES: int = 10080
-
-#     OPENAI_API_KEY: str = ""
-#     ANTHROPIC_API_KEY: str = ""
-#     GOOGLE_API_KEY: str = ""
-
-#     CHROMA_HOST: str = "localhost"
-#     CHROMA_PORT: int = 8001
-#     CHROMA_PERSIST_DIR: str = "./chromadb"
-
-#     UPLOAD_DIR: str = "./uploads"
-#     MAX_UPLOAD_SIZE: int = 52428800
-#     ALLOWED_EXTENSIONS: str = "pdf,png,jpg,jpeg,gif,mp3,wav"
-
-#     SMTP_HOST: str = "smtp.gmail.com"
-#     SMTP_PORT: int = 587
-#     SMTP_USER: str = ""
-#     SMTP_PASSWORD: str = ""
-
-#     WHISPER_MODEL_SIZE: str = "base"
-#     TTS_ENGINE: str = "pyttsx3"
-
-#     @property
-#     def ALLOWED_ORIGINS(self) -> List[str]:
-#         origins_str = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:8000")
-#         return [o.strip() for o in origins_str.split(",") if o.strip()]
-
-#     @property
-#     def ALLOWED_METHODS(self) -> List[str]:
-#         methods = os.getenv("ALLOWED_METHODS", "*")
-#         return ["*"] if methods == "*" else [m.strip() for m in methods.split(",")]
-
-#     @property
-#     def ALLOWED_HEADERS(self) -> List[str]:
-#         return ["*"]
-
-#     RATE_LIMIT_ENABLED: bool = True
-#     RATE_LIMIT_PER_MINUTE: int = 60
-
-
-# settings = Settings()
-
-
 """
-Application Configuration
+Application Configuration.
 """
 
 import os
@@ -88,7 +14,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
-        extra="ignore"
+        extra="ignore",
     )
 
     # ============================================================
@@ -119,8 +45,7 @@ class Settings(BaseSettings):
     # ============================================================
 
     DATABASE_URL: str = (
-        "postgresql+asyncpg://"
-        "mentora:mentora123@localhost:5432/mentora"
+        "postgresql+asyncpg://mentora:mentora123@localhost:5432/mentora"
     )
 
     DB_ECHO: bool = False
@@ -139,10 +64,8 @@ class Settings(BaseSettings):
 
     JWT_ALGORITHM: str = "HS256"
 
-    # Access token expiration: 24 hours
     JWT_EXPIRE_MINUTES: int = 1440
 
-    # Refresh token expiration: 7 days
     JWT_REFRESH_EXPIRE_MINUTES: int = 10080
 
     # ============================================================
@@ -152,7 +75,17 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: str = ""
     ANTHROPIC_API_KEY: str = ""
     GOOGLE_API_KEY: str = ""
-    GROQ_API_KEY: str=""
+
+    # ============================================================
+    # GROQ LLM Configuration
+    # ============================================================
+
+    GROQ_API_KEY: str = ""
+    GROQ_MODEL: str = "llama-3.3-70b-versatile"
+    GROQ_TEMPERATURE: float = 0.7
+    GROQ_MAX_TOKENS: int = 4096
+
+    EMBEDDING_MODEL: str = "sentence-transformers/all-MiniLM-L6-v2"
 
     # ============================================================
     # ChromaDB
@@ -161,23 +94,30 @@ class Settings(BaseSettings):
     CHROMA_HOST: str = "localhost"
     CHROMA_PORT: int = 8001
     CHROMA_PERSIST_DIR: str = "./chromadb"
+    # ============================================================
+    # RAG (retrieval-augmented generation)
+    # ============================================================
 
+    RAG_CHUNK_SIZE: int = 1000
+    RAG_CHUNK_OVERLAP: int = 200
+    RAG_TOP_K: int = 5
+    # Minimum relevance score (0-1, higher = more similar) required
+    # for a retrieved chunk to be used as context.
+    RAG_SIMILARITY_THRESHOLD: float = 0.2
     # ============================================================
     # File Uploads
     # ============================================================
-
-    UPLOAD_DIR: str = "./uploads"
-
-    MAX_UPLOAD_SIZE: int = 52428800
 
     TESSERACT_CMD: str = os.getenv(
         "TESSERACT_CMD",
         "tesseract"
     )
 
-    ALLOWED_EXTENSIONS: str = (
-        "pdf,png,jpg,jpeg,gif,mp3,wav"
-    )
+    UPLOAD_DIR: str = "./uploads"
+
+    MAX_UPLOAD_SIZE: int = 52428800
+
+    ALLOWED_EXTENSIONS: str = "pdf,png,jpg,jpeg,gif,doc,docx,txt"
 
     # ============================================================
     # Email / SMTP
@@ -206,7 +146,7 @@ class Settings(BaseSettings):
 
         origins_str = os.getenv(
             "ALLOWED_ORIGINS",
-            "http://localhost:3000,http://localhost:5173,http://localhost:8000"
+            "http://localhost:3000,http://localhost:5173,http://localhost:8000",
         )
 
         return [
@@ -221,7 +161,7 @@ class Settings(BaseSettings):
 
         methods = os.getenv(
             "ALLOWED_METHODS",
-            "*"
+            "*",
         )
 
         if methods == "*":
@@ -248,4 +188,3 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
-

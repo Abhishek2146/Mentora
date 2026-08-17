@@ -1,144 +1,8 @@
-# """
-# Coding Service - handles code execution and problem management
-# """
-# import os
-# import subprocess
-# import tempfile
-# import resource
-# from typing import Dict, Any, Optional
-
-# from app.core.logger import get_logger
-
-# logger = get_logger(__name__)
-
-
-# class CodingService:
-#     def __init__(self):
-#         self.supported_languages = {
-#             "python": {"ext": "py", "cmd": "python"},
-#             "javascript": {"ext": "js", "cmd": "node"},
-#             "java": {"ext": "java", "cmd": "javac"},
-#             "cpp": {"ext": "cpp", "cmd": "g++"},
-#             "c": {"ext": "c", "cmd": "gcc"},
-#             "go": {"ext": "go", "cmd": "go"},
-#             "rust": {"ext": "rs", "cmd": "rustc"},
-#         }
-
-#     async def execute_code(
-#         self,
-#         problem_id: int,
-#         code: str,
-#         language: str,
-#     ) -> Dict[str, Any]:
-#         """Execute code and return result."""
-#         lang_info = self.supported_languages.get(language.lower())
-#         if not lang_info:
-#             return {
-#                 "status": "error",
-#                 "output": f"Language '{language}' not supported",
-#                 "passed": False,
-#             }
-
-#         with tempfile.TemporaryDirectory() as tmpdir:
-#             ext = lang_info["ext"]
-#             cmd = lang_info["cmd"]
-#             file_path = os.path.join(tmpdir, f"main.{ext}")
-
-#             with open(file_path, "w") as f:
-#                 f.write(code)
-
-#             try:
-#                 if language.lower() == "cpp":
-#                     compile_result = subprocess.run(
-#                         [cmd, "-std=c++17", file_path, "-o", os.path.join(tmpdir, "a.out")],
-#                         capture_output=True,
-#                         text=True,
-#                         timeout=10,
-#                     )
-#                     if compile_result.returncode != 0:
-#                         return {
-#                             "status": "error",
-#                             "output": compile_result.stderr,
-#                             "passed": False,
-#                         }
-#                     run_cmd = [os.path.join(tmpdir, "a.out")]
-#                 elif language.lower() == "c":
-#                     compile_result = subprocess.run(
-#                         [cmd, file_path, "-o", os.path.join(tmpdir, "a.out")],
-#                         capture_output=True,
-#                         text=True,
-#                         timeout=10,
-#                     )
-#                     if compile_result.returncode != 0:
-#                         return {
-#                             "status": "error",
-#                             "output": compile_result.stderr,
-#                             "passed": False,
-#                         }
-#                     run_cmd = [os.path.join(tmpdir, "a.out")]
-#                 elif language.lower() == "java":
-#                     run_cmd = [cmd, "Main"]
-#                     os.chdir(tmpdir)
-#                     class_file = file_path.replace(".java", ".class")
-#                     if os.path.exists(class_file):
-#                         run_cmd = ["java", "Main"]
-#                 else:
-#                     run_cmd = [cmd, file_path]
-
-#                 result = subprocess.run(
-#                     run_cmd,
-#                     capture_output=True,
-#                     text=True,
-#                     timeout=30,
-#                     cwd=tmpdir,
-#                 )
-
-#                 return {
-#                     "status": "passed" if result.returncode == 0 else "failed",
-#                     "output": result.stdout + result.stderr,
-#                     "passed": result.returncode == 0,
-#                     "execution_time": result.returncode,
-#                     "memory_used": 0,
-#                 }
-#             except subprocess.TimeoutExpired:
-#                 return {
-#                     "status": "timeout",
-#                     "output": "Execution timed out",
-#                     "passed": False,
-#                 }
-#             except Exception as e:
-#                 return {
-#                     "status": "error",
-#                     "output": str(e),
-#                     "passed": False,
-#                 }
-
-#     async def generate_coding_problem(
-#         self, topic: str, difficulty: str = "medium"
-#     ) -> Dict[str, Any]:
-#         """Generate a coding problem using AI."""
-#         from app.services.llm_service import LLMService
-#         llm = LLMService()
-
-#         prompt = f"""
-# Generate a coding problem about {topic} at {difficulty} difficulty.
-# Include: title, description, starter_code (in Python), test_cases (JSON array), and solution.
-# Return as JSON.
-# """
-#         response = await llm.chat_completion([
-#             {"role": "system", "content": "You are a coding problem generator."},
-#             {"role": "user", "content": prompt},
-#         ])
-
-#         import json
-#         try:
-#             return json.loads(response.replace("```json", "").replace("```", "").strip())
-#         except json.JSONDecodeError:
-#             return {"title": topic, "description": response, "starter_code": "", "test_cases": [], "solution": ""}
-
-
 """
-Coding Service - handles code execution and problem management
+Coding Service - problem execution helper.
+
+NOTE: Executing arbitrary user code directly on the API host is unsafe.
+For production, run this service inside an isolated sandbox/container.
 """
 
 import json
@@ -146,7 +10,8 @@ import os
 import platform
 import subprocess
 import tempfile
-from typing import Any, Dict
+import time
+from typing import Dict, Any
 
 from app.core.logger import get_logger
 
@@ -161,31 +26,31 @@ class CodingService:
         self.supported_languages = {
             "python": {
                 "ext": "py",
-                "cmd": "python",
+                "cmd": ["python"],
             },
             "javascript": {
                 "ext": "js",
-                "cmd": "node",
+                "cmd": ["node"],
             },
             "java": {
                 "ext": "java",
-                "cmd": "javac",
+                "cmd": ["javac"],
             },
             "cpp": {
                 "ext": "cpp",
-                "cmd": "g++",
+                "cmd": ["g++"],
             },
             "c": {
                 "ext": "c",
-                "cmd": "gcc",
+                "cmd": ["gcc"],
             },
             "go": {
                 "ext": "go",
-                "cmd": "go",
+                "cmd": ["go"],
             },
             "rust": {
                 "ext": "rs",
-                "cmd": "rustc",
+                "cmd": ["rustc"],
             },
         }
 
@@ -225,17 +90,19 @@ class CodingService:
             }
 
         # Check whether required executable exists
-        if not self._command_exists(lang_info["cmd"]):
+        if not self._command_exists(lang_info["cmd"][0]):
             return {
                 "status": "error",
                 "output": (
-                    f"Required executable '{lang_info['cmd']}' "
+                    f"Required executable '{lang_info['cmd'][0]}' "
                     f"was not found on this system."
                 ),
                 "passed": False,
                 "execution_time": 0,
                 "memory_used": 0,
             }
+
+        start = time.perf_counter()
 
         with tempfile.TemporaryDirectory() as tmpdir:
 
@@ -266,7 +133,7 @@ class CodingService:
 
                     compile_result = subprocess.run(
                         [
-                            lang_info["cmd"],
+                            lang_info["cmd"][0],
                             file_path,
                         ],
                         capture_output=True,
@@ -283,7 +150,7 @@ class CodingService:
                                 + compile_result.stderr
                             ),
                             "passed": False,
-                            "execution_time": 0,
+                            "execution_time": int((time.perf_counter() - start) * 1000),
                             "memory_used": 0,
                         }
 
@@ -307,7 +174,7 @@ class CodingService:
 
                     compile_result = subprocess.run(
                         [
-                            lang_info["cmd"],
+                            lang_info["cmd"][0],
                             "-std=c++17",
                             file_path,
                             "-o",
@@ -327,7 +194,7 @@ class CodingService:
                                 + compile_result.stderr
                             ),
                             "passed": False,
-                            "execution_time": 0,
+                            "execution_time": int((time.perf_counter() - start) * 1000),
                             "memory_used": 0,
                         }
 
@@ -348,7 +215,7 @@ class CodingService:
 
                     compile_result = subprocess.run(
                         [
-                            lang_info["cmd"],
+                            lang_info["cmd"][0],
                             file_path,
                             "-o",
                             executable,
@@ -367,7 +234,7 @@ class CodingService:
                                 + compile_result.stderr
                             ),
                             "passed": False,
-                            "execution_time": 0,
+                            "execution_time": int((time.perf_counter() - start) * 1000),
                             "memory_used": 0,
                         }
 
@@ -388,7 +255,7 @@ class CodingService:
 
                     compile_result = subprocess.run(
                         [
-                            lang_info["cmd"],
+                            lang_info["cmd"][0],
                             "build",
                             "-o",
                             executable,
@@ -408,7 +275,7 @@ class CodingService:
                                 + compile_result.stderr
                             ),
                             "passed": False,
-                            "execution_time": 0,
+                            "execution_time": int((time.perf_counter() - start) * 1000),
                             "memory_used": 0,
                         }
 
@@ -429,7 +296,7 @@ class CodingService:
 
                     compile_result = subprocess.run(
                         [
-                            lang_info["cmd"],
+                            lang_info["cmd"][0],
                             file_path,
                             "-o",
                             executable,
@@ -448,7 +315,7 @@ class CodingService:
                                 + compile_result.stderr
                             ),
                             "passed": False,
-                            "execution_time": 0,
+                            "execution_time": int((time.perf_counter() - start) * 1000),
                             "memory_used": 0,
                         }
 
@@ -461,7 +328,7 @@ class CodingService:
                 else:
 
                     run_cmd = [
-                        lang_info["cmd"],
+                        lang_info["cmd"][0],
                         file_path,
                     ]
 
@@ -476,22 +343,18 @@ class CodingService:
                     timeout=30,
                     cwd=tmpdir,
                 )
-
-                output = (
-                    result.stdout
-                    + result.stderr
-                ).strip()
-
+                elapsed = int((time.perf_counter() - start) * 1000)
+                output = (result.stdout or "") + (result.stderr or "")
+                passed = result.returncode == 0
                 return {
-                    "status": (
-                        "passed"
-                        if result.returncode == 0
-                        else "failed"
-                    ),
+                    "status": "passed" if passed else "failed",
                     "output": output,
-                    "passed": result.returncode == 0,
-                    "execution_time": 0,
-                    "memory_used": 0,
+                    "passed": passed,
+                    "score": 100 if passed else 0,
+                    "execution_time": elapsed,
+                    "error_message": result.stderr or None,
+                    "passed_test_cases": 0,
+                    "total_test_cases": 0,
                 }
 
             except subprocess.TimeoutExpired:
@@ -507,7 +370,7 @@ class CodingService:
                     "status": "timeout",
                     "output": "Execution timed out.",
                     "passed": False,
-                    "execution_time": 30,
+                    "execution_time": int((time.perf_counter() - start) * 1000),
                     "memory_used": 0,
                 }
 
@@ -522,7 +385,7 @@ class CodingService:
                     "status": "error",
                     "output": str(exc),
                     "passed": False,
-                    "execution_time": 0,
+                    "execution_time": int((time.perf_counter() - start) * 1000),
                     "memory_used": 0,
                 }
 
@@ -632,4 +495,3 @@ Do not include markdown code fences.
                 "test_cases": [],
                 "solution": "",
             }
-

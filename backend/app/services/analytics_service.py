@@ -32,7 +32,7 @@ class AnalyticsService:
 
         coding_result = await db.execute(
             select(func.count(CodingSubmission.id))
-            .where(CodingSubmission.user_id == user_id, CodingSubmission.passed == True)
+            .where(CodingSubmission.user_id == user_id, CodingSubmission.status == "passed")
         )
         coding_solved = coding_result.scalar() or 0
 
@@ -127,7 +127,7 @@ class AnalyticsService:
         for sub in coding_result.scalars().all():
             activities.append({
                 "type": "coding_submission",
-                "description": f"Code submission: {'passed' if sub.passed else 'failed'}",
+                "description": f"Code submission: {'passed' if sub.status == 'passed' else 'failed'}",
                 "timestamp": sub.created_at.isoformat() if sub.created_at else None,
             })
 

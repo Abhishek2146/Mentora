@@ -74,6 +74,8 @@ class OCRService:
             "jpeg",
             "gif",
             "bmp",
+            "docx",
+            "txt",
         ]
 
     async def extract_text(self, file_path: str, file_type: str) -> str:
@@ -87,6 +89,12 @@ class OCRService:
         try:
             if extension == "pdf":
                 return await self._extract_from_pdf(file_path)
+
+            if extension == "docx":
+                return await self._extract_from_docx(file_path)
+
+            if extension == "txt":
+                return await self._extract_from_txt(file_path)
 
             return await self._extract_from_image(file_path)
 
@@ -165,6 +173,30 @@ class OCRService:
                 text_parts.append(page_text)
 
         return "\n".join(text_parts).strip()
+
+    async def _extract_from_docx(self, file_path: str) -> str:
+        """Extract text from a DOCX file using python-docx."""
+        try:
+            from docx import Document
+        except ImportError:
+            logger.error(
+                "python-docx is not installed. "
+                "Install with: pip install python-docx"
+            )
+            raise RuntimeError(
+                "DOCX extraction is not available - python-docx is not installed."
+            )
+
+        doc = Document(file_path)
+        text_parts = [para.text for para in doc.paragraphs if para.text.strip()]
+        return "\n".join(text_parts).strip()
+
+    async def _extract_from_txt(self, file_path: str) -> str:
+        """Extract text from a plain-text file."""
+        import codecs
+
+        with codecs.open(file_path, "r", encoding="utf-8") as f:
+            return f.read().strip()
 
     async def _extract_from_image(self, file_path: str) -> str:
         """Extract text from an image using OCR."""

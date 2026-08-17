@@ -1,7 +1,7 @@
 """
 Flashcard Service
 """
-from typing import List, Optional
+from typing import List, Optional, Union, Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -25,7 +25,7 @@ class FlashcardService:
         content: str,
         num_cards: int = 20,
         db: Optional[AsyncSession] = None,
-    ) -> FlashcardDeck:
+    ) -> Union[FlashcardDeck, List[dict]]:
         """Generate flashcards from syllabus content."""
         flashcards_data = await self.llm_service.generate_flashcards(content, num_cards)
 
@@ -62,10 +62,15 @@ class FlashcardService:
     async def get_due_flashcards(self, deck_id: int, db: AsyncSession) -> List[Flashcard]:
         """Get flashcards that are due for review."""
         from datetime import datetime
+        from sqlalchemy import or_
+        now = datetime.utcnow().isoformat()
         result = await db.execute(
             select(Flashcard).where(
                 Flashcard.deck_id == deck_id,
-                (Flashcard.next_review == None) | (Flashcard.next_review <= datetime.utcnow().isoformat()),
+                or_(
+                    Flashcard.next_review.is_(None),
+                    Flashcard.next_review <= now,
+                ),
             )
         )
         return result.scalars().all()
@@ -76,17 +81,30 @@ class FlashcardService:
         rating: int,
     ) -> None:
         """Update flashcard based on spaced repetition rating."""
-        ease_factor = max(1.3, flashcard.ease_factor + (rating - 3) * (0.1 * flashcard.ease_factor))
+        if not 0 <= rating <= 5:
+            raise ValueError("rating must be between 0 and 5")
+
+        ease = max(1.3, (flashcard.ease_factor or 250) / 100.0)
+        ease += (rating - 3) * 0.1
+        ease = max(1.3, ease)
+
         if rating < 3:
             repetitions = 0
             interval = 1
         else:
             repetitions = flashcard.repetitions + 1
-            interval = max(1, int(flashcard.interval * ease_factor / 100))
+            if repetitions == 1:
+                interval = 1
+            elif repetitions == 2:
+                interval = 6
+            else:
+                interval = max(1, round(flashcard.interval * ease))
 
-        flashcard.ease_factor = int(ease_factor * 100)
+        flashcard.ease_factor = round(ease * 100)
         flashcard.repetitions = repetitions
         flashcard.interval = interval
+
         from datetime import datetime, timedelta
-        flashcard.next_review = (datetime.utcnow() + timedelta(days=interval)).isoformat()
-        flashcard.last_reviewed = datetime.utcnow().isoformat()
+        now = datetime.utcnow()
+        flashcard.next_review = (now + timedelta(days=interval)).isoformat()
+        flashcard.last_reviewed = now.isoformat()

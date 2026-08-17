@@ -1,64 +1,20 @@
-# """
-# Database connection and initialization
-# """
-# import asyncpg
-# from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine, AsyncSession
-# from sqlalchemy.orm import sessionmaker, declarative_base
-
-# from app.core.config import settings
-# from app.core.logger import get_logger
-
-# logger = get_logger(__name__)
-
-# engine: AsyncEngine = create_async_engine(
-#     settings.DATABASE_URL,
-#     echo=settings.DB_ECHO,
-#     pool_pre_ping=True,
-#     pool_size=20,
-#     max_overflow=10,
-# )
-
-# AsyncSessionLocal = sessionmaker(
-#     bind=engine,
-#     class_=AsyncSession,
-#     expire_on_commit=False,
-#     autoflush=False,
-#     autocommit=False,
-# )
-
-# Base = declarative_base()
-
-
-# async def init_db():
-#     """Initialize database - create tables for both SQLite and PostgreSQL."""
-#     try:
-#         async with engine.begin() as conn:
-#             await conn.run_sync(Base.metadata.create_all)
-#         logger.info("Database tables initialized successfully")
-#     except Exception as e:
-#         logger.error(f"Database initialization/connection check failed: {e}")
-
-
-# async def get_db() -> AsyncSession:
-#     async with AsyncSessionLocal() as session:
-#         yield session
-
 """
 Database connection and initialization
 """
 
-from sqlalchemy.ext.asyncio import (
-    AsyncEngine,
-    AsyncSession,
-    create_async_engine,
-)
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy import text
 
 from app.core.config import settings
 from app.core.logger import get_logger
 from app.database.base import Base
 
+# Import all models so SQLAlchemy registers their tables before create_all.
+from app import models  # noqa: F401
+
 logger = get_logger(__name__)
+
 
 # --------------------------------------------------
 # Database Engine
@@ -72,6 +28,7 @@ engine: AsyncEngine = create_async_engine(
     max_overflow=10,
 )
 
+
 # --------------------------------------------------
 # Async Session
 # --------------------------------------------------
@@ -81,277 +38,96 @@ AsyncSessionLocal = sessionmaker(
     class_=AsyncSession,
     expire_on_commit=False,
     autoflush=False,
-    autocommit=False,
 )
 
 
-# # --------------------------------------------------
-# # Import Models
-# # --------------------------------------------------
-# # These imports make sure SQLAlchemy knows about
-# # all models before create_all() is executed.
+# --------------------------------------------------
+# Schema Migration
+# --------------------------------------------------
 
-# from app.models.user import User
-# from app.models.syllabus import Syllabus
-# from app.models.study_plan import StudyPlan
-# from app.models.revision import Revision
-# from app.models.quiz import Quiz
-# from app.models.flashcard import Flashcard
-# from app.models.progress import Progress
-# from app.models.chat_history import ChatHistory
-# from app.models.analytics import Analytics
-# from app.models.coding_problem import CodingProblem
+async def _run_migrations(conn) -> None:
+    """Idempotently add columns to existing tables that are defined in
+    the SQLAlchemy models but missing from the live database.
 
-
-# # --------------------------------------------------
-# # Initialize Database
-# # --------------------------------------------------
-
-# async def init_db():
-#     """
-#     Initialize database and create all registered tables.
-#     """
-
-#     try:
-#         async with engine.begin() as conn:
-#             await conn.run_sync(Base.metadata.create_all)
-
-#         logger.info("Database tables initialized successfully")
-
-#     except Exception as e:
-#         logger.error(
-#             f"Database initialization/connection check failed: {e}"
-#         )
-#         raise
-
-
-# # --------------------------------------------------
-# # Database Dependency
-# # --------------------------------------------------
-
-# async def get_db():
-#     """
-#     Provide an async database session.
-#     """
-
-#     async with AsyncSessionLocal() as session:
-#         yield session
-
-# """
-# Database connection and initialization
-# """
-
-# from sqlalchemy.ext.asyncio import (
-#     AsyncEngine,
-#     AsyncSession,
-#     create_async_engine,
-# )
-# from sqlalchemy.orm import sessionmaker, declarative_base
-
-# from app.core.config import settings
-# from app.core.logger import get_logger
-
-
-# # --------------------------------------------------
-# # Logger
-# # --------------------------------------------------
-
-# logger = get_logger(__name__)
-
-
-# # --------------------------------------------------
-# # Database Engine
-# # --------------------------------------------------
-
-# engine: AsyncEngine = create_async_engine(
-#     settings.DATABASE_URL,
-#     echo=settings.DB_ECHO,
-#     pool_pre_ping=True,
-#     pool_size=20,
-#     max_overflow=10,
-# )
-
-
-# # --------------------------------------------------
-# # Async Session
-# # --------------------------------------------------
-
-# AsyncSessionLocal = sessionmaker(
-#     bind=engine,
-#     class_=AsyncSession,
-#     expire_on_commit=False,
-#     autoflush=False,
-#     autocommit=False,
-# )
-
-
-# # --------------------------------------------------
-# # Base Model
-# # --------------------------------------------------
-
-# Base = declarative_base()
-
-
-# # --------------------------------------------------
-# # Import Models
-# # --------------------------------------------------
-
-# # These imports make sure SQLAlchemy knows about
-# # all models before create_all() is executed.
-
-# from app.models.user import User
-# from app.models.syllabus import Syllabus
-# from app.models.study_plan import StudyPlan
-# from app.models.revision import RevisionSchedule
-# from app.models.quiz import Quiz
-# from app.models.flashcard import Flashcard
-# from app.models.progress import Progress
-# from app.models.chat_history import ChatSession
-# from app.models.analytics import AnalyticsSummary
-# from app.models.coding_problem import CodingProblem
-
-
-# # --------------------------------------------------
-# # Initialize Database
-# # --------------------------------------------------
-
-# async def init_db():
-#     """
-#     Initialize database and create all registered tables.
-#     """
-
-#     try:
-#         async with engine.begin() as conn:
-#             await conn.run_sync(Base.metadata.create_all)
-
-#         logger.info(
-#             "Database tables initialized successfully"
-#         )
-
-#     except Exception as e:
-#         logger.error(
-#             f"Database initialization/connection check failed: {e}"
-#         )
-#         raise
-
-
-# # --------------------------------------------------
-# # Database Dependency
-# # --------------------------------------------------
-
-# async def get_db():
-#     """
-#     Provide an async database session.
-#     """
-
-#     async with AsyncSessionLocal() as session:
-#         yield session
-
-"""
-Database connection and initialization
-"""
-
-from sqlalchemy.ext.asyncio import (
-    AsyncEngine,
-    AsyncSession,
-    create_async_engine,
-)
-from sqlalchemy.orm import sessionmaker
-
-from app.core.config import settings
-from app.core.logger import get_logger
-
-# IMPORTANT:
-# Import the SAME Base that your models inherit from.
-from app.database.base import Base
-
-logger = get_logger(__name__)
-
-
-# ==========================================================
-# Database Engine
-# ==========================================================
-
-engine: AsyncEngine = create_async_engine(
-    settings.DATABASE_URL,
-    echo=settings.DB_ECHO,
-    pool_pre_ping=True,
-    pool_size=20,
-    max_overflow=10,
-)
-
-
-# ==========================================================
-# Async Session
-# ==========================================================
-
-AsyncSessionLocal = sessionmaker(
-    bind=engine,
-    class_=AsyncSession,
-    expire_on_commit=False,
-    autoflush=False,
-    autocommit=False,
-)
-
-
-# ==========================================================
-# Import Models
-# ==========================================================
-#
-# IMPORTANT:
-# These imports must happen BEFORE create_all().
-# This registers all models with the SAME Base.metadata.
-#
-
-from app.models.user import User
-from app.models.syllabus import Syllabus
-from app.models.study_plan import StudyPlan
-from app.models.revision import RevisionSchedule
-from app.models.quiz import Quiz
-from app.models.flashcard import Flashcard
-from app.models.progress import Progress
-from app.models.chat_history import ChatSession
-from app.models.analytics import AnalyticsSummary
-from app.models.coding_problem import CodingProblem
-
-
-# ==========================================================
-# Initialize Database
-# ==========================================================
-
-async def init_db():
+    ``Base.metadata.create_all`` only creates tables that do not yet
+    exist; it never alters existing tables.  This helper bridges that
+    gap so model changes (e.g. adding ``estimated_hours`` to
+    ``chapters``) are applied without a separate migration tool.
     """
-    Initialize database and create all registered tables.
-    """
+    # Iterate over every registered model and check each column.
+    for table in Base.metadata.tables.values():
+        table_name = table.name
+        for column in table.columns:
+            # Skip base columns (id, created_at, updated_at) which are
+            # always present on existing tables.
+            if column.name in ("id", "created_at", "updated_at"):
+                continue
 
-    try:
-        async with engine.begin() as conn:
+            result = await conn.execute(
+                text(
+                    "SELECT 1 FROM information_schema.columns "
+                    "WHERE table_name = :t AND column_name = :c"
+                ).bindparams(t=table_name, c=column.name)
+            )
+            if result.fetchone():
+                continue  # column already exists
 
-            await conn.run_sync(
-                Base.metadata.create_all
+            # Build the DDL fragment for this column.
+            col_type = str(column.type)
+            parts = [f'"{column.name}"', col_type]
+
+            # Server-side default (e.g. DEFAULT 0).
+            if column.server_default is not None:
+                parts.append(f"DEFAULT {column.server_default}")
+            elif column.default is not None and column.default.is_callable is False:
+                parts.append(f"DEFAULT {column.default.arg}")
+
+            # Nullability.
+            if not column.nullable and "DEFAULT" not in parts:
+                # If a default is provided, allow NOT NULL to use it.
+                # If no default, make it nullable to avoid breaking
+                # existing rows.
+                if "DEFAULT" in parts:
+                    parts.append("NOT NULL")
+                else:
+                    # No default and not nullable — still add as nullable
+                    # so existing rows don't break; the app default 0
+                    # will be applied on read.
+                    pass
+            elif not column.nullable:
+                parts.append("NOT NULL")
+
+            ddl = "ALTER TABLE " + f'"{table_name}"' + " ADD COLUMN " + " ".join(parts)
+            await conn.execute(text(ddl))
+            logger.info(
+                "Added column '%s' to table '%s'",
+                column.name,
+                table_name,
             )
 
-        logger.info(
-            "Database tables initialized successfully"
-        )
 
-    except Exception as e:
+# --------------------------------------------------
+# Initialize Database
+# --------------------------------------------------
 
-        logger.error(
-            f"Database initialization/connection check failed: {e}"
-        )
-
+async def init_db() -> None:
+    """Create application tables and verify the database connection."""
+    try:
+        async with engine.begin() as conn:
+            await conn.execute(text("SELECT 1"))
+            await conn.run_sync(Base.metadata.create_all)
+            await _run_migrations(conn)
+        logger.info("Database initialized successfully")
+    except Exception as exc:
+        logger.exception("Database initialization failed: %s", exc)
         raise
 
 
-# ==========================================================
+# --------------------------------------------------
 # Database Dependency
-# ==========================================================
+# --------------------------------------------------
 
 async def get_db():
-    """
-    Provide an async database session.
-    """
-
+    """Yield an async database session."""
     async with AsyncSessionLocal() as session:
         yield session

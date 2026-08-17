@@ -1,11 +1,10 @@
 """
-Report Service - generates weekly and analytical reports
+Report Service - generates weekly and analytical reports.
 """
 from datetime import datetime, timedelta
-from typing import Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
+from sqlalchemy import select, func, case
 
 from app.core.logger import get_logger
 from app.models.chat_history import WeeklyReport
@@ -19,57 +18,77 @@ logger = get_logger(__name__)
 
 class ReportService:
     async def generate_weekly_report(self, user_id: int, db: AsyncSession) -> dict:
-        """Generate a weekly report for the user."""
-        today = datetime.utcnow()
-        week_start = today - timedelta(days=today.weekday())
-        week_end = week_start + timedelta(days=6)
+        now = datetime.utcnow()
+        week_start = (now - timedelta(days=now.weekday())).replace(
+            hour=0, minute=0, second=0, microsecond=0
+        )
+        week_end = week_start + timedelta(days=7)
 
         quiz_result = await db.execute(
             select(
                 func.count(QuizAttempt.id).label("quizzes_taken"),
-                func.sum(func.case((QuizAttempt.is_passed == True, 1), else_=0)).label("quizzes_passed"),
+                func.sum(case((QuizAttempt.is_passed.is_(True), 1), else_=0)).label("quizzes_passed"),
                 func.avg(QuizAttempt.score).label("avg_score"),
-                func.sum(QuizAttempt.time_taken).label("quiz_time"),
+                func.coalesce(func.sum(QuizAttempt.time_taken), 0).label("quiz_time"),
             ).where(
                 QuizAttempt.user_id == user_id,
                 QuizAttempt.created_at >= week_start,
-                QuizAttempt.created_at <= week_end,
+                QuizAttempt.created_at < week_end,
             )
         )
-        quiz_stats = quiz_result.fetchone()
+        quiz_stats = quiz_result.one()
 
         coding_result = await db.execute(
-            select(func.count(CodingSubmission.id).label("problems_solved"))
-            .where(
+            select(func.count(CodingSubmission.id).label("problems_solved")).where(
                 CodingSubmission.user_id == user_id,
                 CodingSubmission.created_at >= week_start,
-                CodingSubmission.created_at <= week_end,
+                CodingSubmission.created_at < week_end,
+                CodingSubmission.status == "passed",
             )
         )
-        coding_stats = coding_result.fetchone()
+        coding_stats = coding_result.one()
 
         tasks_result = await db.execute(
             select(func.count(StudyTask.id).label("tasks_completed"))
-            .join(StudyPlan)
+            .join(StudyPlan, StudyTask.study_plan_id == StudyPlan.id)
             .where(
                 StudyPlan.user_id == user_id,
-                StudyTask.completed == True,
+                StudyTask.completed.is_(True),
                 StudyTask.updated_at >= week_start,
-                StudyTask.updated_at <= week_end,
+                StudyTask.updated_at < week_end,
             )
         )
-        task_stats = tasks_result.fetchone()
+        task_stats = tasks_result.one()
 
+        # Flashcards belong to users through their deck.
+        from app.models.flashcard import FlashcardDeck
+        flashcard_result = await db.execute(
+            select(func.count(Flashcard.id))
+            .join(FlashcardDeck, Flashcard.deck_id == FlashcardDeck.id)
+            .where(
+                FlashcardDeck.user_id == user_id,
+                Flashcard.last_reviewed.is_not(None),
+                Flashcard.last_reviewed >= week_start.isoformat(),
+                Flashcard.last_reviewed < week_end.isoformat(),
+            )
+        )
+        flashcards_reviewed = flashcard_result.scalar_one()
+
+        avg_score = float(quiz_stats.avg_score or 0.0)
         report = WeeklyReport(
             user_id=user_id,
             week_start=week_start.strftime("%Y-%m-%d"),
-            week_end=week_end.strftime("%Y-%m-%d"),
-            study_time_minutes=quiz_stats.quiz_time or 0 if quiz_stats else 0,
-            quizzes_taken=quiz_stats.quizzes_taken or 0 if quiz_stats else 0,
-            quizzes_passed=quiz_stats.quizzes_passed or 0 if quiz_stats else 0,
-            flashcards_reviewed=0,
-            coding_problems_solved=coding_stats.problems_solved or 0 if coding_stats else 0,
-            report_data=f"Weekly report for {week_start.strftime('%Y-%m-%d')} to {week_end.strftime('%Y-%m-%d')}. Avg quiz score: {quiz_stats.avg_score or 0:.1f}%",
+            week_end=(week_end - timedelta(days=1)).strftime("%Y-%m-%d"),
+            study_time_minutes=int(quiz_stats.quiz_time or 0) // 60,
+            quizzes_taken=int(quiz_stats.quizzes_taken or 0),
+            quizzes_passed=int(quiz_stats.quizzes_passed or 0),
+            flashcards_reviewed=flashcards_reviewed,
+            coding_problems_solved=int(coding_stats.problems_solved or 0),
+            report_data=(
+                f"Weekly report for {week_start:%Y-%m-%d} to "
+                f"{week_end - timedelta(days=1):%Y-%m-%d}. "
+                f"Average quiz score: {avg_score:.1f}%."
+            ),
         )
         db.add(report)
         await db.commit()
@@ -78,11 +97,12 @@ class ReportService:
         return {
             "report": report,
             "summary": {
-                "quizzes_taken": quiz_stats.quizzes_taken or 0,
-                "quizzes_passed": quiz_stats.quizzes_passed or 0,
-                "avg_score": float(quiz_stats.avg_score) if quiz_stats and quiz_stats.avg_score else 0.0,
-                "coding_solved": coding_stats.problems_solved or 0,
-                "tasks_completed": task_stats.tasks_completed or 0,
+                "quizzes_taken": int(quiz_stats.quizzes_taken or 0),
+                "quizzes_passed": int(quiz_stats.quizzes_passed or 0),
+                "avg_score": avg_score,
+                "coding_solved": int(coding_stats.problems_solved or 0),
+                "tasks_completed": int(task_stats.tasks_completed or 0),
+                "flashcards_reviewed": flashcards_reviewed,
             },
         }
 

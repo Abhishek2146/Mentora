@@ -4,7 +4,7 @@ AI Tutor API endpoints
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
@@ -18,9 +18,10 @@ tutor_service = TutorService()
 
 
 class ChatRequest(BaseModel):
-    message: str
+    message: str = Field(..., min_length=1, description="The student's question")
     syllabus_id: Optional[int] = None
     session_id: Optional[int] = None
+    conversation_id: Optional[int] = None
 
 
 class ChatResponse(BaseModel):
@@ -38,7 +39,7 @@ async def chat_with_tutor(
         user_id=user_id,
         message=request.message,
         syllabus_id=request.syllabus_id,
-        session_id=request.session_id,
+        session_id=request.session_id or request.conversation_id,
         db=db,
     )
     return result

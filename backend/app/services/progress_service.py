@@ -19,6 +19,26 @@ logger = get_logger(__name__)
 class ProgressService:
     def __init__(self):
         self.llm_service = LLMService()
+    async def get_top_weak_topics(
+        self,
+        user_id: int,
+        db: AsyncSession,
+        syllabus_id: Optional[int] = None,
+        limit: int = 3,
+    ) -> List[WeakTopic]:
+        """Return the user's weakest topics (lowest accuracy first), used
+        by the AI Tutor / Voice Tutor to personalize explanations.
+
+        This reads the existing WeakTopic table populated by
+        detect_weak_topics; it does not redesign analytics.
+        """
+        query = select(WeakTopic).where(WeakTopic.user_id == user_id)
+        if syllabus_id:
+            query = query.where(WeakTopic.syllabus_id == syllabus_id)
+        query = query.order_by(WeakTopic.accuracy.asc()).limit(limit)
+
+        result = await db.execute(query)
+        return result.scalars().all()
 
     async def update_progress(self, user_id: int, progress_type: str, value: float, db: AsyncSession):
         """Update or create a progress entry."""
