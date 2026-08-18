@@ -69,6 +69,14 @@ class Settings(BaseSettings):
     JWT_REFRESH_EXPIRE_MINUTES: int = 10080
 
     # ============================================================
+    # Admin Registration
+    # ============================================================
+
+    # Secret key required to register new admin accounts.
+    # Anyone without this key cannot create an admin user.
+    ADMIN_SECRET_KEY: str = "mentora-admin-secret"
+
+    # ============================================================
     # AI API Keys
     # ============================================================
 
@@ -81,7 +89,11 @@ class Settings(BaseSettings):
     # ============================================================
 
     GROQ_API_KEY: str = ""
+<<<<<<< HEAD
     GROQ_MODEL: str = "allam-2-7b"
+=======
+    GROQ_MODEL: str = "openai/gpt-oss-120b"
+>>>>>>> 94af0c5359713970689e9a2e3cc9ef831e55cb90
     GROQ_TEMPERATURE: float = 0.7
     GROQ_MAX_TOKENS: int = 4096
     # Maximum characters for syllabus text sent in a single LLM request.

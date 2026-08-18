@@ -29,6 +29,7 @@ from app.api.v1 import (
     voice,
     reports,
     dashboard,
+    admin,
 )
 
 from app.middleware.rate_limit import RateLimitMiddleware
@@ -200,6 +201,12 @@ app.include_router(
     dashboard.router,
     prefix=f"{settings.API_PREFIX}/dashboard",
     tags=["dashboard"],
+)
+
+app.include_router(
+    admin.router,
+    prefix=f"{settings.API_PREFIX}/admin",
+    tags=["admin"],
 )
 
 

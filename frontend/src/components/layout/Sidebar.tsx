@@ -3,7 +3,7 @@ import {
   LayoutDashboard, Brain, CreditCard, CalendarDays, BarChart3,
   ClipboardList, BookOpen, Trophy, AlertTriangle, RotateCcw,
   Upload, Code2, Mic, User, Settings, ChevronLeft, ChevronRight,
-  GraduationCap, TrendingUp,
+  GraduationCap, TrendingUp, ShieldCheck, Users,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useUIStore } from "@/store/uiStore";
@@ -54,6 +54,20 @@ export default function Sidebar() {
   const { user } = useAuthStore();
   const { pathname } = useLocation();
   const userName = user?.full_name || user?.username || "Student";
+  const isAdmin = user?.role === "admin";
+
+  const groups = [
+    ...(isAdmin
+      ? [{
+          label: "Admin",
+          items: [
+            { label: "Admin Dashboard", icon: ShieldCheck, path: "/admin/dashboard" },
+            { label: "User Management", icon: Users, path: "/admin/dashboard" },
+          ],
+        }]
+      : []),
+    ...navGroups,
+  ];
 
   return (
     <aside
@@ -94,7 +108,7 @@ export default function Sidebar() {
 
       {/* Navigation */}
       <nav className="flex-1 overflow-y-auto py-4 px-2 no-scrollbar">
-        {navGroups.map((group) => (
+        {groups.map((group) => (
           <div key={group.label} className="mb-4">
             {sidebarOpen && (
               <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400 dark:text-slate-500 px-3 mb-1.5">

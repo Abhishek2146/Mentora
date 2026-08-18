@@ -17,8 +17,8 @@ from app.core.security import (
 from app.core.auth import get_current_user_id
 from app.core.config import settings
 from app.database.database import get_db
-from app.models.user import User
-from app.schemas.user import UserCreate, UserLogin, UserOut, Token
+from app.models.user import User, UserRole
+from app.schemas.user import UserCreate, UserLogin, UserOut, Token, AdminCreate
 
 from sqlalchemy import select
 
@@ -47,6 +47,53 @@ async def register(
         username=user_data.username,
         full_name=user_data.full_name,
         #role=user_data.role.value if hasattr(user_data.role, "value") else user_data.role,
+        hashed_password=hashed_password,
+    )
+    db.add(new_user)
+    await db.commit()
+    await db.refresh(new_user)
+    return new_user
+
+
+@router.post(
+    "/register-admin",
+    response_model=UserOut,
+    status_code=status.HTTP_201_CREATED,
+)
+async def register_admin(
+    user_data: AdminCreate,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Register a new admin account.
+
+    Only callers that provide the configured ``ADMIN_SECRET_KEY``
+    are allowed to create admin users.
+    """
+    if user_data.admin_secret != settings.ADMIN_SECRET_KEY:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Invalid admin registration key",
+        )
+
+    existing_user = await db.execute(
+        select(User).where(
+            (User.email == user_data.email) | (User.username == user_data.username)
+        )
+    )
+    if existing_user.scalars().first():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Email or username already registered",
+        )
+
+    hashed_password = get_password_hash(user_data.password)
+    new_user = User(
+        email=user_data.email,
+        username=user_data.username,
+        full_name=user_data.full_name,
+        role=UserRole.ADMIN.value,
+        is_verified=True,
         hashed_password=hashed_password,
     )
     db.add(new_user)
