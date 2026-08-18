@@ -1,7 +1,19 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import axios from "axios";
 import { User, Token } from "@/types";
 import apiClient from "@/lib/api";
+
+function getApiError(error: unknown): Error {
+  if (axios.isAxiosError(error)) {
+    const detail = error.response?.data?.detail;
+    if (typeof detail === "string") return new Error(detail);
+    if (Array.isArray(detail)) {
+      return new Error(detail.map((d) => d.msg ?? JSON.stringify(d)).join("; "));
+    }
+  }
+  return error instanceof Error ? error : new Error("Something went wrong. Please try again.");
+}
 
 interface AuthState {
   user: User | null;
@@ -12,6 +24,7 @@ interface AuthState {
   setTokens: (tokens: Token) => void;
   login: (emailOrUsername: string, password: string) => Promise<void>;
   register: (userData: { email: string; username: string; password: string; full_name?: string; role?: string }) => Promise<void>;
+  registerAdmin: (userData: { email: string; username: string; password: string; full_name?: string; admin_secret: string }) => Promise<void>;
   logout: () => void;
   checkAuth: () => Promise<void>;
   updateUser: (data: Partial<User>) => Promise<void>;
@@ -68,12 +81,29 @@ export const useAuthStore = create<AuthState>()(
           await apiClient.post("/api/v1/auth/register", userData);
         } catch (error) {
           set({ isLoading: false });
-          throw error;
+          throw getApiError(error);
         }
         try {
           await get().login(userData.email, userData.password);
         } catch {
           // Account created; let the user sign in with their new credentials.
+        } finally {
+          set({ isLoading: false });
+        }
+      },
+
+      registerAdmin: async (userData) => {
+        set({ isLoading: true });
+        try {
+          await apiClient.post("/api/v1/auth/register-admin", userData);
+        } catch (error) {
+          set({ isLoading: false });
+          throw getApiError(error);
+        }
+        try {
+          await get().login(userData.email, userData.password);
+        } catch {
+          // Admin account created; let the user sign in with their new credentials.
         } finally {
           set({ isLoading: false });
         }

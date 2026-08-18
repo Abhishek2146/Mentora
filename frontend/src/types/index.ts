@@ -272,4 +272,30 @@ export interface DashboardResponse {
   }[];
 }
 
+export interface AdminDashboardStats {
+  stats: {
+    total_users: number;
+    total_students: number;
+    total_admins: number;
+    active_users: number;
+    total_syllabi: number;
+    total_study_plans: number;
+    total_quizzes: number;
+    total_quiz_attempts: number;
+    total_coding_problems: number;
+    total_coding_submissions: number;
+    total_flashcard_decks: number;
+    avg_quiz_score: number;
+  };
+  recent_registrations: {
+    id: number;
+    username: string;
+    full_name: string | null;
+    email: string;
+    role: string;
+    is_active: boolean;
+    created_at: string | null;
+  }[];
+}
+
 export * from "./api";

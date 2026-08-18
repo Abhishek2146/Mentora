@@ -69,6 +69,14 @@ class Settings(BaseSettings):
     JWT_REFRESH_EXPIRE_MINUTES: int = 10080
 
     # ============================================================
+    # Admin Registration
+    # ============================================================
+
+    # Secret key required to register new admin accounts.
+    # Anyone without this key cannot create an admin user.
+    ADMIN_SECRET_KEY: str = "mentora-admin-secret"
+
+    # ============================================================
     # AI API Keys
     # ============================================================
 
@@ -81,7 +89,7 @@ class Settings(BaseSettings):
     # ============================================================
 
     GROQ_API_KEY: str = ""
-    GROQ_MODEL: str = "llama-3.3-70b-versatile"
+    GROQ_MODEL: str = "openai/gpt-oss-120b"
     GROQ_TEMPERATURE: float = 0.7
     GROQ_MAX_TOKENS: int = 4096
 

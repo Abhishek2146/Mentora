@@ -124,6 +124,43 @@ class UserCreate(UserBase):
 
 
 # ============================================================
+# Admin Registration
+# ============================================================
+
+class AdminCreate(BaseModel):
+    """
+    Schema used when registering a new admin account.
+
+    The ``admin_secret`` must match the configured
+    ``ADMIN_SECRET_KEY`` or the registration is rejected.
+    """
+
+    email: EmailStr
+
+    username: str = Field(
+        ...,
+        min_length=3,
+        max_length=50
+    )
+
+    full_name: Optional[str] = Field(
+        None,
+        max_length=255
+    )
+
+    password: str = Field(
+        ...,
+        min_length=8,
+        max_length=128
+    )
+
+    admin_secret: str = Field(
+        ...,
+        min_length=1
+    )
+
+
+# ============================================================
 # User Login
 # ============================================================
 
@@ -169,6 +206,30 @@ class UserUpdate(BaseModel):
         None,
         max_length=500
     )
+
+
+# ============================================================
+# Admin Management
+# ============================================================
+
+class AdminUserUpdate(BaseModel):
+    """
+    Schema used by admins to manage other users.
+
+    Unlike ``UserUpdate``, admins may also change a user's
+    role and account status.
+    """
+
+    full_name: Optional[str] = Field(
+        None,
+        max_length=255
+    )
+
+    role: Optional[UserRole] = None
+
+    is_active: Optional[bool] = None
+
+    is_verified: Optional[bool] = None
 
 
 # ============================================================
