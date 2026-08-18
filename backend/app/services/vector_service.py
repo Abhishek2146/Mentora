@@ -54,8 +54,7 @@ class VectorService:
             collection_name=collection_name,
             collection_metadata={"hnsw:space": "cosine"},
         )
-        vector_db.persist()
-        logger.info(f"Created collection: {collection_name}")
+        logger.info("Created collection: %s", collection_name)
         return vector_db
 
     def get_collection(self, collection_name: str) -> Chroma:
@@ -72,7 +71,6 @@ class VectorService:
         """Add documents to an existing collection."""
         vector_db = self.get_collection(collection_name)
         vector_db.add_documents(documents)
-        vector_db.persist()
         return vector_db
 
     def similarity_search(
@@ -231,9 +229,12 @@ class VectorService:
         return "\n\n".join(blocks)
 
     def delete_collection(self, collection_name: str):
-        """Delete a collection."""
-        import shutil
-        collection_path = os.path.join(self.persist_directory, collection_name)
-        if os.path.exists(collection_path):
-            shutil.rmtree(collection_path)
-        logger.info(f"Deleted collection: {collection_name}")
+        """Delete a collection using Chroma's native API."""
+        try:
+            chroma = self.get_collection(collection_name)
+            chroma.delete_collection()
+            logger.info("Deleted collection: %s", collection_name)
+        except Exception as e:
+            logger.warning(
+                "Failed to delete collection '%s': %s", collection_name, e
+            )

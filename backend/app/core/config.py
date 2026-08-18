@@ -81,9 +81,14 @@ class Settings(BaseSettings):
     # ============================================================
 
     GROQ_API_KEY: str = ""
-    GROQ_MODEL: str = "llama-3.3-70b-versatile"
+    GROQ_MODEL: str = "allam-2-7b"
     GROQ_TEMPERATURE: float = 0.7
     GROQ_MAX_TOKENS: int = 4096
+    # Maximum characters for syllabus text sent in a single LLM request.
+    # Conservative budget: model TPM limit is 6000; we reserve headroom
+    # for the system prompt (~400 tok ≈ 1600 chars) and output tokens,
+    # leaving ~1800 chars (~450 tokens) for user content.
+    GROQ_SYLLABUS_MAX_INPUT_CHARS: int = 1800
 
     EMBEDDING_MODEL: str = "sentence-transformers/all-MiniLM-L6-v2"
 
@@ -98,12 +103,23 @@ class Settings(BaseSettings):
     # RAG (retrieval-augmented generation)
     # ============================================================
 
-    RAG_CHUNK_SIZE: int = 1000
-    RAG_CHUNK_OVERLAP: int = 200
-    RAG_TOP_K: int = 5
+    RAG_CHUNK_SIZE: int = 800
+    RAG_CHUNK_OVERLAP: int = 150
+    RAG_TOP_K: int = 3
     # Minimum relevance score (0-1, higher = more similar) required
     # for a retrieved chunk to be used as context.
     RAG_SIMILARITY_THRESHOLD: float = 0.2
+
+    # ============================================================
+    # Tutor context budget (prevents 413 Request Too Large)
+    # ============================================================
+
+    # Maximum number of recent conversation messages to include.
+    TUTOR_MAX_HISTORY_MESSAGES: int = 6
+    # Maximum total characters for RAG context injected into system prompt.
+    TUTOR_MAX_CONTEXT_CHARS: int = 2000
+    # Approximate characters-per-token ratio used for budget estimation.
+    TUTOR_CHARS_PER_TOKEN: int = 4
     # ============================================================
     # File Uploads
     # ============================================================

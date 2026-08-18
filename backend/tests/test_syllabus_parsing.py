@@ -162,8 +162,13 @@ class TestValidateSyllabusData:
             LLMService._validate_syllabus_data({})
 
     def test_subjects_not_a_list(self):
-        with pytest.raises(ValueError, match="subjects.*list"):
-            LLMService._validate_syllabus_data({"subjects": "not a list"})
+        """subjects as a string is now normalized (not a validation error)."""
+        data = {"subjects": "not a list"}
+        result = LLMService._validate_syllabus_data(
+            LLMService._normalize_syllabus_data(data)
+        )
+        assert len(result["subjects"]) == 1
+        assert result["subjects"][0]["name"] == "not a list"
 
     def test_subject_missing_name(self):
         with pytest.raises(ValueError, match="missing 'name'"):
@@ -178,17 +183,313 @@ class TestValidateSyllabusData:
             )
 
     def test_topics_not_a_list(self):
-        with pytest.raises(ValueError, match="topics.*list"):
-            LLMService._validate_syllabus_data(
+        """topics as a string is now normalized (not a validation error)."""
+        data = {
+            "subjects": [
                 {
-                    "subjects": [
-                        {
-                            "name": "Math",
-                            "chapters": [{"name": "Ch1", "topics": "not a list"}],
-                        }
-                    ]
+                    "name": "Math",
+                    "chapters": [{"name": "Ch1", "topics": "not a list"}],
                 }
-            )
+            ]
+        }
+        result = LLMService._validate_syllabus_data(
+            LLMService._normalize_syllabus_data(data)
+        )
+        assert result["subjects"][0]["chapters"][0]["topics"] == ["not a list"]
+
+
+# ---------------------------------------------------------------------------
+# _normalize_syllabus_data
+# ---------------------------------------------------------------------------
+
+class TestNormalizeSyllabusData:
+    """Test the syllabus data normalizer."""
+
+    def test_valid_data_unchanged(self):
+        data = {
+            "subjects": [
+                {
+                    "name": "Math",
+                    "description": "Maths",
+                    "chapters": [
+                        {
+                            "name": "Algebra",
+                            "description": "Basics",
+                            "topics": ["x", "y"],
+                            "estimated_hours": 3,
+                        }
+                    ],
+                }
+            ]
+        }
+        result = LLMService._normalize_syllabus_data(data)
+        assert result == data
+
+    def test_subjects_as_single_object(self):
+        data = {
+            "subjects": {
+                "name": "Computer Networking",
+                "chapters": [],
+            }
+        }
+        result = LLMService._normalize_syllabus_data(data)
+        assert isinstance(result["subjects"], list)
+        assert len(result["subjects"]) == 1
+        assert result["subjects"][0]["name"] == "Computer Networking"
+
+    def test_subjects_as_string(self):
+        data = {"subjects": "Computer Networking"}
+        result = LLMService._normalize_syllabus_data(data)
+        assert isinstance(result["subjects"], list)
+        assert result["subjects"][0]["name"] == "Computer Networking"
+        assert result["subjects"][0]["chapters"] == []
+
+    def test_subject_as_string_in_list(self):
+        data = {"subjects": ["Networking", "Security"]}
+        result = LLMService._normalize_syllabus_data(data)
+        assert result["subjects"][0]["name"] == "Networking"
+        assert result["subjects"][0]["chapters"] == []
+        assert result["subjects"][1]["name"] == "Security"
+
+    def test_chapters_as_strings(self):
+        """Case 2: chapters returned as plain strings."""
+        data = {
+            "subjects": [
+                {
+                    "name": "Computer Networking",
+                    "chapters": [
+                        "Introduction",
+                        "Network Models",
+                    ],
+                }
+            ]
+        }
+        result = LLMService._normalize_syllabus_data(data)
+        chapters = result["subjects"][0]["chapters"]
+        assert len(chapters) == 2
+        assert chapters[0] == {
+            "name": "Introduction",
+            "description": "",
+            "topics": [],
+            "estimated_hours": 0,
+        }
+        assert chapters[1] == {
+            "name": "Network Models",
+            "description": "",
+            "topics": [],
+            "estimated_hours": 0,
+        }
+
+    def test_single_chapter_string(self):
+        data = {
+            "subjects": [
+                {
+                    "name": "Math",
+                    "chapters": "Algebra",
+                }
+            ]
+        }
+        result = LLMService._normalize_syllabus_data(data)
+        chapters = result["subjects"][0]["chapters"]
+        assert len(chapters) == 1
+        assert chapters[0]["name"] == "Algebra"
+
+    def test_chapters_as_single_object(self):
+        data = {
+            "subjects": [
+                {
+                    "name": "Math",
+                    "chapters": {"name": "Algebra", "topics": ["x"]},
+                }
+            ]
+        }
+        result = LLMService._normalize_syllabus_data(data)
+        chapters = result["subjects"][0]["chapters"]
+        assert isinstance(chapters, list)
+        assert len(chapters) == 1
+        assert chapters[0]["name"] == "Algebra"
+
+    def test_topics_as_string(self):
+        """Case 3: topics returned as a single string."""
+        data = {
+            "subjects": [
+                {
+                    "name": "Computer Networking",
+                    "chapters": [
+                        {
+                            "name": "Introduction",
+                            "topics": "Network Models",
+                        }
+                    ],
+                }
+            ]
+        }
+        result = LLMService._normalize_syllabus_data(data)
+        topics = result["subjects"][0]["chapters"][0]["topics"]
+        assert topics == ["Network Models"]
+
+    def test_topics_as_dict_with_name(self):
+        data = {
+            "subjects": [
+                {
+                    "name": "Math",
+                    "chapters": [
+                        {
+                            "name": "Algebra",
+                            "topics": {"name": "Linear Equations"},
+                        }
+                    ],
+                }
+            ]
+        }
+        result = LLMService._normalize_syllabus_data(data)
+        topics = result["subjects"][0]["chapters"][0]["topics"]
+        assert topics == ["Linear Equations"]
+
+    def test_topics_as_dict_with_title(self):
+        data = {
+            "subjects": [
+                {
+                    "name": "Math",
+                    "chapters": [
+                        {
+                            "name": "Algebra",
+                            "topics": {"title": "Linear Equations"},
+                        }
+                    ],
+                }
+            ]
+        }
+        result = LLMService._normalize_syllabus_data(data)
+        topics = result["subjects"][0]["chapters"][0]["topics"]
+        assert topics == ["Linear Equations"]
+
+    def test_topics_list_with_dict_elements(self):
+        data = {
+            "subjects": [
+                {
+                    "name": "Math",
+                    "chapters": [
+                        {
+                            "name": "Algebra",
+                            "topics": [
+                                {"name": "Linear Equations"},
+                                {"topic": "Quadratics"},
+                                "Geometry",
+                            ],
+                        }
+                    ],
+                }
+            ]
+        }
+        result = LLMService._normalize_syllabus_data(data)
+        topics = result["subjects"][0]["chapters"][0]["topics"]
+        assert topics == ["Linear Equations", "Quadratics", "Geometry"]
+
+    def test_missing_description_defaults(self):
+        data = {
+            "subjects": [
+                {
+                    "name": "Math",
+                    "chapters": [
+                        {"name": "Algebra", "topics": ["x"]}
+                    ],
+                }
+            ]
+        }
+        result = LLMService._normalize_syllabus_data(data)
+        assert result["subjects"][0]["description"] == ""
+        assert result["subjects"][0]["chapters"][0]["description"] == ""
+
+    def test_missing_estimated_hours_defaults(self):
+        data = {
+            "subjects": [
+                {
+                    "name": "Math",
+                    "chapters": [
+                        {"name": "Algebra", "topics": ["x"]}
+                    ],
+                }
+            ]
+        }
+        result = LLMService._normalize_syllabus_data(data)
+        assert result["subjects"][0]["chapters"][0]["estimated_hours"] == 0
+
+    def test_estimated_hours_as_numeric_string(self):
+        data = {
+            "subjects": [
+                {
+                    "name": "Math",
+                    "chapters": [
+                        {
+                            "name": "Algebra",
+                            "topics": ["x"],
+                            "estimated_hours": "3 Hrs.",
+                        }
+                    ],
+                }
+            ]
+        }
+        result = LLMService._normalize_syllabus_data(data)
+        assert result["subjects"][0]["chapters"][0]["estimated_hours"] == 3
+
+    def test_estimated_hours_as_plain_number_string(self):
+        data = {
+            "subjects": [
+                {
+                    "name": "Math",
+                    "chapters": [
+                        {
+                            "name": "Algebra",
+                            "topics": ["x"],
+                            "estimated_hours": "7",
+                        }
+                    ],
+                }
+            ]
+        }
+        result = LLMService._normalize_syllabus_data(data)
+        assert result["subjects"][0]["chapters"][0]["estimated_hours"] == 7
+
+    def test_missing_topics_defaults(self):
+        data = {
+            "subjects": [
+                {
+                    "name": "Math",
+                    "chapters": [
+                        {"name": "Algebra"}
+                    ],
+                }
+            ]
+        }
+        result = LLMService._normalize_syllabus_data(data)
+        assert result["subjects"][0]["chapters"][0]["topics"] == []
+
+    def test_no_subjects_key(self):
+        data = {"foo": "bar"}
+        result = LLMService._normalize_syllabus_data(data)
+        assert result == {"foo": "bar"}
+
+    def test_mixed_normalization_scenario(self):
+        """Combination: subject as string, chapter as string, topic as string."""
+        data = {
+            "subjects": [
+                {
+                    "name": "Networking",
+                    "chapters": ["OSI Model"],
+                }
+            ]
+        }
+        result = LLMService._normalize_syllabus_data(data)
+        chap = result["subjects"][0]["chapters"][0]
+        assert chap["name"] == "OSI Model"
+        assert chap["topics"] == []
+        assert chap["estimated_hours"] == 0
+
+    def test_normalization_returns_same_object(self):
+        data = {"subjects": []}
+        result = LLMService._normalize_syllabus_data(data)
+        assert result is data
 
 
 # ---------------------------------------------------------------------------
@@ -209,6 +510,7 @@ class TestParseSyllabusContent:
                     "chapters": [
                         {
                             "name": "Cell Biology",
+                            "description": "",
                             "topics": ["Cell structure", "Organelles", "Membrane"],
                             "estimated_hours": 4,
                         }
@@ -230,8 +532,9 @@ class TestParseSyllabusContent:
             "subjects": [
                 {
                     "name": "Chemistry",
+                    "description": "",
                     "chapters": [
-                        {"name": "Atoms", "topics": ["Atomic structure"], "estimated_hours": 3}
+                        {"name": "Atoms", "description": "", "topics": ["Atomic structure"], "estimated_hours": 3}
                     ],
                 }
             ]
@@ -250,9 +553,11 @@ class TestParseSyllabusContent:
             "subjects": [
                 {
                     "name": "Physics",
+                    "description": "",
                     "chapters": [
                         {
                             "name": "Mechanics",
+                            "description": "",
                             "topics": ["Kinematics", "Dynamics"],
                             "estimated_hours": 6,
                         }
@@ -275,8 +580,9 @@ class TestParseSyllabusContent:
             "subjects": [
                 {
                     "name": "Math",
+                    "description": "",
                     "chapters": [
-                        {"name": "Algebra", "topics": ["x"], "estimated_hours": 2}
+                        {"name": "Algebra", "description": "", "topics": ["x"], "estimated_hours": 2}
                     ],
                 }
             ]
@@ -329,7 +635,7 @@ class TestParseSyllabusContent:
     @pytest.mark.asyncio
     async def test_json_mode_is_requested_on_first_attempt(self):
         """The first _get_model call should use json_mode=True."""
-        data = {"subjects": [{"name": "Test", "chapters": []}]}
+        data = {"subjects": [{"name": "Test", "description": "", "chapters": []}]}
         svc = LLMService()
         fake = FakeChatModel([json.dumps(data)])
 
@@ -351,7 +657,8 @@ class TestParseSyllabusContent:
             "subjects": [
                 {
                     "name": "Biology",
-                    "chapters": [{"name": "Cells", "topics": ["Mitosis"], "estimated_hours": 2}],
+                    "description": "",
+                    "chapters": [{"name": "Cells", "description": "", "topics": ["Mitosis"], "estimated_hours": 2}],
                 }
             ]
         }
@@ -386,18 +693,21 @@ class TestParseSyllabusContent:
                     "chapters": [
                         {
                             "name": "Supervised Learning",
+                            "description": "",
                             "topics": ["Linear Regression", "Logistic Regression",
                                      "Decision Trees", "SVM"],
                             "estimated_hours": 8,
                         },
                         {
                             "name": "Unsupervised Learning",
+                            "description": "",
                             "topics": ["K-Means Clustering", "PCA",
                                      "Hierarchical Clustering"],
                             "estimated_hours": 6,
                         },
                         {
                             "name": "Deep Learning",
+                            "description": "",
                             "topics": ["Neural Networks", "CNNs", "RNNs",
                                      "Transformers"],
                             "estimated_hours": 10,
@@ -410,12 +720,14 @@ class TestParseSyllabusContent:
                     "chapters": [
                         {
                             "name": "Arrays and Hash Tables",
+                            "description": "",
                             "topics": ["Array operations", "Hash maps",
                                      "Two pointers"],
                             "estimated_hours": 5,
                         },
                         {
                             "name": "Tree Algorithms",
+                            "description": "",
                             "topics": ["Binary trees", "BST traversal",
                                      "AVL trees", "Tries"],
                             "estimated_hours": 7,
@@ -496,9 +808,11 @@ class TestParseSyllabusContent:
             "subjects": [
                 {
                     "name": "Computer Networks",
+                    "description": "",
                     "chapters": [
                         {
                             "name": "OSI Model",
+                            "description": "",
                             "topics": ["Layer 1", "Layer 2", "Layer 3", "Layer 4",
                                      "Layer 5", "Layer 6", "Layer 7"],
                             "estimated_hours": 5,
@@ -522,3 +836,716 @@ class TestParseSyllabusContent:
         assert len(result["subjects"]) == 1
         assert result["subjects"][0]["chapters"][0]["estimated_hours"] == 5
         assert len(result["subjects"][0]["chapters"][0]["topics"]) == 7
+
+    @pytest.mark.asyncio
+    async def test_cloud_computing_syllabus(self):
+        """Real-world cloud computing syllabus: Unit 1 and Unit 2 parsed correctly."""
+        data = {
+            "subjects": [
+                {
+                    "name": "Introduction to Cloud Computing",
+                    "description": "Fundamentals of cloud computing",
+                    "chapters": [
+                        {
+                            "name": "Introduction to Cloud Computing",
+                            "description": "Overview of cloud computing concepts",
+                            "topics": [
+                                "Evolution of Cloud Computing",
+                                "Characteristics of Cloud Computing",
+                                "Types of Cloud and Cloud Services",
+                                "Benefits and Challenges of Cloud Computing",
+                                "Applications of Cloud Computing",
+                                "Cloud Storage",
+                                "Cloud Service Requirements",
+                                "Cloud and Dynamic Infrastructure",
+                                "Cloud Adoption",
+                            ],
+                            "estimated_hours": 6,
+                        }
+                    ],
+                },
+                {
+                    "name": "Cloud Architecture",
+                    "description": "Cloud architecture design and virtualization",
+                    "chapters": [
+                        {
+                            "name": "Cloud Architecture",
+                            "description": "Architecture patterns and resource management",
+                            "topics": [
+                                "Cloud Reference Architecture",
+                                "Virtualization",
+                                "Resource Management",
+                            ],
+                            "estimated_hours": 8,
+                        }
+                    ],
+                },
+            ]
+        }
+        raw_syllabus = (
+            "Course Contents:\n"
+            "\n"
+            "Unit 1. Introduction to Cloud Computing 6 Hrs.\n"
+            "\n"
+            "Evolution of Cloud Computing;\n"
+            "Characteristics of Cloud Computing;\n"
+            "Types of Cloud and Cloud Services;\n"
+            "Benefits and Challenges of Cloud Computing;\n"
+            "Applications of Cloud Computing;\n"
+            "Cloud Storage;\n"
+            "Cloud Service Requirements;\n"
+            "Cloud and Dynamic Infrastructure;\n"
+            "Cloud Adoption.\n"
+            "\n"
+            "Unit 2. Cloud Architecture 8 Hrs.\n"
+            "\n"
+            "Cloud Reference Architecture;\n"
+            "Virtualization;\n"
+            "Resource Management;\n"
+        )
+        svc, fake = _make_service([json.dumps(data)])
+        result = await svc.parse_syllabus_content(raw_syllabus)
+
+        assert len(result["subjects"]) == 2
+
+        # Unit 1
+        subj1 = result["subjects"][0]
+        assert subj1["name"] == "Introduction to Cloud Computing"
+        assert len(subj1["chapters"]) == 1
+        ch1 = subj1["chapters"][0]
+        assert ch1["estimated_hours"] == 6
+        assert len(ch1["topics"]) == 9
+        assert "Evolution of Cloud Computing" in ch1["topics"]
+        assert "Cloud Adoption" in ch1["topics"]
+
+        # Unit 2
+        subj2 = result["subjects"][1]
+        assert subj2["name"] == "Cloud Architecture"
+        assert len(subj2["chapters"]) == 1
+        ch2 = subj2["chapters"][0]
+        assert ch2["estimated_hours"] == 8
+        assert len(ch2["topics"]) == 3
+        assert "Virtualization" in ch2["topics"]
+
+        # No DBMS dummy data
+        full_text = json.dumps(result).lower()
+        assert "dbms" not in full_text
+        assert "database management" not in full_text
+
+    @pytest.mark.asyncio
+    async def test_syllabus_with_xml_delimiters_in_prompt(self):
+        """Verify the prompt uses XML-style delimiters for syllabus content."""
+        data = {
+            "subjects": [
+                {
+                    "name": "Test Subject",
+                    "description": "",
+                    "chapters": [
+                        {"name": "Test Chapter", "description": "", "topics": ["Topic A"], "estimated_hours": 2}
+                    ],
+                }
+            ]
+        }
+        svc, fake = _make_service([json.dumps(data)])
+        result = await svc.parse_syllabus_content("Unit 1: Test Subject (2 Hrs.) - Topic A")
+        assert result == data
+        assert fake.calls == 1
+
+    # ------------------------------------------------------------------
+    # Normalization through full pipeline
+    # ------------------------------------------------------------------
+
+    @pytest.mark.asyncio
+    async def test_chapter_strings_normalized_through_pipeline(self):
+        """End-to-end: LLM returns chapters as strings, normalization fixes it."""
+        raw_llm = {
+            "subjects": [
+                {
+                    "name": "Computer Networking",
+                    "chapters": [
+                        "Introduction to Networking",
+                        "Network Models",
+                    ],
+                }
+            ]
+        }
+        expected = {
+            "subjects": [
+                {
+                    "name": "Computer Networking",
+                    "description": "",
+                    "chapters": [
+                        {
+                            "name": "Introduction to Networking",
+                            "description": "",
+                            "topics": [],
+                            "estimated_hours": 0,
+                        },
+                        {
+                            "name": "Network Models",
+                            "description": "",
+                            "topics": [],
+                            "estimated_hours": 0,
+                        },
+                    ],
+                }
+            ]
+        }
+        svc, fake = _make_service([json.dumps(raw_llm)])
+        result = await svc.parse_syllabus_content("Networking syllabus")
+        assert result == expected
+        assert fake.calls == 1
+
+    @pytest.mark.asyncio
+    async def test_topics_string_normalized_through_pipeline(self):
+        """End-to-end: LLM returns topics as a string, normalization fixes it."""
+        raw_llm = {
+            "subjects": [
+                {
+                    "name": "Computer Networking",
+                    "chapters": [
+                        {
+                            "name": "Introduction",
+                            "topics": "Network Models",
+                        }
+                    ],
+                }
+            ]
+        }
+        expected = {
+            "subjects": [
+                {
+                    "name": "Computer Networking",
+                    "description": "",
+                    "chapters": [
+                        {
+                            "name": "Introduction",
+                            "description": "",
+                            "topics": ["Network Models"],
+                            "estimated_hours": 0,
+                        }
+                    ],
+                }
+            ]
+        }
+        svc, fake = _make_service([json.dumps(raw_llm)])
+        result = await svc.parse_syllabus_content("Networking syllabus")
+        assert result == expected
+        assert fake.calls == 1
+
+    @pytest.mark.asyncio
+    async def test_subject_object_normalized_through_pipeline(self):
+        """End-to-end: LLM returns subjects as a single object, normalization fixes it."""
+        raw_llm = {
+            "subjects": {
+                "name": "Computer Networking",
+                "chapters": [],
+            }
+        }
+        expected = {
+            "subjects": [
+                {
+                    "name": "Computer Networking",
+                    "description": "",
+                    "chapters": [],
+                }
+            ]
+        }
+        svc, fake = _make_service([json.dumps(raw_llm)])
+        result = await svc.parse_syllabus_content("Networking syllabus")
+        assert result == expected
+        assert fake.calls == 1
+
+    @pytest.mark.asyncio
+    async def test_invalid_data_still_raises_value_error(self):
+        """Completely invalid structures should still raise ValueError."""
+        raw_llm = {"not_subjects": "garbage"}
+        svc, fake = _make_service([json.dumps(raw_llm)])
+        with pytest.raises(ValueError, match="Failed to parse syllabus"):
+            await svc.parse_syllabus_content("Some text")
+
+    @pytest.mark.asyncio
+    async def test_completely_invalid_subjects_type_still_raises(self):
+        """Subjects as a list of ints should fail after normalization."""
+        raw_llm = {"subjects": [1, 2, 3]}
+        svc, fake = _make_service([json.dumps(raw_llm)])
+        # Normalization won't turn int into a dict with 'name', so
+        # validation should still fail.
+        with pytest.raises(ValueError, match="Failed to parse syllabus"):
+            await svc.parse_syllabus_content("Some text")
+
+
+# ---------------------------------------------------------------------------
+# _split_syllabus_text
+# ---------------------------------------------------------------------------
+
+class TestSplitSyllabusText:
+    """Test syllabus text chunking for oversized requests."""
+
+    def test_small_text_not_split(self):
+        text = "Unit 1: Short topic\nSome details here."
+        result = LLMService._split_syllabus_text(text, max_chars=500)
+        assert result == [text]
+
+    def test_split_on_unit_headings(self):
+        text = (
+            "Unit 1: Networking (6 Hrs.)\n"
+            "Topic A; Topic B\n"
+            "\n"
+            "Unit 2: Security (4 Hrs.)\n"
+            "Topic C; Topic D\n"
+            "\n"
+            "Unit 3: Databases (5 Hrs.)\n"
+            "Topic E; Topic F\n"
+        )
+        result = LLMService._split_syllabus_text(text, max_chars=80)
+        assert len(result) >= 3
+        # Each chunk should start with a heading or contain heading content
+        all_text = " ".join(result)
+        assert "Unit 1" in all_text
+        assert "Unit 2" in all_text
+        assert "Unit 3" in all_text
+
+    def test_split_on_module_headings(self):
+        text = (
+            "Module 1: Cloud Basics\n"
+            "AWS, Azure, GCP\n"
+            "\n"
+            "Module 2: Cloud Architecture\n"
+            "Microservices, Serverless\n"
+        )
+        result = LLMService._split_syllabus_text(text, max_chars=60)
+        assert len(result) >= 2
+        all_text = " ".join(result)
+        assert "Module 1" in all_text
+        assert "Module 2" in all_text
+
+    def test_split_preserves_all_content(self):
+        """No content should be lost when splitting."""
+        paragraphs = [f"Unit {i}: Topic {i}\nDetail paragraph {i}.\n" for i in range(1, 6)]
+        text = "\n".join(paragraphs)
+        result = LLMService._split_syllabus_text(text, max_chars=60)
+        # All original paragraphs must appear in the output
+        for i in range(1, 6):
+            found = any(f"Unit {i}" in chunk for chunk in result)
+            assert found, f"Unit {i} missing from split output"
+        for i in range(1, 6):
+            found = any(f"Detail paragraph {i}" in chunk for chunk in result)
+            assert found, f"Detail paragraph {i} missing from split output"
+
+    def test_split_fallback_to_blank_lines(self):
+        """A single section without headings splits on blank lines."""
+        text = (
+            "Paragraph one with some content about networking.\n"
+            "\n"
+            "Paragraph two with more details.\n"
+            "\n"
+            "Paragraph three with even more.\n"
+        )
+        result = LLMService._split_syllabus_text(text, max_chars=50)
+        assert len(result) >= 2
+        all_text = " ".join(result)
+        assert "Paragraph one" in all_text
+        assert "Paragraph three" in all_text
+
+    def test_split_fallback_to_sentences(self):
+        """A single paragraph splits on sentence boundaries."""
+        text = "First sentence about topic A. Second sentence about topic B. Third sentence about topic C."
+        result = LLMService._split_syllabus_text(text, max_chars=50)
+        assert len(result) >= 2
+        all_text = " ".join(result)
+        assert "First sentence" in all_text
+        assert "Third sentence" in all_text
+
+    def test_empty_text(self):
+        result = LLMService._split_syllabus_text("", max_chars=100)
+        assert result == [""]
+
+    def test_no_content_loss_with_oversized_section(self):
+        """A single section exceeding max_chars still preserves all content."""
+        text = (
+            "Unit 1: Very Long Topic\n"
+            + "Detail line.\n" * 20
+        )
+        result = LLMService._split_syllabus_text(text, max_chars=80)
+        all_text = "\n".join(result)
+        assert "Unit 1" in all_text
+        for i in range(20):
+            assert f"Detail line" in all_text
+
+
+# ---------------------------------------------------------------------------
+# _merge_syllabus_chunks
+# ---------------------------------------------------------------------------
+
+class TestMergeSyllabusChunks:
+    """Test merging of multiple parsed syllabus chunks."""
+
+    def test_merge_two_distinct_subjects(self):
+        chunk1 = {"subjects": [{"name": "Unit 1: Networking", "chapters": [{"name": "Basics", "topics": ["OSI"], "estimated_hours": 3}]}]}
+        chunk2 = {"subjects": [{"name": "Unit 2: Security", "chapters": [{"name": "Crypto", "topics": ["AES"], "estimated_hours": 4}]}]}
+        result = LLMService._merge_syllabus_chunks([chunk1, chunk2])
+        assert len(result["subjects"]) == 2
+        names = [s["name"] for s in result["subjects"]]
+        assert "Unit 1: Networking" in names
+        assert "Unit 2: Security" in names
+
+    def test_merge_duplicate_subjects_merges_chapters(self):
+        chunk1 = {"subjects": [{"name": "Networking", "chapters": [{"name": "OSI", "topics": ["Layer 1"], "estimated_hours": 3}]}]}
+        chunk2 = {"subjects": [{"name": "Networking", "chapters": [{"name": "TCP/IP", "topics": ["Ports"], "estimated_hours": 2}]}]}
+        result = LLMService._merge_syllabus_chunks([chunk1, chunk2])
+        assert len(result["subjects"]) == 1
+        assert result["subjects"][0]["name"] == "Networking"
+        chapters = result["subjects"][0]["chapters"]
+        assert len(chapters) == 2
+        chap_names = [c["name"] for c in chapters]
+        assert "OSI" in chap_names
+        assert "TCP/IP" in chap_names
+
+    def test_merge_duplicate_chapters_merges_topics(self):
+        chunk1 = {"subjects": [{"name": "Networking", "chapters": [{"name": "OSI", "topics": ["Layer 1", "Layer 2"], "estimated_hours": 3}]}]}
+        chunk2 = {"subjects": [{"name": "Networking", "chapters": [{"name": "OSI", "topics": ["Layer 3", "Layer 1"], "estimated_hours": 5}]}]}
+        result = LLMService._merge_syllabus_chunks([chunk1, chunk2])
+        assert len(result["subjects"]) == 1
+        chapters = result["subjects"][0]["chapters"]
+        assert len(chapters) == 1
+        topics = chapters[0]["topics"]
+        assert len(topics) == 3  # "Layer 1" deduplicated
+        assert "Layer 1" in topics
+        assert "Layer 2" in topics
+        assert "Layer 3" in topics
+        # estimated_hours takes the larger value
+        assert chapters[0]["estimated_hours"] == 5
+
+    def test_merge_empty_chunks(self):
+        result = LLMService._merge_syllabus_chunks([{"subjects": []}, {"subjects": []}])
+        assert result == {"subjects": []}
+
+    def test_merge_preserves_order(self):
+        chunk1 = {"subjects": [{"name": "Alpha", "chapters": []}]}
+        chunk2 = {"subjects": [{"name": "Beta", "chapters": []}]}
+        chunk3 = {"subjects": [{"name": "Gamma", "chapters": []}]}
+        result = LLMService._merge_syllabus_chunks([chunk1, chunk2, chunk3])
+        names = [s["name"] for s in result["subjects"]]
+        assert names == ["Alpha", "Beta", "Gamma"]
+
+    def test_merge_single_chunk_passthrough(self):
+        data = {"subjects": [{"name": "Math", "chapters": [{"name": "Algebra", "topics": ["x"], "estimated_hours": 2}]}]}
+        result = LLMService._merge_syllabus_chunks([data])
+        assert result == data
+
+
+# ---------------------------------------------------------------------------
+# _attempt_syllabus_parse error handling
+# ---------------------------------------------------------------------------
+
+class TestAttemptSyllabusParseErrors:
+    """Test error classification in _attempt_syllabus_parse."""
+
+    @pytest.mark.asyncio
+    async def test_413_error_returns_oversized_not_retry(self):
+        """A 413 oversized error returns None immediately (no retry)."""
+        error_413 = Exception(
+            "Error code: 413 - Request too large for model `allam-2-7b` "
+            "TPM Limit: 6000 Requested: 6308"
+        )
+
+        svc = LLMService()
+        call_count = 0
+
+        def mock_get_model(temperature=0.7, json_mode=False):
+            nonlocal call_count
+            call_count += 1
+            raise error_413
+
+        svc._get_model = mock_get_model  # type: ignore[assignment]
+
+        from langchain_core.prompts import ChatPromptTemplate
+        prompt = ChatPromptTemplate.from_messages(
+            [("system", "test"), ("human", "{{text}}")],
+            template_format="mustache",
+        )
+
+        # _attempt_syllabus_parse catches _OversizedRequestError and returns None
+        result = await svc._attempt_syllabus_parse(
+            prompt, temperature=0.7, json_mode=True, text="test",
+            max_retries=3,
+        )
+        assert result is None
+        # Should be called exactly once — no retry
+        assert call_count == 1
+
+    @pytest.mark.asyncio
+    async def test_429_error_retries_with_backoff(self):
+        """A 429 rate-limit error should retry, not raise immediately."""
+        error_429 = Exception("Error code: 429 - Rate limit exceeded")
+
+        svc = LLMService()
+        call_count = 0
+
+        def mock_get_model(temperature=0.7, json_mode=False):
+            nonlocal call_count
+            call_count += 1
+            if call_count <= 3:
+                raise error_429
+            raise RuntimeError("Should not reach here")
+
+        svc._get_model = mock_get_model  # type: ignore[assignment]
+
+        from langchain_core.prompts import ChatPromptTemplate
+        prompt = ChatPromptTemplate.from_messages(
+            [("system", "test"), ("human", "{{text}}")],
+            template_format="mustache",
+        )
+
+        # After max_retries=3 with 429, should return None (not raise)
+        result = await svc._attempt_syllabus_parse(
+            prompt, temperature=0.7, json_mode=True, text="test",
+            max_retries=3,
+        )
+        assert result is None
+        assert call_count == 3  # All 3 retries attempted
+
+    @pytest.mark.asyncio
+    async def test_request_too_large_string_triggers_oversized(self):
+        """String matching for 'request too large' should raise _OversizedRequestError."""
+        from app.services.llm_service import _OversizedRequestError
+
+        error_msg = Exception("request body too large for model allam-2-7b")
+
+        svc = LLMService()
+        call_count = 0
+
+        def mock_get_model(temperature=0.7, json_mode=False):
+            nonlocal call_count
+            call_count += 1
+            raise error_msg
+
+        svc._get_model = mock_get_model  # type: ignore[assignment]
+
+        from langchain_core.prompts import ChatPromptTemplate
+        prompt = ChatPromptTemplate.from_messages(
+            [("system", "test"), ("human", "{{text}}")],
+            template_format="mustache",
+        )
+
+        result = await svc._attempt_syllabus_parse(
+            prompt, temperature=0.7, json_mode=True, text="test",
+            max_retries=3,
+        )
+        # Oversized request returns None immediately — no retry
+        assert result is None
+        assert call_count == 1
+
+
+# ---------------------------------------------------------------------------
+# parse_syllabus_content — large syllabus splitting
+# ---------------------------------------------------------------------------
+
+class TestParseSyllabusContentSplitting:
+    """Test that large syllabuses are split and merged correctly."""
+
+    @pytest.mark.asyncio
+    async def test_small_syllabus_single_request(self):
+        """A syllabus under the budget should use a single LLM call."""
+        data = {
+            "subjects": [
+                {"name": "Unit 1: Networking", "description": "", "chapters": [
+                    {"name": "Basics", "description": "", "topics": ["OSI"], "estimated_hours": 3}
+                ]}
+            ]
+        }
+        svc, fake = _make_service([json.dumps(data)])
+        result = await svc.parse_syllabus_content("Unit 1: Networking (3 Hrs.) - OSI")
+        assert result == data
+        assert fake.calls == 1
+
+    @pytest.mark.asyncio
+    async def test_large_syllabus_splits_into_chunks(self):
+        """A syllabus exceeding the budget should be split and parsed in parts."""
+        chunk1_data = {
+            "subjects": [
+                {"name": "Unit 1: Networking", "description": "", "chapters": [
+                    {"name": "OSI Model", "description": "", "topics": ["Layer 1", "Layer 2"], "estimated_hours": 3}
+                ]}
+            ]
+        }
+        chunk2_data = {
+            "subjects": [
+                {"name": "Unit 2: Security", "description": "", "chapters": [
+                    {"name": "Cryptography", "description": "", "topics": ["AES", "RSA"], "estimated_hours": 4}
+                ]}
+            ]
+        }
+        # Create a text with two clearly separated sections
+        large_text = (
+            "Unit 1: Networking (3 Hrs.)\n"
+            + "Detail line about networking.\n" * 10
+            + "\n"
+            "Unit 2: Security (4 Hrs.)\n"
+            + "Detail line about security.\n" * 10
+            + "\n"
+        )
+
+        # Use a budget that forces splitting into 2 heading chunks
+        # but doesn't cause sentence-level splitting
+        svc = LLMService()
+        fake = FakeChatModel([json.dumps(chunk1_data), json.dumps(chunk2_data)])
+        svc._get_model = lambda temperature=0.7, json_mode=False: fake  # type: ignore[assignment]
+
+        # Temporarily override the budget — use a budget smaller than each
+        # section but larger than one chunk to force exactly 2 heading-based chunks
+        import app.core.config as cfg
+        original = cfg.settings.GROQ_SYLLABUS_MAX_INPUT_CHARS
+        cfg.settings.GROQ_SYLLABUS_MAX_INPUT_CHARS = 200
+        try:
+            result = await svc.parse_syllabus_content(large_text)
+        finally:
+            cfg.settings.GROQ_SYLLABUS_MAX_INPUT_CHARS = original
+
+        assert len(result["subjects"]) == 2
+        names = [s["name"] for s in result["subjects"]]
+        assert "Unit 1: Networking" in names
+        assert "Unit 2: Security" in names
+
+    @pytest.mark.asyncio
+    async def test_large_syllabus_merges_duplicate_subjects(self):
+        """When the same subject appears in multiple chunks, chapters merge."""
+        chunk1_data = {
+            "subjects": [
+                {"name": "Networking", "description": "", "chapters": [
+                    {"name": "OSI", "description": "", "topics": ["Layer 1"], "estimated_hours": 3}
+                ]}
+            ]
+        }
+        chunk2_data = {
+            "subjects": [
+                {"name": "Networking", "description": "", "chapters": [
+                    {"name": "TCP/IP", "description": "", "topics": ["Ports"], "estimated_hours": 2}
+                ]}
+            ]
+        }
+        large_text = (
+            "Unit 1: Networking (3 Hrs.)\n"
+            + "Detail about OSI.\n" * 10
+            + "\n"
+            "Unit 2: Networking continued (2 Hrs.)\n"
+            + "Detail about TCP/IP.\n" * 10
+            + "\n"
+        )
+
+        svc = LLMService()
+        fake = FakeChatModel([json.dumps(chunk1_data), json.dumps(chunk2_data)])
+        svc._get_model = lambda temperature=0.7, json_mode=False: fake  # type: ignore[assignment]
+
+        import app.core.config as cfg
+        original = cfg.settings.GROQ_SYLLABUS_MAX_INPUT_CHARS
+        cfg.settings.GROQ_SYLLABUS_MAX_INPUT_CHARS = 200
+        try:
+            result = await svc.parse_syllabus_content(large_text)
+        finally:
+            cfg.settings.GROQ_SYLLABUS_MAX_INPUT_CHARS = original
+
+        assert len(result["subjects"]) == 1
+        assert result["subjects"][0]["name"] == "Networking"
+        chapters = result["subjects"][0]["chapters"]
+        assert len(chapters) == 2
+        chap_names = {c["name"] for c in chapters}
+        assert "OSI" in chap_names
+        assert "TCP/IP" in chap_names
+
+    @pytest.mark.asyncio
+    async def test_no_content_loss_in_large_syllabus(self):
+        """All units/topics from all chunks should appear in the merged result."""
+        chunk1_data = {
+            "subjects": [
+                {"name": "Unit 1", "description": "", "chapters": [
+                    {"name": "Networking Basics", "description": "", "topics": ["OSI", "TCP/IP", "HTTP"], "estimated_hours": 3}
+                ]}
+            ]
+        }
+        chunk2_data = {
+            "subjects": [
+                {"name": "Unit 2", "description": "", "chapters": [
+                    {"name": "Security Fundamentals", "description": "", "topics": ["Cryptography", "Firewalls", "VPN"], "estimated_hours": 4}
+                ]}
+            ]
+        }
+        chunk3_data = {
+            "subjects": [
+                {"name": "Unit 3", "description": "", "chapters": [
+                    {"name": "Cloud Computing", "description": "", "topics": ["AWS", "Azure", "GCP"], "estimated_hours": 5}
+                ]}
+            ]
+        }
+        large_text = (
+            "Unit 1: Networking (3 Hrs.)\n"
+            + "Detail A.\n" * 5
+            + "\n"
+            "Unit 2: Security (4 Hrs.)\n"
+            + "Detail B.\n" * 5
+            + "\n"
+            "Unit 3: Cloud (5 Hrs.)\n"
+            + "Detail C.\n" * 5
+            + "\n"
+        )
+
+        svc = LLMService()
+        fake = FakeChatModel([
+            json.dumps(chunk1_data),
+            json.dumps(chunk2_data),
+            json.dumps(chunk3_data),
+        ])
+        svc._get_model = lambda temperature=0.7, json_mode=False: fake  # type: ignore[assignment]
+
+        import app.core.config as cfg
+        original = cfg.settings.GROQ_SYLLABUS_MAX_INPUT_CHARS
+        cfg.settings.GROQ_SYLLABUS_MAX_INPUT_CHARS = 200
+        try:
+            result = await svc.parse_syllabus_content(large_text)
+        finally:
+            cfg.settings.GROQ_SYLLABUS_MAX_INPUT_CHARS = original
+
+        # All 3 units present
+        assert len(result["subjects"]) == 3
+        names = [s["name"] for s in result["subjects"]]
+        assert "Unit 1" in names
+        assert "Unit 2" in names
+        assert "Unit 3" in names
+
+        # All topics present
+        all_topics = []
+        for subj in result["subjects"]:
+            for chap in subj.get("chapters", []):
+                all_topics.extend(chap.get("topics", []))
+
+        expected_topics = [
+            "OSI", "TCP/IP", "HTTP",
+            "Cryptography", "Firewalls", "VPN",
+            "AWS", "Azure", "GCP",
+        ]
+        for topic in expected_topics:
+            assert topic in all_topics, f"Topic '{topic}' missing from merged result"
+
+    @pytest.mark.asyncio
+    async def test_413_in_single_chunk_returns_none_no_retry(self):
+        """If the single-request path hits a 413, it returns None (no crash)."""
+        from app.services.llm_service import _OversizedRequestError
+
+        svc = LLMService()
+
+        def mock_get_model(temperature=0.7, json_mode=False):
+            raise _OversizedRequestError("413 too large")
+
+        svc._get_model = mock_get_model  # type: ignore[assignment]
+
+        import app.core.config as cfg
+        original = cfg.settings.GROQ_SYLLABUS_MAX_INPUT_CHARS
+        cfg.settings.GROQ_SYLLABUS_MAX_INPUT_CHARS = 50  # Very small budget
+        try:
+            # Should not crash — _parse_single_chunk returns None,
+            # then parse_syllabus_content raises ValueError
+            with pytest.raises(ValueError, match="Failed to parse syllabus"):
+                await svc.parse_syllabus_content("Some syllabus text that exceeds budget")
+        finally:
+            cfg.settings.GROQ_SYLLABUS_MAX_INPUT_CHARS = original

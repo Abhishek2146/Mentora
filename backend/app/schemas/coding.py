@@ -46,16 +46,17 @@ class CodingProblemOut(CodingProblemBase):
     class Config:
         from_attributes = True
 
-
 class CodingSubmissionBase(BaseModel):
     problem_id: int
     code: str
     language: str = Field(..., max_length=50)
     status: str = "pending"
     output: Optional[str] = None
-    passed: bool = False
+    score: int = 0
+    passed_test_cases: int = 0
+    total_test_cases: int = 0
     execution_time: Optional[int] = None
-    memory_used: Optional[int] = None
+    error_message: Optional[str] = None
 
 
 class CodingSubmissionCreate(BaseModel):
@@ -67,6 +68,10 @@ class CodingSubmissionCreate(BaseModel):
 class CodingSubmissionOut(CodingSubmissionBase):
     id: int
     user_id: int
+    # NOTE: separate known issue, not fixed here - `submission.problem` is
+    # an ORM relationship object, not a dict, and reading it inside an
+    # async session without eager loading will fail. Left as-is since
+    # it's outside the scope of the passed/memory_used column fix.
     problem: Optional[dict] = None
 
     class Config:

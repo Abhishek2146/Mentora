@@ -11,8 +11,10 @@ from app.core.auth import get_current_user_id
 from app.database.database import get_db
 from app.models.study_plan import StudyPlan, StudyTask
 from app.schemas.study_plan import StudyPlanCreate, StudyPlanOut, StudyPlanUpdate, StudyTaskCreate, StudyTaskOut, StudyTaskUpdate
+from app.services.studyplan_service import StudyPlanService
 
 router = APIRouter()
+study_plan_service = StudyPlanService()
 
 
 @router.post("/", response_model=StudyPlanOut, status_code=status.HTTP_201_CREATED)
@@ -21,15 +23,26 @@ async def create_study_plan(
     db: AsyncSession = Depends(get_db),
     user_id: int = Depends(get_current_user_id),
 ):
+    if plan_data.is_ai_generated and plan_data.syllabus_id:
+        try:
+            return await study_plan_service.generate_study_plan(
+                user_id=user_id,
+                syllabus_id=plan_data.syllabus_id,
+                start_date=plan_data.start_date.strftime("%Y-%m-%d"),
+                end_date=plan_data.end_date.strftime("%Y-%m-%d") if plan_data.end_date else None,
+                db=db,
+            )
+        except ValueError as e:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
     new_plan = StudyPlan(
         user_id=user_id,
-        **plan_data.dict(),
+        **plan_data.dict(exclude={"is_ai_generated"}),
     )
     db.add(new_plan)
     await db.commit()
     await db.refresh(new_plan)
     return new_plan
-
 
 @router.get("/", response_model=List[StudyPlanOut])
 async def list_study_plans(

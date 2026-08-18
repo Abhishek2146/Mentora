@@ -150,7 +150,11 @@ async def list_syllabuses(
     user_id: int = Depends(get_current_user_id),
 ):
     result = await db.execute(
-        select(Syllabus).where(Syllabus.user_id == user_id).offset(skip).limit(limit)
+        select(Syllabus)
+        .where(Syllabus.user_id == user_id)
+        .order_by(Syllabus.id.desc())
+        .offset(skip)
+        .limit(limit)
     )
     return result.scalars().all()
 

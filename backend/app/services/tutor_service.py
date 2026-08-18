@@ -6,6 +6,7 @@ from typing import Optional, List, Dict, Any
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
+from app.core.config import settings
 from app.core.logger import get_logger
 from app.models.chat_history import ChatSession, ChatMessage
 from app.models.syllabus import Syllabus
@@ -63,6 +64,37 @@ class TutorService:
             "these areas - but don't force it if the question is unrelated."
         )
 
+    @staticmethod
+    def _truncate_context(context: str, max_chars: int) -> str:
+        """Truncate RAG context to fit within the character budget while
+        preserving whole source blocks.  Sources are separated by double
+        newlines and start with ``SOURCE N``.  We drop trailing partial
+        blocks rather than cutting mid-sentence."""
+        if len(context) <= max_chars:
+            return context
+
+        truncated = context[:max_chars]
+        # Try to cut at the last complete source block boundary.
+        last_boundary = truncated.rfind("\n\nSOURCE ")
+        if last_boundary == -1:
+            last_boundary = truncated.rfind("\n\n")
+        if last_boundary > 0:
+            truncated = truncated[:last_boundary]
+
+        logger.info(
+            "[Tutor] RAG context truncated from %d to %d chars "
+            "(%d source blocks kept)",
+            len(context),
+            len(truncated),
+            truncated.count("SOURCE "),
+        )
+        return truncated
+
+    @staticmethod
+    def _estimate_tokens(text: str) -> int:
+        """Rough token estimate using the configured chars-per-token ratio."""
+        return len(text) // settings.TUTOR_CHARS_PER_TOKEN
+
     async def process_message(
         self,
         user_id: int,
@@ -105,11 +137,22 @@ class TutorService:
                 ChatMessage.session_id == session.id
             ).order_by(ChatMessage.sequence)
         )
-        existing_messages: List[ChatMessage] = history_result.scalars().all()
-        next_sequence = len(existing_messages) + 1
+        all_messages: List[ChatMessage] = history_result.scalars().all()
+        next_sequence = len(all_messages) + 1
+
+        # ── Budget: keep only the most recent messages ──────────────
+        max_history = settings.TUTOR_MAX_HISTORY_MESSAGES
+        if len(all_messages) > max_history:
+            all_messages = all_messages[-max_history:]
+            logger.info(
+                "[Tutor] Conversation history truncated to last %d messages "
+                "(total was %d)",
+                max_history,
+                next_sequence - 1,
+            )
 
         history: List[Dict[str, str]] = []
-        for msg in existing_messages:
+        for msg in all_messages:
             history.append({"role": msg.role, "content": msg.content})
 
         messages: List[Dict[str, str]] = []
@@ -142,6 +185,11 @@ class TutorService:
                 )
                 context = self.vector_service.format_context(context_docs)
 
+                # ── Budget: cap RAG context characters ──────────────
+                context = self._truncate_context(
+                    context, settings.TUTOR_MAX_CONTEXT_CHARS
+                )
+
                 logger.debug(
                     "[Tutor] Retrieved %d documents from collection '%s'; "
                     "context length=%d chars; context preview=%s",
@@ -150,15 +198,6 @@ class TutorService:
                     len(context),
                     context[:500] if context else "(empty)",
                 )
-                for i, doc in enumerate(context_docs):
-                    logger.debug(
-                        "[Tutor] Doc %d: metadata=%s, content_len=%d, "
-                        "preview=%s",
-                        i,
-                        doc.metadata,
-                        len(doc.page_content),
-                        doc.page_content[:200],
-                    )
 
         personalization = await self._build_personalization_note(user_id, syllabus_id, db)
 
@@ -180,7 +219,65 @@ class TutorService:
         messages.extend(history)
         messages.append({"role": "user", "content": message})
 
-        ai_response = await self.llm_service.chat_completion(messages, temperature=0.7)
+        # ── Diagnostics: log per-message request size ───────────────
+        logger.info(
+            "[Tutor] Request breakdown (%d messages):",
+            len(messages),
+        )
+        est_tokens_total = 0
+        for i, msg in enumerate(messages):
+            chars = len(msg["content"])
+            toks = self._estimate_tokens(msg["content"])
+            est_tokens_total += toks
+            logger.info(
+                "  [%d] role=%s chars=%d ~tokens=%d preview=%r",
+                i,
+                msg["role"],
+                chars,
+                toks,
+                msg["content"][:80],
+            )
+        logger.info(
+            "[Tutor] Total: ~%d chars, ~%d tokens",
+            sum(len(m["content"]) for m in messages),
+            est_tokens_total,
+        )
+
+        try:
+            ai_response = await self.llm_service.chat_completion(
+                messages, temperature=0.7
+            )
+        except Exception as exc:
+            error_str = str(exc).lower()
+            if "413" in error_str or "request entity too large" in error_str:
+                logger.error(
+                    "[Tutor] Groq rejected request as too large "
+                    "(~%d tokens). Retrying with minimal context.",
+                    est_tokens_total,
+                )
+                # Build a genuinely minimal system prompt (no RAG, no personalization)
+                minimal_system = (
+                    "You are a helpful AI tutor. "
+                    "Answer the student's question concisely."
+                )
+                reduced_messages = [
+                    {"role": "system", "content": minimal_system},
+                    messages[-1],  # user's latest question only
+                ]
+                logger.info(
+                    "[Tutor] Retrying with minimal context: "
+                    "~%d chars, ~%d tokens",
+                    sum(len(m["content"]) for m in reduced_messages),
+                    sum(
+                        self._estimate_tokens(m["content"])
+                        for m in reduced_messages
+                    ),
+                )
+                ai_response = await self.llm_service.chat_completion(
+                    reduced_messages, temperature=0.7
+                )
+            else:
+                raise
 
         user_msg = ChatMessage(
             session_id=session.id,

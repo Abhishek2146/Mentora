@@ -6,10 +6,12 @@ GROQ_API_KEY is configured, falls back to OpenAI if
 OPENAI_API_KEY is available.
 """
 
+import asyncio
 import json
 import re
 from typing import Any, Dict, List, Optional
 
+from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_groq import ChatGroq
@@ -18,6 +20,15 @@ from app.core.config import settings
 from app.core.logger import get_logger
 
 logger = get_logger(__name__)
+
+
+class _OversizedRequestError(Exception):
+    """Raised when the LLM request exceeds the model's input size limit.
+
+    This is NOT a transient error — retrying with the same input will
+    fail again.  The caller should reduce the chunk size or split the
+    input further rather than retrying.
+    """
 
 
 class LLMService:
@@ -63,6 +74,7 @@ class LLMService:
                 model=settings.GROQ_MODEL,
                 api_key=settings.GROQ_API_KEY,
                 temperature=temperature,
+                max_tokens=settings.GROQ_MAX_TOKENS,
                 model_kwargs=model_kwargs,
             )
             self._model_cache_key = cache_key
@@ -167,11 +179,23 @@ class LLMService:
         messages: List[Dict[str, str]],
         temperature: float = 0.7,
     ) -> str:
-        """Generate a chat response from a list of messages."""
-        prompt = ChatPromptTemplate.from_messages(messages)
+        """Generate a chat response from a list of messages.
+
+        Uses BaseMessage objects directly instead of ChatPromptTemplate
+        to avoid f-string template issues with curly braces in content.
+        """
         model = self._get_model(temperature=temperature)
-        chain = prompt | model | self.parser
-        return await chain.ainvoke({})
+        lc_messages = []
+        for msg in messages:
+            role = msg.get("role", "user")
+            content = msg.get("content", "")
+            if role == "system":
+                lc_messages.append(SystemMessage(content=content))
+            elif role == "assistant":
+                lc_messages.append(AIMessage(content=content))
+            else:
+                lc_messages.append(HumanMessage(content=content))
+        return await model.ainvoke(lc_messages)
 
     async def parse_syllabus_content(
         self,
@@ -179,6 +203,11 @@ class LLMService:
     ) -> dict:
         """
         Parse syllabus text into structured academic data.
+
+        If the text fits within the model's input budget, it is sent in
+        a single request.  Otherwise it is split on structural headings
+        (Unit / Module / Chapter / …) and each chunk is parsed separately;
+        the results are merged before being returned.
 
         Uses Groq JSON mode (``response_format: {"type": "json_object"}``)
         to constrain the LLM output to valid JSON, with a robust extraction
@@ -189,74 +218,178 @@ class LLMService:
         SyllabusService) rather than silently returning empty subjects.
         """
 
-        system_prompt = """
-You are an expert educational content analyzer.
+        max_input_chars = settings.GROQ_SYLLABUS_MAX_INPUT_CHARS
 
-Analyze the provided syllabus and extract its academic structure.
+        system_prompt = (
+            "You are an expert educational content analyzer.\n"
+            "\n"
+            "TASK: Extract the academic structure from the syllabus provided\n"
+            "inside <SYLLABUS_CONTENT> tags.\n"
+            "\n"
+            "RULES:\n"
+            "- Output EXACTLY ONE valid JSON object.\n"
+            "- Do NOT include markdown, code fences, comments, or any text\n"
+            "  outside the JSON object.\n"
+            "- Use double quotes for all keys and string values.\n"
+            "- No trailing commas.\n"
+            "- Do NOT invent content that is not in the syllabus.\n"
+            "- Do NOT add DBMS, computer-science, or other dummy content.\n"
+            "\n"
+            "CRITICAL STRUCTURE RULES:\n"
+            "- The top-level JSON object MUST contain a \"subjects\" key.\n"
+            "- \"subjects\" MUST ALWAYS be an array (list), never a string\n"
+            "  or object.\n"
+            "- Every element in \"subjects\" MUST be an object.\n"
+            "- Every subject object MUST contain \"name\" (string) and\n"
+            "  \"chapters\" (array).\n"
+            "- \"chapters\" MUST ALWAYS be an array (list), never a string\n"
+            "  or object.\n"
+            "- Every element in \"chapters\" MUST be an object.\n"
+            "- Every chapter object MUST contain \"name\" (string),\n"
+            "  \"description\" (string), \"topics\" (array of strings),\n"
+            "  and \"estimated_hours\" (integer).\n"
+            "- \"topics\" MUST ALWAYS be an array of strings, never a\n"
+            "  single string.\n"
+            "- NEVER return chapters as plain strings.\n"
+            "- NEVER return subjects as plain strings.\n"
+            "- NEVER return topics as a single string.\n"
+            "\n"
+            "UNIT HEADINGS:\n"
+            "Recognize patterns like: Unit 1, Unit I, Module 1, Chapter 1,\n"
+            "or similar headings. Each becomes ONE subject.\n"
+            "Use only the unit title (without the 'Unit N:' prefix or\n"
+            "hours in parentheses) as the subject name.\n"
+            "\n"
+            "HOURS:\n"
+            "Extract the integer from patterns like '(3 Hrs.)', '(6 Hours)',\n"
+            "'(2 hr)'. If no hours found, use 0.\n"
+            "\n"
+            "TOPICS:\n"
+            "Split semicolon-separated and bullet-point topics into a list.\n"
+            "\n"
+            "OUTPUT SCHEMA:\n"
+            "{\n"
+            '  "subjects": [\n'
+            "    {\n"
+            '      "name": "Unit Title",\n'
+            '      "description": "Brief description",\n'
+            '      "chapters": [\n'
+            "        {\n"
+            '          "name": "Chapter Name",\n'
+            '          "description": "Brief description",\n'
+            '          "topics": ["Topic 1", "Topic 2"],\n'
+            '          "estimated_hours": 3\n'
+            "        }\n"
+            "      ]\n"
+            "    }\n"
+            "  ]\n"
+            "}\n"
+            "\n"
+            "EXAMPLE - correct output for 'Unit 1: Networking (3 Hrs.)'\n"
+            "with topics 'OSI Model' and 'TCP/IP':\n"
+            "{\n"
+            '  "subjects": [\n'
+            "    {\n"
+            '      "name": "Networking",\n'
+            '      "description": "Unit 1",\n'
+            '      "chapters": [\n'
+            "        {\n"
+            '          "name": "Networking Overview",\n'
+            '          "description": "",\n'
+            '          "topics": ["OSI Model", "TCP/IP"],\n'
+            '          "estimated_hours": 3\n'
+            "        }\n"
+            "      ]\n"
+            "    }\n"
+            "  ]\n"
+            "}\n"
+            "\n"
+            "Return ONLY the JSON object. Nothing else."
+        )
 
-A syllabus typically contains one or more units (often labeled
-"Unit 1", "Unit I", "Module 1", or similar).  Each unit heading has
-the format: "Unit N: Title (H Hrs.)" and is followed by a list of
-topics, usually separated by semicolons or as bullet points.
-
-Extract the structure as follows:
-- Each unit heading (e.g. "Unit 1: Introduction to Computer (3 Hrs.)")
-  becomes ONE Subject.  Use only the unit title (without the "Unit N:"
-  prefix or the hours in parentheses) as the subject name.
-- Create ONE Chapter per Subject.  That chapter holds:
-  - the list of topics for that unit (split on semicolons or bullets)
-  - the estimated_hours: the integer from the "(N Hrs.)",
-    "(N Hours)", "(N hr)", or "(N hours)" pattern on the unit line.
-    If no hours are found, use 0.
-- If the syllabus has explicit sub-chapters within a unit, create one
-  chapter per sub-chapter instead, each with its own topics and
-  estimated_hours if available.
-
-IMPORTANT: Return ONLY valid JSON. The entire response must be a
-valid JSON object. Do NOT include any markdown formatting, code fences,
-or explanatory text outside the JSON.
-
-Required structure:
-
-{{
-    "subjects": [
-        {{
-            "name": "Unit Title",
-            "description": "Subject description",
-            "chapters": [
-                {{
-                    "name": "Chapter Name",
-                    "description": "Chapter description",
-                    "topics": [
-                        "Topic 1",
-                        "Topic 2"
-                    ],
-                    "estimated_hours": 3
-                }}
-            ]
-        }}
-    ]
-}}
-"""
-
-        human_prompt = f"""
-Parse the following syllabus content:
-
-{text}
-"""
+        human_prompt = (
+            "<SYLLABUS_CONTENT>\n"
+            "{{text}}\n"
+            "</SYLLABUS_CONTENT>\n"
+            "\n"
+            "Extract the academic structure as a JSON object."
+        )
 
         prompt = ChatPromptTemplate.from_messages(
             [
                 ("system", system_prompt),
                 ("human", human_prompt),
-            ]
+            ],
+            template_format="mustache",
         )
 
+        # --- Try single-request first ----------------------------------
+        if len(text) <= max_input_chars:
+            result = await self._parse_single_chunk(
+                prompt, text, settings.GROQ_TEMPERATURE
+            )
+            if result is None:
+                raise ValueError(
+                    "Failed to parse syllabus: the LLM did not return valid "
+                    "JSON after multiple attempts."
+                )
+            return result
+
+        # --- Text is too large — split into chunks ---------------------
+        chunks = self._split_syllabus_text(text, max_input_chars)
+        num_chunks = len(chunks)
+        logger.info(
+            "Syllabus exceeds single-request budget (%d chars > %d); "
+            "splitting into %d chunks",
+            len(text),
+            max_input_chars,
+            num_chunks,
+        )
+
+        chunk_results: List[dict] = []
+        for i, chunk in enumerate(chunks, 1):
+            logger.info("Parsing syllabus chunk %d/%d", i, num_chunks)
+            parsed = await self._parse_single_chunk(
+                prompt, chunk, settings.GROQ_TEMPERATURE
+            )
+            if parsed:
+                chunk_results.append(parsed)
+
+        if not chunk_results:
+            raise ValueError(
+                "Failed to parse any syllabus chunk into valid JSON."
+            )
+
+        if len(chunk_results) == 1:
+            logger.info("Successfully parsed syllabus in 1 chunk")
+            return chunk_results[0]
+
+        merged = self._merge_syllabus_chunks(chunk_results)
+        total_subjects = len(merged.get("subjects", []))
+        logger.info(
+            "Successfully merged %d syllabus chunks (%d subjects)",
+            num_chunks,
+            total_subjects,
+        )
+        return merged
+
+    async def _parse_single_chunk(
+        self,
+        prompt: ChatPromptTemplate,
+        text: str,
+        temperature: float,
+    ) -> Optional[dict]:
+        """Parse a single chunk of syllabus text using the 3-attempt strategy.
+
+        Returns the validated dict on success, or ``None`` if all attempts
+        fail (including oversized-request errors, which are not retried).
+        """
         # Attempt 1: Groq JSON mode at the configured temperature.
         result = await self._attempt_syllabus_parse(
             prompt,
-            temperature=settings.GROQ_TEMPERATURE,
+            temperature=temperature,
             json_mode=True,
+            text=text,
         )
         if result is not None:
             return result
@@ -264,73 +397,263 @@ Parse the following syllabus content:
         logger.warning(
             "Syllabus JSON parse failed (temp=%s); retrying with lower "
             "temperature.",
-            settings.GROQ_TEMPERATURE,
+            temperature,
         )
 
         # Attempt 2: JSON mode at a lower, more deterministic temperature.
         result = await self._attempt_syllabus_parse(
-            prompt, temperature=0.2, json_mode=True
+            prompt, temperature=0.1, json_mode=True, text=text
         )
         if result is not None:
             return result
 
         logger.warning(
-            "Syllabus JSON parse failed (temp=0.2); retrying without "
+            "Syllabus JSON parse failed (temp=0.1); retrying without "
             "JSON-mode constraint but with robust extraction."
         )
 
         # Attempt 3: No JSON-mode constraint - fall back to robust
         # extraction from a free-form response.
         result = await self._attempt_syllabus_parse(
-            prompt, temperature=0.2, json_mode=False
+            prompt, temperature=0.1, json_mode=False, text=text
         )
         if result is not None:
             return result
 
-        raise ValueError(
-            "Failed to parse syllabus into valid JSON after multiple attempts."
-        )
+        return None
 
     async def _attempt_syllabus_parse(
         self,
         prompt: ChatPromptTemplate,
         temperature: float,
         json_mode: bool,
+        text: str = "",
+        max_retries: int = 3,
     ) -> Optional[dict]:
-        """Try a single syllabus-parse attempt.
+        """Try a single syllabus-parse attempt with retry on rate-limit errors.
 
         Returns the validated, parsed dict on success, or ``None`` on
         any failure so the caller can fall back to another strategy.
         """
-        try:
-            model = self._get_model(
-                temperature=temperature, json_mode=json_mode
-            )
-            chain = prompt | model | self.parser
-            result = await chain.ainvoke({})
+        last_exc: Optional[Exception] = None
+        for attempt in range(max_retries):
+            try:
+                model = self._get_model(
+                    temperature=temperature, json_mode=json_mode
+                )
+                chain = prompt | model | self.parser
+                result = await chain.ainvoke({"text": text})
 
-            cleaned = self._extract_json(result)
-            data = json.loads(cleaned)
-            data = self._validate_syllabus_data(data)
+                cleaned = self._extract_json(result)
+                data = json.loads(cleaned)
+                data = self._normalize_syllabus_data(data)
+                data = self._validate_syllabus_data(data)
 
-            if not data.get("subjects"):
-                raise ValueError("Parsed syllabus contains no subjects")
+                if not data.get("subjects"):
+                    raise ValueError("Parsed syllabus contains no subjects")
 
+                return data
+
+            except RuntimeError:
+                # Configuration errors (e.g. missing/invalid API key) are not
+                # transient - retry will not help, so let them propagate.
+                raise
+            except _OversizedRequestError:
+                # The request is too large for the model.  Do NOT retry —
+                # return None so the caller can split or reduce the chunk.
+                logger.warning(
+                    "Request too large for model (attempt %d/%d); "
+                    "caller should split input",
+                    attempt + 1,
+                    max_retries,
+                )
+                return None
+            except Exception as exc:
+                last_exc = exc
+                exc_str = str(exc).lower()
+                is_rate_limit = (
+                    "429" in exc_str
+                    or ("rate" in exc_str and "limit" in exc_str)
+                )
+                is_oversized = (
+                    "413" in exc_str
+                    or "request too large" in exc_str
+                    or "requested" in exc_str and "exceed" in exc_str
+                    or "request body too large" in exc_str
+                )
+                if is_oversized:
+                    logger.warning(
+                        "Request too large for model (attempt %d/%d); "
+                        "caller should split input",
+                        attempt + 1,
+                        max_retries,
+                    )
+                    return None
+                if is_rate_limit and attempt < max_retries - 1:
+                    wait = 2 ** attempt * 5  # 5s, 10s, 20s
+                    logger.warning(
+                        "Rate limited on syllabus parse (attempt %d/%d), "
+                        "retrying in %ds...",
+                        attempt + 1,
+                        max_retries,
+                        wait,
+                    )
+                    await asyncio.sleep(wait)
+                else:
+                    logger.warning(
+                        "Syllabus parse attempt failed "
+                        "(temperature=%s, json_mode=%s): %s",
+                        temperature,
+                        json_mode,
+                        exc,
+                    )
+                    return None
+
+        logger.warning(
+            "Syllabus parse attempt failed after %d retries: %s",
+            max_retries,
+            last_exc,
+        )
+        return None
+
+    @staticmethod
+    def _normalize_syllabus_data(data: dict) -> dict:
+        """Normalize LLM syllabus output so that structural quirks are
+        coerced into the expected schema before validation.
+
+        This handles common LLM mistakes such as returning subjects or
+        chapters as plain strings, topics as a single string, missing
+        optional fields, etc.  Only *obvious* structural fixes are made;
+        no academic content is invented.
+
+        Returns the normalized dict (mutated in place for efficiency).
+        """
+        subjects = data.get("subjects")
+        if subjects is None:
             return data
 
-        except RuntimeError:
-            # Configuration errors (e.g. missing/invalid API key) are not
-            # transient - retry will not help, so let them propagate.
-            raise
-        except Exception as exc:
-            logger.warning(
-                "Syllabus parse attempt failed "
-                "(temperature=%s, json_mode=%s): %s",
-                temperature,
-                json_mode,
-                exc,
-            )
-            return None
+        # --- subjects level ---
+        if isinstance(subjects, dict):
+            logger.debug("Normalized subjects from object to list")
+            data["subjects"] = [subjects]
+            subjects = data["subjects"]
+        elif isinstance(subjects, str):
+            logger.debug("Normalized subjects string to subject list")
+            data["subjects"] = [{"name": subjects, "chapters": []}]
+            subjects = data["subjects"]
+
+        if not isinstance(subjects, list):
+            return data
+
+        for subj in subjects:
+            # Each subject must be a dict with at least a 'name'.
+            if isinstance(subj, str):
+                idx = subjects.index(subj)
+                logger.debug(
+                    "Normalized subject string '%s' to subject object", subj
+                )
+                subjects[idx] = {"name": subj, "description": "", "chapters": []}
+                subj = subjects[idx]
+
+            if not isinstance(subj, dict):
+                continue
+
+            subj.setdefault("description", "")
+
+            # --- chapters level ---
+            chapters = subj.get("chapters")
+            if chapters is None:
+                subj["chapters"] = []
+                continue
+            if isinstance(chapters, dict):
+                logger.debug(
+                    "Normalized chapters object to list in subject '%s'",
+                    subj.get("name"),
+                )
+                subj["chapters"] = [chapters]
+                chapters = subj["chapters"]
+            elif isinstance(chapters, str):
+                logger.debug(
+                    "Normalized chapters string to chapter list in subject '%s'",
+                    subj.get("name"),
+                )
+                subj["chapters"] = [
+                    {"name": chapters, "description": "", "topics": [], "estimated_hours": 0}
+                ]
+                chapters = subj["chapters"]
+
+            if not isinstance(chapters, list):
+                continue
+
+            for k, chap in enumerate(chapters):
+                if isinstance(chap, str):
+                    logger.debug(
+                        "Normalized chapter string '%s' to chapter object in subject '%s'",
+                        chap,
+                        subj.get("name"),
+                    )
+                    chapters[k] = {
+                        "name": chap,
+                        "description": "",
+                        "topics": [],
+                        "estimated_hours": 0,
+                    }
+                    chap = chapters[k]
+
+                if not isinstance(chap, dict):
+                    continue
+
+                chap.setdefault("description", "")
+                chap.setdefault("estimated_hours", 0)
+
+                # Coerce estimated_hours from numeric string
+                eh = chap.get("estimated_hours")
+                if isinstance(eh, str):
+                    m = re.search(r"\d+", eh)
+                    chap["estimated_hours"] = int(m.group()) if m else 0
+
+                # --- topics level ---
+                topics = chap.get("topics")
+                if topics is None:
+                    chap["topics"] = []
+                elif isinstance(topics, str):
+                    logger.debug(
+                        "Normalized topics string to topic list in chapter '%s'",
+                        chap.get("name"),
+                    )
+                    chap["topics"] = [topics]
+                elif isinstance(topics, dict):
+                    # LLM may return {"name": "..."} or {"topic": "..."}
+                    name_val = (
+                        topics.get("name")
+                        or topics.get("title")
+                        or topics.get("topic")
+                        or str(topics)
+                    )
+                    logger.debug(
+                        "Normalized topics object to topic list in chapter '%s'",
+                        chap.get("name"),
+                    )
+                    chap["topics"] = [name_val] if name_val else []
+                elif isinstance(topics, list):
+                    # Normalise each element: extract .name/.title/.topic
+                    # from any dicts, coerce anything else to str.
+                    normalised: List[str] = []
+                    for t in topics:
+                        if isinstance(t, dict):
+                            val = (
+                                t.get("name")
+                                or t.get("title")
+                                or t.get("topic")
+                                or str(t)
+                            )
+                            if val:
+                                normalised.append(str(val))
+                        else:
+                            normalised.append(str(t))
+                    chap["topics"] = normalised
+
+        return data
 
     @staticmethod
     def _validate_syllabus_data(data: Any) -> dict:
@@ -338,6 +661,10 @@ Parse the following syllabus content:
 
         Returns the validated dict, or raises ``ValueError`` with a
         descriptive message when the structure is invalid.
+
+        Normalization should already have been applied before calling
+        this method; this validator catches anything that normalization
+        could not safely recover.
         """
         if not isinstance(data, dict):
             raise ValueError(
@@ -380,6 +707,169 @@ Parse the following syllabus content:
                     )
 
         return data
+
+    # ----------------------------------------------------------------
+    # Syllabus chunking helpers
+    # ----------------------------------------------------------------
+
+    # Regex that matches structural headings at the start of a line.
+    # Captures the heading text so we can use it for chunk boundaries.
+    _HEADING_RE = re.compile(
+        r"^[ \t]*"
+        r"(?:Unit|Module|Chapter|Part|Week|Lecture|Section|Topic)"
+        r"\s+\S+",
+        re.IGNORECASE | re.MULTILINE,
+    )
+
+    @staticmethod
+    def _split_syllabus_text(text: str, max_chars: int) -> List[str]:
+        """Split syllabus *text* into chunks that each fit within *max_chars*.
+
+        Splitting strategy:
+        1. If the text already fits in one chunk, return it as-is.
+        2. Try to split on structural headings (Unit 1, Module 2, …).
+        3. If a single section still exceeds *max_chars*, split it on
+           paragraph boundaries (blank lines).
+        4. As a last resort, hard-split on sentence boundaries.
+
+        No content is discarded — every character of *text* appears in
+        exactly one output chunk (whitespace-only chunks are dropped).
+        """
+        if len(text) <= max_chars:
+            return [text]
+
+        # --- Step 1: split on structural headings ---
+        chunks: List[str] = []
+        last_end = 0
+        for m in re.finditer(LLMService._HEADING_RE, text):
+            if m.start() > last_end:
+                section = text[last_end : m.start()].strip()
+                if section:
+                    chunks.append(section)
+            last_end = m.start()
+        tail = text[last_end:].strip()
+        if tail:
+            chunks.append(tail)
+
+        # --- Step 2: sub-split oversized chunks on blank lines ---
+        final: List[str] = []
+        for chunk in chunks:
+            if len(chunk) <= max_chars:
+                final.append(chunk)
+            else:
+                final.extend(
+                    LLMService._split_on_blank_lines(chunk, max_chars)
+                )
+
+        # --- Step 3: hard-split any remaining oversized chunks on sentences ---
+        result: List[str] = []
+        for chunk in final:
+            if len(chunk) <= max_chars:
+                result.append(chunk)
+            else:
+                result.extend(
+                    LLMService._split_on_sentences(chunk, max_chars)
+                )
+
+        return result if result else [text[:max_chars]]
+
+    @staticmethod
+    def _split_on_blank_lines(text: str, max_chars: int) -> List[str]:
+        """Split *text* on blank-line boundaries, keeping each paragraph
+        together.  Paragraphs longer than *max_chars* are passed through
+        to sentence-level splitting by the caller."""
+        paragraphs = re.split(r"\n\s*\n", text)
+        chunks: List[str] = []
+        current = ""
+        for para in paragraphs:
+            candidate = f"{current}\n\n{para}".strip() if current else para
+            if len(candidate) <= max_chars:
+                current = candidate
+            else:
+                if current:
+                    chunks.append(current)
+                current = para
+        if current:
+            chunks.append(current)
+        return chunks
+
+    @staticmethod
+    def _split_on_sentences(text: str, max_chars: int) -> List[str]:
+        """Last-resort split on sentence boundaries (`. ` or newline)."""
+        sentences = re.split(r"(?<=[.!?])\s+|\n", text)
+        chunks: List[str] = []
+        current = ""
+        for sent in sentences:
+            candidate = f"{current} {sent}".strip() if current else sent
+            if len(candidate) <= max_chars:
+                current = candidate
+            else:
+                if current:
+                    chunks.append(current)
+                current = sent
+        if current:
+            chunks.append(current)
+        return chunks
+
+    @staticmethod
+    def _merge_syllabus_chunks(chunk_results: List[dict]) -> dict:
+        """Merge multiple parsed syllabus chunk results into one structure.
+
+        Each element of *chunk_results* is a dict with a ``"subjects"`` key
+        containing a list of subject dicts.  Subjects whose ``"name"``
+        matches (case-insensitive, stripped) are merged; otherwise they
+        are appended in order.
+
+        No content is invented — only the data returned by the LLM is used.
+        """
+        merged_subjects: List[dict] = []
+        # index by normalised subject name for quick lookup
+        name_index: Dict[str, int] = {}
+
+        for chunk in chunk_results:
+            for subj in chunk.get("subjects", []):
+                if not isinstance(subj, dict):
+                    continue
+                raw_name = (subj.get("name") or "").strip()
+                norm_name = raw_name.lower()
+                if norm_name and norm_name in name_index:
+                    # Merge into existing subject
+                    idx = name_index[norm_name]
+                    existing = merged_subjects[idx]
+                    # Merge chapters by name
+                    existing_chapters = {
+                        (c.get("name") or "").strip().lower(): c
+                        for c in existing.get("chapters", [])
+                        if isinstance(c, dict)
+                    }
+                    for new_chap in subj.get("chapters", []):
+                        if not isinstance(new_chap, dict):
+                            continue
+                        chap_key = (new_chap.get("name") or "").strip().lower()
+                        if chap_key and chap_key in existing_chapters:
+                            # Merge topics from duplicate chapter
+                            ec = existing_chapters[chap_key]
+                            old_topics = ec.get("topics") or []
+                            new_topics = new_chap.get("topics") or []
+                            seen = {t.lower() for t in old_topics if isinstance(t, str)}
+                            for t in new_topics:
+                                if isinstance(t, str) and t.lower() not in seen:
+                                    old_topics.append(t)
+                                    seen.add(t.lower())
+                            ec["topics"] = old_topics
+                            # Update estimated_hours (take the larger value)
+                            ec["estimated_hours"] = max(
+                                ec.get("estimated_hours", 0),
+                                new_chap.get("estimated_hours", 0),
+                            )
+                        else:
+                            existing.setdefault("chapters", []).append(new_chap)
+                else:
+                    # New subject
+                    name_index[norm_name] = len(merged_subjects)
+                    merged_subjects.append(subj)
+
+        return {"subjects": merged_subjects}
 
     async def generate_quiz_questions(
         self,
@@ -522,10 +1012,10 @@ The plan should contain:
 
 Return ONLY valid JSON with:
 
-{{
+{
     "tasks": [],
     "summary": ""
-}}
+}
 """
 
         human_prompt = f"""
@@ -578,15 +1068,15 @@ Create a spaced repetition revision schedule.
 
 Return ONLY valid JSON:
 
-{{
+{
     "items": [
-        {{
+        {
             "topic": "Topic name",
             "scheduled_date": "YYYY-MM-DD",
             "difficulty": "easy/medium/hard"
-        }}
+        }
     ]
-}}
+}
 """
 
         human_prompt = f"""
