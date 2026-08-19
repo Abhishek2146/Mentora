@@ -375,6 +375,14 @@ def verify_access_token(
     """
 
     try:
+        from app.services.token_blacklist import token_blacklist
+        import asyncio
+
+        # Check if token is blacklisted
+        is_blacklisted = asyncio.run(token_blacklist.is_blacklisted(token))
+        if is_blacklisted:
+            return None
+
         payload = jwt.decode(
             token,
             settings.SECRET_KEY,
@@ -405,6 +413,14 @@ def verify_refresh_token(
     """
 
     try:
+        from app.services.token_blacklist import token_blacklist
+        import asyncio
+
+        # Check if token is blacklisted
+        is_blacklisted = asyncio.run(token_blacklist.is_blacklisted(token))
+        if is_blacklisted:
+            return None
+
         payload = jwt.decode(
             token,
             settings.SECRET_KEY,
@@ -412,6 +428,70 @@ def verify_refresh_token(
         )
 
         if payload.get("type") != "refresh":
+            return None
+
+        return payload
+
+    except JWTError:
+        return None
+
+
+# ============================================================
+# Password Reset Token
+# ============================================================
+
+def create_password_reset_token(
+    data: dict,
+    expires_delta: Optional[timedelta] = None
+) -> str:
+    """
+    Create a JWT password reset token.
+
+    Args:
+        data: Data to include in the JWT payload.
+        expires_delta: Optional custom expiration time.
+
+    Returns:
+        Encoded JWT password reset token.
+    """
+
+    to_encode = data.copy()
+
+    expire = datetime.now(timezone.utc) + (
+        expires_delta
+        or timedelta(minutes=60)
+    )
+
+    to_encode.update({
+        "exp": expire,
+        "type": "password_reset"
+    })
+
+    return jwt.encode(
+        to_encode,
+        settings.SECRET_KEY,
+        algorithm=settings.JWT_ALGORITHM
+    )
+
+
+def verify_password_reset_token(
+    token: str
+) -> Optional[dict]:
+    """
+    Verify and decode a password reset token.
+
+    Returns:
+        JWT payload if valid, otherwise None.
+    """
+
+    try:
+        payload = jwt.decode(
+            token,
+            settings.SECRET_KEY,
+            algorithms=[settings.JWT_ALGORITHM]
+        )
+
+        if payload.get("type") != "password_reset":
             return None
 
         return payload

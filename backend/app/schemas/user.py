@@ -79,7 +79,6 @@ class UserRole(str, Enum):
     """Available user roles."""
 
     STUDENT = "student"
-    INSTRUCTOR = "instructor"
     ADMIN = "admin"
 
 
@@ -112,14 +111,19 @@ class UserCreate(UserBase):
     """
     Schema used when creating/registering a new user.
 
-    New users are always registered as students.
-    The role should not be supplied by the client.
+    Role can be 'student' (default: student).
+    Admin registration is restricted to the dedicated admin endpoint.
     """
 
     password: str = Field(
         ...,
         min_length=8,
         max_length=128
+    )
+
+    role: Optional[UserRole] = Field(
+        default=UserRole.STUDENT,
+        description="User role: 'student'"
     )
 
 
@@ -288,4 +292,28 @@ class TokenPayload(BaseModel):
     type: Optional[str] = None
 
     exp: Optional[int] = None
+
+
+# ============================================================
+# Password Reset
+# ============================================================
+
+class ForgotPasswordRequest(BaseModel):
+    """Schema for forgot password request."""
+
+    email: EmailStr
+
+
+class ResetPasswordRequest(BaseModel):
+    """Schema for reset password request."""
+
+    token: str = Field(..., min_length=1)
+    password: str = Field(..., min_length=8, max_length=128)
+
+
+class ChangePasswordRequest(BaseModel):
+    """Schema for change password request (authenticated user)."""
+
+    current_password: str = Field(..., min_length=1)
+    new_password: str = Field(..., min_length=8, max_length=128)
 

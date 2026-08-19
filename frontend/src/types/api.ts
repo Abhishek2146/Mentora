@@ -14,7 +14,7 @@ export interface RegisterData {
   username: string;
   password: string;
   full_name?: string;
-  role?: string;
+  role?: "student";
 }
 
 export interface UploadFileData {

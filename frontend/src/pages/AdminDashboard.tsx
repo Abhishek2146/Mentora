@@ -225,7 +225,6 @@ export default function AdminDashboard() {
               >
                 <option value="">All roles</option>
                 <option value="student">Student</option>
-                <option value="instructor">Instructor</option>
                 <option value="admin">Admin</option>
               </select>
             </div>
@@ -274,13 +273,10 @@ export default function AdminDashboard() {
                           "text-xs font-medium rounded-lg px-2 py-1 border",
                           u.role === "admin"
                             ? "bg-violet-50 text-violet-600 border-violet-200 dark:bg-violet-900/30 dark:text-violet-300 dark:border-violet-700"
-                            : u.role === "instructor"
-                              ? "bg-sky-50 text-sky-600 border-sky-200 dark:bg-sky-900/30 dark:text-sky-300 dark:border-sky-700"
-                              : "bg-emerald-50 text-emerald-600 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-300 dark:border-emerald-700"
+                            : "bg-emerald-50 text-emerald-600 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-300 dark:border-emerald-700"
                         )}
                       >
                         <option value="student">student</option>
-                        <option value="instructor">instructor</option>
                         <option value="admin">admin</option>
                       </select>
                     </td>

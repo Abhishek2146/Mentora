@@ -135,6 +135,7 @@ class Settings(BaseSettings):
     SMTP_PORT: int = 587
 
     SMTP_USER: str = ""
+    SMTP_EMAIL: str = ""
     SMTP_PASSWORD: str = ""
 
     # ============================================================

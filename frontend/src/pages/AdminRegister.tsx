@@ -1,11 +1,16 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { ShieldCheck, Mail, Lock, User, Eye, EyeOff, KeyRound } from "lucide-react";
+import { ShieldCheck, Mail, Lock, User, Eye, EyeOff, KeyRound, LogIn } from "lucide-react";
 import { useAuthStore } from "@/store/authStore";
 
 export default function AdminRegister() {
   const navigate = useNavigate();
-  const { registerAdmin, isLoading } = useAuthStore();
+  const { registerAdmin, logout, isLoading } = useAuthStore();
+
+  const handleSignIn = () => {
+    logout();
+    navigate("/login");
+  };
   const [form, setForm] = useState({ full_name: "", username: "", email: "", password: "", admin_secret: "" });
   const [showPw, setShowPw] = useState(false);
   const [showSecret, setShowSecret] = useState(false);
@@ -77,7 +82,7 @@ export default function AdminRegister() {
             </button>
           </form>
           <p className="text-center text-sm text-slate-500">
-            Already an admin? <Link to="/login" className="text-primary-600 font-semibold hover:underline">Sign in</Link>
+            Already an admin? <button onClick={handleSignIn} className="text-primary-600 font-semibold hover:underline bg-transparent border-none p-0 cursor-pointer"><LogIn className="w-4 h-4 inline mr-1" /> Sign in</button>
           </p>
         </div>
       </div>

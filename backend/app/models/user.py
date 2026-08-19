@@ -44,7 +44,6 @@ class UserRole(str, Enum):
     """Available user roles."""
 
     STUDENT = "student"
-    INSTRUCTOR = "instructor"
     ADMIN = "admin"
 
 

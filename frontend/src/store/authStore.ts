@@ -23,8 +23,11 @@ interface AuthState {
   setUser: (user: User | null) => void;
   setTokens: (tokens: Token) => void;
   login: (emailOrUsername: string, password: string) => Promise<void>;
-  register: (userData: { email: string; username: string; password: string; full_name?: string; role?: string }) => Promise<void>;
+  register: (userData: { email: string; username: string; password: string; full_name?: string }) => Promise<void>;
   registerAdmin: (userData: { email: string; username: string; password: string; full_name?: string; admin_secret: string }) => Promise<void>;
+  forgotPassword: (email: string) => Promise<void>;
+  resetPassword: (token: string, password: string) => Promise<void>;
+  changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
   logout: () => void;
   checkAuth: () => Promise<void>;
   updateUser: (data: Partial<User>) => Promise<void>;
@@ -153,6 +156,53 @@ export const useAuthStore = create<AuthState>()(
           const updatedUser: User = await response.json();
           set({ user: updatedUser });
         }
+      },
+
+      forgotPassword: async (email: string) => {
+        set({ isLoading: true });
+        try {
+          await apiClient.post("/api/v1/auth/forgot-password", { email });
+        } catch (error) {
+          set({ isLoading: false });
+          throw getApiError(error);
+        }
+        set({ isLoading: false });
+      },
+
+      resetPassword: async (token: string, password: string) => {
+        set({ isLoading: true });
+        try {
+          await apiClient.post("/api/v1/auth/reset-password", { token, password });
+        } catch (error) {
+          set({ isLoading: false });
+          throw getApiError(error);
+        }
+        set({ isLoading: false });
+      },
+
+      changePassword: async (currentPassword: string, newPassword: string) => {
+        set({ isLoading: true });
+        try {
+          const tokens = get().tokens;
+          if (!tokens) throw new Error("Not authenticated");
+          const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:8000";
+          const response = await fetch(`${apiUrl}/api/v1/auth/change-password`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${tokens.access_token}`,
+            },
+            body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
+          });
+          if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.detail || "Failed to change password");
+          }
+        } catch (error) {
+          set({ isLoading: false });
+          throw getApiError(error);
+        }
+        set({ isLoading: false });
       },
     }),
     { name: "mentora_auth" }

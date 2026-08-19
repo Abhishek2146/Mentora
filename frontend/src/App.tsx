@@ -19,6 +19,7 @@ import ProgressPage from "@/pages/Progress";
 import RegisterPage from "@/pages/Register";
 import LoginPage from "@/pages/Login";
 import ForgotPasswordPage from "@/pages/ForgotPassword";
+import ResetPasswordPage from "@/pages/ResetPassword";
 import { ProtectedRoute, PublicRoute, AdminRoute } from "@/components/ProtectedRoute";
 import { useAuthStore } from "@/store/authStore";
 import AdminRegisterPage from "@/pages/AdminRegister";
@@ -52,6 +53,7 @@ export default function App() {
         <Route path="/register" element={<PublicRoute><RegisterPage /></PublicRoute>} />
         <Route path="/login" element={<PublicRoute><LoginPage /></PublicRoute>} />
         <Route path="/forgot-password" element={<PublicRoute><ForgotPasswordPage /></PublicRoute>} />
+        <Route path="/reset-password" element={<PublicRoute><ResetPasswordPage /></PublicRoute>} />
         <Route path="/admin/register" element={<AdminRegisterPage />} />
         <Route path="/admin/dashboard" element={<AdminRoute><AdminDashboardPage /></AdminRoute>} />
         <Route path="*" element={<Navigate to="/" replace />} />

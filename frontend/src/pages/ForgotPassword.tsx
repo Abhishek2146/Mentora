@@ -1,10 +1,24 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { GraduationCap, Mail, ArrowLeft, CheckCircle2 } from "lucide-react";
+import { GraduationCap, Mail, ArrowLeft, CheckCircle2, AlertCircle } from "lucide-react";
+import { useAuthStore } from "@/store/authStore";
 
 export default function ForgotPassword() {
   const [email, setEmail] = useState("");
   const [sent, setSent] = useState(false);
+  const [error, setError] = useState("");
+  const { forgotPassword, isLoading } = useAuthStore();
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+    try {
+      await forgotPassword(email);
+      setSent(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to send reset link. Please try again.");
+    }
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-primary-50 to-secondary-50 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 flex items-center justify-center p-4">
@@ -28,13 +42,25 @@ export default function ForgotPassword() {
             <>
               <h2 className="text-xl font-bold text-slate-800 dark:text-slate-100">Reset Password</h2>
               <p className="text-sm text-slate-500">Enter your email to receive a reset link</p>
-              <form onSubmit={e => { e.preventDefault(); setSent(true); }} className="space-y-4">
+              {error && (
+                <div className="p-3 bg-danger-50 dark:bg-red-900/20 border border-danger-200 dark:border-red-700 rounded-xl text-sm text-danger-600 dark:text-red-400 flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                  {error}
+                </div>
+              )}
+              <form onSubmit={handleSubmit} className="space-y-4">
                 <div className="relative">
                   <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                   <input type="email" value={email} onChange={e => setEmail(e.target.value)}
                     placeholder="Your email address" className="input pl-10" required />
                 </div>
-                <button type="submit" className="btn-primary btn-md w-full">Send Reset Link</button>
+                <button type="submit" disabled={isLoading} className="btn-primary btn-md w-full">
+                  {isLoading ? (
+                    <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                  ) : (
+                    'Send Reset Link'
+                  )}
+                </button>
               </form>
               <Link to="/login" className="flex items-center gap-2 text-sm text-slate-500 hover:text-slate-700 justify-center">
                 <ArrowLeft className="w-4 h-4" /> Back to login

@@ -17,7 +17,11 @@ export default function Login() {
     try {
       await login(email, password);
       const role = useAuthStore.getState().user?.role;
-      navigate(role === "admin" ? "/admin/dashboard" : "/dashboard");
+      if (role === "admin") {
+        navigate("/admin/dashboard");
+      } else {
+        navigate("/dashboard");
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Invalid email or password");
     }
@@ -72,9 +76,6 @@ export default function Login() {
 
           <p className="text-center text-sm text-slate-500">
             No account? <Link to="/register" className="text-primary-600 font-semibold hover:underline">Sign up</Link>
-          </p>
-          <p className="text-center text-xs text-slate-400">
-            Are you an admin? <Link to="/admin/register" className="text-violet-600 dark:text-violet-400 font-semibold hover:underline">Admin sign up</Link>
           </p>
         </div>
       </div>
