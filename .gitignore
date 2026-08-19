@@ -29,6 +29,13 @@ frontend/dist/
 dist/
 build/
 
+# ChromaDB
+chromadb/
+*.bin
+
+# Uploads
+backend/uploads/
+
 # IDE
 .vscode/
 .idea/
