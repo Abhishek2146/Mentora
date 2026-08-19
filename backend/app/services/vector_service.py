@@ -231,9 +231,27 @@ class VectorService:
         return "\n\n".join(blocks)
 
     def delete_collection(self, collection_name: str):
-        """Delete a collection."""
+        """Delete a ChromaDB collection.
+
+        Modern Chroma (>= 0.4) stores collections inside the shared
+        ``chroma.sqlite3`` rather than as a directory named after the
+        collection, so the delete must go through the Chroma client.
+        Falls back to removing a legacy on-disk folder when the client
+        delete is unavailable.
+        """
+        try:
+            vector_db = self.get_collection(collection_name)
+            vector_db.delete_collection()
+            logger.info(f"Deleted collection: {collection_name}")
+            return
+        except Exception as e:
+            logger.warning(
+                "Client delete failed for collection '%s': %s",
+                collection_name,
+                e,
+            )
         import shutil
         collection_path = os.path.join(self.persist_directory, collection_name)
         if os.path.exists(collection_path):
             shutil.rmtree(collection_path)
-        logger.info(f"Deleted collection: {collection_name}")
+            logger.info(f"Deleted collection folder: {collection_name}")

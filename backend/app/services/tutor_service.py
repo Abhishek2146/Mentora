@@ -163,7 +163,14 @@ class TutorService:
         personalization = await self._build_personalization_note(user_id, syllabus_id, db)
 
         system_parts = [
-            "You are a helpful AI tutor."
+            "You are a helpful AI tutor.",
+            (
+                "Format your reply as clean plain text for a chat interface. "
+                "Use short paragraphs and simple bullet lists starting with a "
+                "dash (-). Do NOT use Markdown formatting (no **, *, |, ---, "
+                "#, >), do NOT use HTML tags (no <br> or similar), and do not "
+                "use tables."
+            ),
         ]
         if context:
             system_parts.append(

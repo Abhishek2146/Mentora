@@ -59,7 +59,7 @@ from sqlalchemy import (
     JSON,
     String,
 )
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import relationship, backref
 
 from app.database.base import BaseModel
 
@@ -139,7 +139,7 @@ class AnalyticsSummary(BaseModel):
 
     user = relationship(
         "User",
-        backref="analytics_summaries",
+        backref=backref("analytics_summaries", passive_deletes=True),
     )
 
 
@@ -238,7 +238,7 @@ class ExamSimulation(BaseModel):
 
     user = relationship(
         "User",
-        backref="exam_simulations",
+        backref=backref("exam_simulations", passive_deletes=True),
     )
 
 

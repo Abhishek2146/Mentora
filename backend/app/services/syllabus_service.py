@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.logger import get_logger
 from app.models.syllabus import Syllabus, Subject, Chapter
 from app.schemas.syllabus import SyllabusStatus
+from langchain_core.documents import Document
 from app.services.llm_service import LLMService
 from app.services.ocr_service import OCRService
 from app.services.embedding_service import EmbeddingService
@@ -310,7 +311,7 @@ class SyllabusService:
         # This ensures the tutor can retrieve content from Chroma.
         try:
             await self._embed_for_rag(
-                syllabus, extracted_text, parsed_data or {}
+                syllabus, extracted_text, syllabus.parsed_data or {}
             )
             syllabus.is_ai_processed = True
             syllabus.is_processed = True
@@ -461,6 +462,80 @@ class SyllabusService:
             syllabus.id,
         )
 
+    def _build_structured_documents(
+        self, parsed_data: dict, base_metadata: dict
+    ) -> List[Document]:
+        """Build chapter-aware RAG documents from the parsed syllabus
+        structure so retrieved chunks carry subject/chapter metadata.
+
+        Produces one "chapter list" document per subject (so queries like
+        "what are the chapters?" retrieve the full list) and one document
+        per chapter containing its description and topics.  Returns an
+        empty list when there is no usable structure, in which case the
+        caller falls back to plain full-text chunking.
+        """
+        documents: List[Document] = []
+        subjects = (parsed_data or {}).get("subjects") or []
+
+        for subject in subjects:
+            subject_name = (subject.get("name") or "").strip() or "Unknown"
+            chapters = subject.get("chapters") or []
+
+            chapter_names = [
+                (ch.get("name") or "").strip()
+                for ch in chapters
+                if (ch.get("name") or "").strip()
+            ]
+            if chapter_names:
+                listing_content = (
+                    f"Chapter list for subject {subject_name}:\n"
+                    + "\n".join(f"- {name}" for name in chapter_names)
+                )
+                documents.extend(
+                    self.embedding_service.chunk_text_with_metadata(
+                        listing_content,
+                        {
+                            **base_metadata,
+                            "subject": subject_name,
+                            "chapter": "",
+                            "topic": "",
+                            "doc_type": "chapter_list",
+                        },
+                    )
+                )
+
+            for chapter in chapters:
+                chapter_name = (chapter.get("name") or "").strip() or "Unknown"
+                parts: List[str] = []
+                description = (chapter.get("description") or "").strip()
+                if description:
+                    parts.append(description)
+                topics = chapter.get("topics") or []
+                for topic in topics:
+                    topic = str(topic).strip()
+                    if topic:
+                        parts.append(f"- {topic}")
+
+                content = "\n".join(parts).strip()
+                if not content:
+                    content = f"{subject_name}: {chapter_name}"
+
+                metadata = {
+                    **base_metadata,
+                    "subject": subject_name,
+                    "chapter": chapter_name,
+                    "topic": "",
+                    "doc_type": "chapter",
+                }
+                docs = self.embedding_service.chunk_text_with_metadata(
+                    content, metadata
+                )
+                if not docs:
+                    docs = [Document(page_content=content, metadata=metadata)]
+                documents.extend(docs)
+
+        return documents
+
     async def _embed_for_rag(
         self, syllabus: Syllabus, extracted_text: str, parsed_data: dict
     ) -> None:
@@ -481,10 +556,20 @@ class SyllabusService:
             else "unknown",
         }
 
-        try:
-            chunks = self.embedding_service.chunk_text_with_metadata(
+        # Build chapter-aware documents from the parsed structure so every
+        # chunk carries subject/chapter metadata and the tutor can answer
+        # structural questions (chapter lists, per-chapter summaries).
+        # Fall back to plain full-text chunking when there is no structure.
+        documents = self._build_structured_documents(
+            parsed_data, base_metadata
+        )
+        if not documents:
+            documents = self.embedding_service.chunk_text_with_metadata(
                 extracted_text, base_metadata
             )
+
+        try:
+            chunks = documents
 
             if not chunks:
                 logger.warning(

@@ -14,7 +14,7 @@ from sqlalchemy import (
     JSON,
     String,
 )
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import relationship, backref
 
 from app.database.base import BaseModel
 
@@ -89,7 +89,7 @@ class Progress(BaseModel):
 
     user = relationship(
         "User",
-        backref="progress",
+        backref=backref("progress", passive_deletes=True),
     )
 
     subject = relationship(
@@ -185,7 +185,7 @@ class WeakTopic(BaseModel):
 
     user = relationship(
         "User",
-        backref="weak_topics",
+        backref=backref("weak_topics", passive_deletes=True),
     )
 
     syllabus = relationship(

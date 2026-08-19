@@ -2,7 +2,7 @@
 Chat history model
 """
 from sqlalchemy import Column, String, Text, ForeignKey, Integer
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import relationship, backref
 from app.database.base import BaseModel
 
 
@@ -14,7 +14,7 @@ class ChatSession(BaseModel):
     model_used = Column(String(100), default="gpt-4", nullable=False)
     syllabus_id = Column(Integer, ForeignKey("syllabuses.id"), nullable=True)
 
-    user = relationship("User", backref="chat_sessions")
+    user = relationship("User", backref=backref("chat_sessions", passive_deletes=True))
     messages = relationship("ChatMessage", back_populates="session", cascade="all, delete-orphan")
     syllabus = relationship("Syllabus", backref="chat_sessions")
 
@@ -42,7 +42,7 @@ class VoiceSession(BaseModel):
     voice_used = Column(String(50), default="default", nullable=False)
     duration = Column(Integer, nullable=True)
 
-    user = relationship("User", backref="voice_sessions")
+    user = relationship("User", backref=backref("voice_sessions", passive_deletes=True))
     session = relationship("ChatSession", backref="voice_sessions")
 
 
@@ -60,4 +60,4 @@ class WeeklyReport(BaseModel):
     coding_problems_solved = Column(Integer, default=0, nullable=False)
     report_data = Column(Text, nullable=True)
 
-    user = relationship("User", backref="weekly_reports")
+    user = relationship("User", backref=backref("weekly_reports", passive_deletes=True))
