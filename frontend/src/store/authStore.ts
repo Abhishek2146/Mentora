@@ -114,7 +114,7 @@ export const useAuthStore = create<AuthState>()(
 
       logout: () => {
         apiClient.clearTokensOnLogout();
-        set({ user: null, isAuthenticated: false, tokens: null });
+        set({ user: null, isAuthenticated: false, tokens: null, isLoading: false });
         window.location.href = "/login";
       },
 
@@ -205,7 +205,14 @@ export const useAuthStore = create<AuthState>()(
         set({ isLoading: false });
       },
     }),
-    { name: "mentora_auth" }
+    { 
+      name: "mentora_auth",
+      partialize: (state) => ({
+        user: state.user,
+        isAuthenticated: state.isAuthenticated,
+        tokens: state.tokens,
+      })
+    }
   )
 );
 

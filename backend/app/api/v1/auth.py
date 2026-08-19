@@ -159,7 +159,7 @@ async def login(
 async def refresh_token(
     refresh_token: str,
 ):
-    payload = verify_refresh_token(refresh_token)
+    payload = await verify_refresh_token(refresh_token)
     if not payload:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -181,7 +181,7 @@ async def logout(
     credentials: HTTPAuthorizationCredentials = Depends(security),
 ):
     token = credentials.credentials
-    payload = verify_access_token(token)
+    payload = await verify_access_token(token)
     if payload:
         exp = payload.get("exp")
         if exp:

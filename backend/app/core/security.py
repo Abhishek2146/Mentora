@@ -364,7 +364,7 @@ def create_refresh_token(
 # Access Token Verification
 # ============================================================
 
-def verify_access_token(
+async def verify_access_token(
     token: str
 ) -> Optional[dict]:
     """
@@ -376,10 +376,9 @@ def verify_access_token(
 
     try:
         from app.services.token_blacklist import token_blacklist
-        import asyncio
 
         # Check if token is blacklisted
-        is_blacklisted = asyncio.run(token_blacklist.is_blacklisted(token))
+        is_blacklisted = await token_blacklist.is_blacklisted(token)
         if is_blacklisted:
             return None
 
@@ -402,7 +401,7 @@ def verify_access_token(
 # Refresh Token Verification
 # ============================================================
 
-def verify_refresh_token(
+async def verify_refresh_token(
     token: str
 ) -> Optional[dict]:
     """
@@ -414,10 +413,9 @@ def verify_refresh_token(
 
     try:
         from app.services.token_blacklist import token_blacklist
-        import asyncio
 
         # Check if token is blacklisted
-        is_blacklisted = asyncio.run(token_blacklist.is_blacklisted(token))
+        is_blacklisted = await token_blacklist.is_blacklisted(token)
         if is_blacklisted:
             return None
 

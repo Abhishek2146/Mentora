@@ -17,7 +17,7 @@ async def get_current_user_id(
     credentials: HTTPAuthorizationCredentials = Depends(security),
 ) -> int:
     token = credentials.credentials
-    payload = verify_access_token(token)
+    payload = await verify_access_token(token)
     if not payload:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
