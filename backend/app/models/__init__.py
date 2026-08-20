@@ -11,6 +11,7 @@ from app.models.progress import Progress, WeakTopic
 from app.models.revision import RevisionSchedule, RevisionItem
 from app.models.chat_history import ChatSession, ChatMessage, VoiceSession, WeeklyReport
 from app.models.analytics import AnalyticsSummary, ActivityLog, ExamSimulation
+from app.models.notification import Notification, NotificationType, NotificationPriority
 
 __all__ = [
     "User", "UserRole",
@@ -23,4 +24,5 @@ __all__ = [
     "RevisionSchedule", "RevisionItem",
     "ChatSession", "ChatMessage", "VoiceSession", "WeeklyReport",
     "AnalyticsSummary", "ActivityLog", "ExamSimulation",
+    "Notification", "NotificationType", "NotificationPriority",
 ]

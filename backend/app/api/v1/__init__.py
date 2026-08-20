@@ -14,6 +14,7 @@ from app.api.v1 import (
     voice,
     reports,
     dashboard,
+    notifications,
 )
 
 from app.api.v1.auth import router as auth_router
@@ -31,6 +32,7 @@ from app.api.v1.weak_topics import router as weak_topics_router
 from app.api.v1.voice import router as voice_router
 from app.api.v1.reports import router as reports_router
 from app.api.v1.dashboard import router as dashboard_router
+from app.api.v1.notifications import router as notifications_router
 
 __all__ = [
     "auth",
@@ -48,6 +50,7 @@ __all__ = [
     "voice",
     "reports",
     "dashboard",
+    "notifications",
     "auth_router",
     "users_router",
     "syllabus_router",
@@ -63,4 +66,5 @@ __all__ = [
     "voice_router",
     "reports_router",
     "dashboard_router",
+    "notifications_router",
 ]

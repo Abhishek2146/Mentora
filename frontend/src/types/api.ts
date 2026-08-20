@@ -50,3 +50,33 @@ export interface FileUploadResponse {
   file_type: string;
   extracted_text: string;
 }
+
+export interface SyllabusSearchParams {
+  q: string;
+  search_in?: string[];
+  status?: string;
+  page?: number;
+  per_page?: number;
+}
+
+export interface SyllabusSearchResult {
+  id: number;
+  title: string;
+  description?: string;
+  file_type?: string;
+  status: string;
+  is_processed: boolean;
+  is_ai_processed: boolean;
+  created_at: string;
+  updated_at: string;
+  matched_fields: string[];
+}
+
+export interface SyllabusSearchResponse {
+  items: SyllabusSearchResult[];
+  total: number;
+  page: number;
+  per_page: number;
+  pages: number;
+  query: string;
+}

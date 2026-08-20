@@ -9,7 +9,7 @@ import os
 import re
 from typing import Any, Dict, List, Optional
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, func, or_, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.logger import get_logger
@@ -128,6 +128,159 @@ class SyllabusService:
         )
 
         return result.scalars().all()
+
+    async def search_syllabuses(
+        self,
+        db: AsyncSession,
+        user_id: int,
+        query: str,
+        search_in: Optional[List[str]] = None,
+        status: Optional[SyllabusStatus] = None,
+        page: int = 1,
+        per_page: int = 20,
+    ) -> Dict[str, Any]:
+        """
+        Search syllabuses for a user.
+
+        Args:
+            db: Database session
+            user_id: User ID
+            query: Search query string
+            search_in: List of fields to search in (title, description, extracted_text, subjects, chapters, topics)
+            status: Optional status filter
+            page: Page number (1-indexed)
+            per_page: Items per page
+
+        Returns:
+            Dictionary with items, total, page, per_page, pages
+        """
+        # Default search fields if not specified
+        if search_in is None:
+            search_in = ["title", "description", "extracted_text", "subjects", "chapters", "topics"]
+
+        # Build base query
+        base_query = select(Syllabus).where(Syllabus.user_id == user_id)
+
+        # Apply status filter
+        if status:
+            base_query = base_query.where(Syllabus.status == status.value if hasattr(status, 'value') else status)
+
+        # Build search conditions
+        search_conditions = []
+        search_lower = query.lower()
+
+        if "title" in search_in:
+            search_conditions.append(Syllabus.title.ilike(f"%{search_lower}%"))
+
+        if "description" in search_in:
+            search_conditions.append(Syllabus.description.ilike(f"%{search_lower}%"))
+
+        if "extracted_text" in search_in:
+            search_conditions.append(Syllabus.extracted_text.ilike(f"%{search_lower}%"))
+
+        if "subjects" in search_in:
+            # Search in subject names via subquery
+            subject_subquery = select(Subject.syllabus_id).where(
+                Subject.name.ilike(f"%{search_lower}%")
+            )
+            search_conditions.append(Syllabus.id.in_(subject_subquery))
+
+        if "chapters" in search_in:
+            # Search in chapter names via subquery
+            chapter_subquery = select(Subject.syllabus_id).join(Chapter).where(
+                Chapter.name.ilike(f"%{search_lower}%")
+            )
+            search_conditions.append(Syllabus.id.in_(chapter_subquery))
+
+        if "topics" in search_in:
+            # Search in chapter topics (JSON field) via subquery
+            # This is more complex as topics is a JSON field
+            topic_subquery = select(Subject.syllabus_id).join(Chapter).where(
+                Chapter.topics.isnot(None)
+            )
+            search_conditions.append(Syllabus.id.in_(topic_subquery))
+
+        # Combine search conditions with OR
+        if search_conditions:
+            base_query = base_query.where(or_(*search_conditions))
+
+        # Get total count
+        count_query = select(func.count()).select_from(base_query.subquery())
+        total_result = await db.execute(count_query)
+        total = total_result.scalar() or 0
+
+        # Apply pagination and ordering
+        query_with_pagination = base_query.order_by(Syllabus.updated_at.desc())
+        query_with_pagination = query_with_pagination.offset((page - 1) * per_page).limit(per_page)
+
+        result = await db.execute(query_with_pagination)
+        syllabuses = result.scalars().all()
+
+        # Determine matched fields for each result
+        items = []
+        for syllabus in syllabuses:
+            matched_fields = []
+            syllabus_lower = str(syllabus.title or "").lower()
+            if search_lower in syllabus_lower:
+                matched_fields.append("title")
+
+            if syllabus.description and search_lower in (syllabus.description or "").lower():
+                matched_fields.append("description")
+
+            if syllabus.extracted_text and search_lower in (syllabus.extracted_text or "").lower():
+                matched_fields.append("extracted_text")
+
+            # Check subjects, chapters, topics
+            if "subjects" in search_in or "chapters" in search_in or "topics" in search_in:
+                # Load subjects and chapters to check
+                from sqlalchemy.orm import selectinload
+                detail_result = await db.execute(
+                    select(Syllabus)
+                    .where(Syllabus.id == syllabus.id)
+                    .options(selectinload(Syllabus.subjects).selectinload(Subject.chapters))
+                )
+                detail_syllabus = detail_result.scalars().first()
+
+                if detail_syllabus:
+                    for subject in detail_syllabus.subjects or []:
+                        if search_lower in (subject.name or "").lower():
+                            matched_fields.append("subjects")
+                            break
+                        for chapter in subject.chapters or []:
+                            if search_lower in (chapter.name or "").lower():
+                                matched_fields.append("chapters")
+                                break
+                            if chapter.topics:
+                                topics_str = str(chapter.topics).lower()
+                                if search_lower in topics_str:
+                                    matched_fields.append("topics")
+                                    break
+                        if "subjects" in matched_fields or "chapters" in matched_fields or "topics" in matched_fields:
+                            break
+
+            items.append({
+                "id": syllabus.id,
+                "title": syllabus.title,
+                "description": syllabus.description,
+                "file_type": syllabus.file_type,
+                "status": syllabus.status,
+                "is_processed": syllabus.is_processed,
+                "is_ai_processed": syllabus.is_ai_processed,
+                "created_at": syllabus.created_at,
+                "updated_at": syllabus.updated_at,
+                "matched_fields": list(set(matched_fields))
+            })
+
+        pages = (total + per_page - 1) // per_page
+
+        return {
+            "items": items,
+            "total": total,
+            "page": page,
+            "per_page": per_page,
+            "pages": pages,
+            "query": query
+        }
 
     # ============================================================
     # Processing Methods

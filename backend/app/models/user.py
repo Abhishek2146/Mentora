@@ -35,6 +35,7 @@ User model
 from enum import Enum
 
 from sqlalchemy import Boolean, Column, DateTime, String
+from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
 from app.database.base import BaseModel
@@ -123,4 +124,7 @@ class User(BaseModel):
         onupdate=func.now(),
         nullable=False
     )
+
+    # Notifications
+    notifications = relationship("Notification", back_populates="user", cascade="all, delete-orphan")
 
