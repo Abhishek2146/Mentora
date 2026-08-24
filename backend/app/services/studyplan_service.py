@@ -2,7 +2,7 @@
 Study Plan Service
 """
 from datetime import datetime, timedelta, date as date_cls
-from typing import Optional
+from typing import List, Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -33,6 +33,9 @@ class StudyPlanService:
         actually owns, and materialize the generated tasks as real
         StudyTask rows (not just an opaque JSON blob).
         """
+        import os as _os
+        if _os.getenv("STUDY_PLAN_DEBUG_418") == "1":
+            raise ValueError("DEBUG_MARKER_V2_REACHED")
         syllabus_result = await db.execute(
             select(Syllabus).where(Syllabus.id == syllabus_id, Syllabus.user_id == user_id)
         )
@@ -47,6 +50,13 @@ class StudyPlanService:
             start_date=start_date,
             end_date=end_date,
         )
+
+        if not plan_data.get("tasks"):
+            logger.warning(
+                "LLM produced no tasks for study plan; falling back to "
+                "deterministic distribution of syllabus topics."
+            )
+            plan_data = self._build_fallback_plan(syllabus_data, start_date, end_date)
 
         weak_topics = await self.progress_service.get_top_weak_topics(
             user_id=user_id, db=db, syllabus_id=syllabus_id, limit=5
@@ -78,8 +88,83 @@ class StudyPlanService:
             )
             await db.commit()
 
+            # Refresh AFTER the task-insertion commit so the response
+            # includes the tasks. Without this, the in-memory `tasks`
+            # collection is still empty (the tasks were added via FK, not
+            # through the relationship), so the API returns "tasks": []
+            # and the UI shows "No tasks generated yet" until a manual
+            # page reload.
+            await db.refresh(plan)
+
         logger.info(f"Study plan created for user {user_id}")
         return plan
+
+    def _build_fallback_plan(
+        self,
+        syllabus_data: dict,
+        start_date: str,
+        end_date: Optional[str] = None,
+    ) -> dict:
+        """Deterministically distribute syllabus chapters/topics across the
+        available date range. Used when the LLM returns nothing usable so a
+        plan always has tasks.
+        """
+        start = datetime.strptime(start_date, "%Y-%m-%d").date()
+        end = (
+            datetime.strptime(end_date, "%Y-%m-%d").date()
+            if end_date else start + timedelta(days=29)
+        )
+        total_days = max((end - start).days + 1, 1)
+
+        study_items: List[dict] = []
+        for subject in (syllabus_data.get("subjects") or []):
+            if not isinstance(subject, dict):
+                continue
+            subject_name = subject.get("name") or "Syllabus"
+            for chapter in (subject.get("chapters") or []):
+                if not isinstance(chapter, dict):
+                    continue
+                chapter_name = chapter.get("name") or ""
+                topics = [t for t in (chapter.get("topics") or []) if t]
+                if topics:
+                    for topic in topics:
+                        study_items.append({
+                            "title": f"Study {topic}",
+                            "description": (f"{chapter_name} ({subject_name})" if subject_name != "Syllabus" else chapter_name),
+                        })
+                elif chapter_name:
+                    study_items.append({
+                        "title": f"Study {chapter_name}",
+                        "description": str(subject_name),
+                    })
+
+        tasks: List[dict] = []
+        if study_items:
+            days_per_item = total_days / len(study_items)
+            for index, item in enumerate(study_items[:60]):
+                day_offset = int(index * days_per_item)
+                task_date = min(start + timedelta(days=day_offset), end)
+                tasks.append({
+                    "title": item["title"],
+                    "description": item["description"],
+                    "date": task_date.strftime("%Y-%m-%d"),
+                    "type": "study",
+                })
+                # Add a revision task at the end of the range for every 6th item.
+                if (index + 1) % 6 == 0:
+                    rev_offset = min(day_offset + max(total_days // 10, 1), total_days - 1)
+                    tasks.append({
+                        "title": f"Revise {item['title'].replace('Study ', '', 1)}",
+                        "description": "Spaced revision of previously studied material.",
+                        "date": (start + timedelta(days=rev_offset)).strftime("%Y-%m-%d"),
+                        "type": "revision",
+                    })
+
+        summary = (
+            f"Deterministic plan covering {len(study_items)} syllabus items "
+            f"across {total_days} days."
+        )
+        return {"summary": summary, "tasks": tasks}
 
     def _create_tasks_from_plan(
         self,
@@ -101,7 +186,7 @@ class StudyPlanService:
         raw_tasks = plan_data.get("tasks", [])
         covered_weak_keys = set()
 
-        for index, item in enumerate(raw_tasks[:30]):
+        for index, item in enumerate(raw_tasks[:150]):
             if not isinstance(item, dict):
                 continue
 

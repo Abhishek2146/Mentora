@@ -103,6 +103,12 @@ async def upload_syllabus(
                 "Contact the administrator to enable syllabus processing."
             ),
         )
+    except ValueError as e:
+        await db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(e),
+        )
 
     # Reload the syllabus with subjects and chapters eager-loaded.
     result = await db.execute(
@@ -111,8 +117,11 @@ async def upload_syllabus(
         .options(
             selectinload(Syllabus.subjects).selectinload(Subject.chapters)
         )
+        .execution_options(populate_existing=True)
     )
     syllabus = result.scalars().first()
+
+    return syllabus
 
     if syllabus is None:
         raise HTTPException(

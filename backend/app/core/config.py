@@ -89,21 +89,50 @@ class Settings(BaseSettings):
     # ============================================================
 
     GROQ_API_KEY: str = ""
-<<<<<<< HEAD
-    GROQ_MODEL: str = "allam-2-7b"
-=======
-    GROQ_MODEL: str = "openai/gpt-oss-120b"
->>>>>>> 94af0c5359713970689e9a2e3cc9ef831e55cb90
+    GROQ_MODEL: str = "openai/gpt-oss-20b"
     GROQ_TEMPERATURE: float = 0.7
     GROQ_MAX_TOKENS: int = 4096
+    # Documented per-request token budget for the configured Groq model
+    # (see the "Request too large for model ... TPM Limit" error surfaced
+    # by the provider and the project tests).  TPM = tokens allowed per
+    # minute (input + output combined); ALLaM-2-7b also has a 4096-token
+    # context window.
+    GROQ_MODEL_REQUEST_TOKEN_LIMIT: int = 6000
+    # Max output tokens reserved for a single syllabus parsing request.
+    # Dense chunks need headroom: echoing every topic verbatim as JSON
+    # costs roughly 2-3x the raw text in tokens, and exceeding this
+    # reservation truncates the JSON mid-object -> json_validate_failed
+    # -> whole chunks abandoned.  2048 + a ~300-token input still fits
+    # inside ALLaM-2-7b's 4096-token context window with room for the
+    # system prompt.
+    GROQ_SYLLABUS_MAX_OUTPUT_TOKENS: int = 2048
+    # Minimum delay between syllabus chunk requests.  With a 6000 TPM
+    # rate limit, sending many chunks back-to-back trips a 413 "Request
+    # too large" that splitting cannot fix — we must pace requests so the
+    # rolling token rate stays under the limit.
+    GROQ_SYLLABUS_MIN_INTERVAL_SECONDS: float = 1.0
     # Maximum characters for syllabus text sent in a single LLM request.
-    # Conservative budget: model TPM limit is 6000; we reserve headroom
-    # for the system prompt (~400 tok ≈ 1600 chars) and output tokens,
-    # leaving ~1800 chars (~450 tokens) for user content.
-    GROQ_SYLLABUS_MAX_INPUT_CHARS: int = 1800
+    # llama-3.1-8b-instant has a 131K-token context window.  With a ~400-token
+    # system prompt and 2048 max output tokens, we have ample room.  We use
+    # 8000 chars (~2000 tokens) per chunk to balance context quality against
+    # Groq's 6000 TPM rate limit and keep output tokens well within budget.
+    GROQ_SYLLABUS_MAX_INPUT_CHARS: int = 8000
+    # Approximate characters-per-token ratio used for token estimation
+    # logged before every syllabus parsing request.
+    GROQ_SYLLABUS_CHARS_PER_TOKEN: int = 4
+    # Sensible floor for recursive syllabus chunk splitting.  Chunks at or
+    # below this size are never split further (that would destroy the
+    # unit/topic structure); larger failing chunks are halved instead.
+    GROQ_SYLLABUS_MIN_CHUNK_CHARS: int = 300
+    # Overlap (in characters) carried between adjacent hard-split chunks.
+    # Overlap duplicates content across chunks (repeated topics + wasted
+    # output tokens), so it defaults to 0; splitting happens on line /
+    # heading boundaries which already avoids mid-word cuts.
+    GROQ_SYLLABUS_CHUNK_OVERLAP: int = 0
 
     EMBEDDING_MODEL: str = "sentence-transformers/all-MiniLM-L6-v2"
-
+    LLM_MAX_INPUT_CHARS: int = 12000
+    TUTOR_HISTORY_TURNS: int = 3
     # ============================================================
     # ChromaDB
     # ============================================================
@@ -121,6 +150,9 @@ class Settings(BaseSettings):
     # Minimum relevance score (0-1, higher = more similar) required
     # for a retrieved chunk to be used as context.
     RAG_SIMILARITY_THRESHOLD: float = 0.2
+    # v3: structured unit/topic documents with course/unit/topic/source
+    # metadata (replaces raw-text chunk indexes from v2 and earlier).
+    RAG_INDEX_VERSION: str = "v3"
 
     # ============================================================
     # Tutor context budget (prevents 413 Request Too Large)

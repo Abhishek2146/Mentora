@@ -131,6 +131,7 @@ class StudyPlan(BaseModel):
         "StudyTask",
         back_populates="study_plan",
         cascade="all, delete-orphan",
+        lazy="selectin",
     )
 
 

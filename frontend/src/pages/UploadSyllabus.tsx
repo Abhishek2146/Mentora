@@ -25,8 +25,10 @@ export default function UploadSyllabus() {
       setResult(res);
     } catch (e: any) {
       const msg =
-        e?.response?.data?.detail ||
-        "Upload failed. Please try again.";
+        e?.code === "ECONNABORTED"
+          ? "Processing is taking longer than expected. The syllabus may still have been saved — check your library before retrying."
+          : e?.response?.data?.detail ||
+            "Upload failed. Please try again.";
       setError(msg);
     } finally {
       setUploading(false);

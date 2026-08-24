@@ -12,6 +12,8 @@ class SyllabusStatus(str, Enum):
     PROCESSING = "processing"
     PARSED = "parsed"
     FAILED = "failed"
+    RAG_READY = "rag_ready"
+    EMBEDDING_FAILED = "embedding_failed"
 
 
 class SyllabusBase(BaseModel):
@@ -74,12 +76,9 @@ class SyllabusOut(BaseModel):
     file_path: Optional[str] = None
     file_type: Optional[str] = None
     status: SyllabusStatus
+    is_ai_processed: bool = False
     parsed_data: Optional[Any] = None
     subjects: List[SubjectWithChapters] = []
-    processing_error: Optional[str] = None
-    is_processed: bool = False
-    is_ai_processed: bool = False
-    extracted_text: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -92,30 +91,37 @@ class SyllabusOut(BaseModel):
     @computed_field
     @property
     def units(self) -> List[UnitOut]:
+        """Frontend units: one entry per CHAPTER (a real syllabus unit).
+
+        Chapters are exactly what the parser extracted as numbered
+        units/modules from the uploaded document - generic section
+        headings ("Syllabus", "Objectives", ...) never become chapters,
+        so they never appear as units here either.  Unit numbers are a
+        global running index in document order; hours come from the
+        source only (0 when the unit does not state any).
+        """
         result: List[UnitOut] = []
+        unit_number = 0
         for s in self.subjects:
-            # Aggregate topics and hours from the subject's chapters.
-            # When a syllabus has one chapter per unit (the common case),
-            # this yields that chapter's topics and hours directly.
-            all_topics: List[str] = []
-            total_hours = 0
             for chap in s.chapters:
-                if chap.estimated_hours:
-                    total_hours += chap.estimated_hours
+                unit_number += 1
+
+                topics: List[str] = []
                 if chap.topics:
                     if isinstance(chap.topics, list):
-                        all_topics.extend(str(t) for t in chap.topics)
+                        topics.extend(str(t) for t in chap.topics)
                     elif isinstance(chap.topics, dict):
-                        all_topics.extend(str(v) for v in chap.topics.values())
-            result.append(
-                UnitOut(
-                    unitNumber=s.order + 1,
-                    title=s.name,
-                    description=s.description,
-                    estimatedHours=total_hours,
-                    topics=all_topics if all_topics else None,
+                        topics.extend(str(v) for v in chap.topics.values())
+
+                result.append(
+                    UnitOut(
+                        unitNumber=unit_number,
+                        title=chap.name,
+                        description=chap.description,
+                        estimatedHours=chap.estimated_hours or 0,
+                        topics=topics if topics else None,
+                    )
                 )
-            )
         return result
 
     @computed_field

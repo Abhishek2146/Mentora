@@ -48,7 +48,7 @@ def _make_service(responses: List[str]):
     """Create an LLMService whose _get_model is stubbed to return a FakeChatModel."""
     svc = LLMService()
     fake = FakeChatModel(responses)
-    svc._get_model = lambda temperature=0.7, json_mode=False: fake  # type: ignore[assignment]
+    svc._get_model = lambda temperature=0.7, json_mode=False, **kwargs: fake  # type: ignore[assignment]
     return svc, fake
 
 
@@ -177,10 +177,24 @@ class TestValidateSyllabusData:
             )
 
     def test_chapter_missing_name(self):
-        with pytest.raises(ValueError, match="missing 'name'"):
-            LLMService._validate_syllabus_data(
-                {"subjects": [{"name": "Math", "chapters": [{"topics": []}]}]}
-            )
+        """Chapters without a name are skipped (not raised) after normalization."""
+        data = {
+            "subjects": [
+                {
+                    "name": "Math",
+                    "chapters": [
+                        {"name": "Algebra", "topics": ["x"]},
+                        {"topics": []},
+                    ],
+                }
+            ]
+        }
+        result = LLMService._validate_syllabus_data(
+            LLMService._normalize_syllabus_data(data)
+        )
+        # Only the named chapter survives
+        assert len(result["subjects"][0]["chapters"]) == 1
+        assert result["subjects"][0]["chapters"][0]["name"] == "Algebra"
 
     def test_topics_not_a_list(self):
         """topics as a string is now normalized (not a validation error)."""
@@ -196,6 +210,174 @@ class TestValidateSyllabusData:
             LLMService._normalize_syllabus_data(data)
         )
         assert result["subjects"][0]["chapters"][0]["topics"] == ["not a list"]
+
+    def test_chapter_missing_name_with_topics_gets_inferred_name(self):
+        """A chapter with topics but no name gets an inferred name from context."""
+        data = {
+            "subjects": [
+                {
+                    "name": "Computer Fundamentals",
+                    "chapters": [
+                        {"topics": ["Computer Hardware", "Computer Software"]}
+                    ],
+                }
+            ]
+        }
+        result = LLMService._validate_syllabus_data(
+            LLMService._normalize_syllabus_data(data)
+        )
+        chapters = result["subjects"][0]["chapters"]
+        assert len(chapters) == 1
+        assert chapters[0]["name"] == "Computer Fundamentals - Chapter 1"
+        assert chapters[0]["topics"] == ["Computer Hardware", "Computer Software"]
+
+    def test_chapter_missing_name_no_topics_gets_dropped(self):
+        """A chapter with no name AND no topics gets dropped entirely."""
+        data = {
+            "subjects": [
+                {
+                    "name": "Math",
+                    "chapters": [
+                        {"name": "Algebra", "topics": ["x"]},
+                        {"topics": []},
+                    ],
+                }
+            ]
+        }
+        result = LLMService._validate_syllabus_data(
+            LLMService._normalize_syllabus_data(data)
+        )
+        chapters = result["subjects"][0]["chapters"]
+        assert len(chapters) == 1
+        assert chapters[0]["name"] == "Algebra"
+
+    def test_chapter_missing_name_validator_skips(self):
+        """Validator skips (not raises) for chapters still missing name after normalization."""
+        data = {
+            "subjects": [
+                {
+                    "name": "Math",
+                    "chapters": [
+                        {"description": "empty chapter"},
+                    ],
+                }
+            ]
+        }
+        # Should NOT raise ValueError
+        result = LLMService._validate_syllabus_data(
+            LLMService._normalize_syllabus_data(data)
+        )
+        # Chapter with no name should be skipped
+        assert len(result["subjects"][0]["chapters"]) == 0
+
+    def test_duplicate_topics_are_deduplicated(self):
+        """Exact duplicate topics within a chapter are removed (order preserved)."""
+        data = {
+            "subjects": [
+                {
+                    "name": "Computer Fundamentals",
+                    "chapters": [
+                        {
+                            "name": "Introduction",
+                            "topics": [
+                                "Computer Hardware",
+                                "Computer Applications",
+                                "Computer Applications",
+                                "Computer Applications",
+                                "Computer Software",
+                            ],
+                        }
+                    ],
+                }
+            ]
+        }
+        result = LLMService._normalize_syllabus_data(data)
+        topics = result["subjects"][0]["chapters"][0]["topics"]
+        assert topics == [
+            "Computer Hardware",
+            "Computer Applications",
+            "Computer Software",
+        ]
+
+    def test_case_insensitive_dedup(self):
+        """Topics differing only in case are deduplicated."""
+        data = {
+            "subjects": [
+                {
+                    "name": "Math",
+                    "chapters": [
+                        {
+                            "name": "Algebra",
+                            "topics": ["Linear Equations", "linear equations", "LINEAR EQUATIONS"],
+                        }
+                    ],
+                }
+            ]
+        }
+        result = LLMService._normalize_syllabus_data(data)
+        topics = result["subjects"][0]["chapters"][0]["topics"]
+        assert len(topics) == 1
+        assert topics[0] == "Linear Equations"
+
+    def test_repetition_loop_output_is_detected_not_truncated(self):
+        """Degenerate repetition-loop output is detected by ratio, not by a
+        hard topic-count cap.  60 LEGITIMATE unique topics must survive
+        normalization untouched."""
+        # A real syllabus chapter can legitimately have many topics.
+        many_topics = [f"Topic {i}" for i in range(60)]
+        data = {
+            "subjects": [
+                {
+                    "name": "Test Subject",
+                    "chapters": [{"name": "Test Chapter", "topics": many_topics}],
+                }
+            ]
+        }
+        result = LLMService._normalize_syllabus_data(data)
+        topics = result["subjects"][0]["chapters"][0]["topics"]
+        assert len(topics) == 60
+        assert not LLMService._looks_like_repetition_loop(data)
+
+    def test_repetition_loop_detected_single_topic_repeated(self):
+        """One topic repeated many times is flagged as degenerate output."""
+        repeated = (
+            ["Database", "Database System", "Data Warehousing Techniques"] * 5
+        )
+        data = {
+            "subjects": [
+                {
+                    "name": "Introduction",
+                    "chapters": [{"name": "Database", "topics": repeated}],
+                }
+            ]
+        }
+        assert LLMService._looks_like_repetition_loop(data)
+
+    def test_repetition_loop_detected_low_unique_ratio(self):
+        """30 entries with only 5 unique values is degenerate even when no
+        single entry dominates."""
+        uniques = ["Alpha", "Beta", "Gamma", "Delta", "Epsilon"]
+        shuffled = [uniques[i % 5] for i in range(30)]
+        data = {
+            "subjects": [
+                {"name": "S", "chapters": [{"name": "C", "topics": shuffled}]}
+            ]
+        }
+        assert LLMService._looks_like_repetition_loop(data)
+
+    def test_few_topics_with_accidental_duplicate_not_flagged(self):
+        """Small chapters with an accidental duplicate are NOT degenerate."""
+        data = {
+            "subjects": [
+                {
+                    "name": "Math",
+                    "chapters": [
+                        {"name": "Algebra", "topics": ["x", "y", "x"]}
+                    ],
+                }
+            ]
+        }
+        assert not LLMService._looks_like_repetition_loop(data)
 
 
 # ---------------------------------------------------------------------------
@@ -622,7 +804,7 @@ class TestParseSyllabusContent:
         svc = LLMService()
         call_count = 0
 
-        def mock_get_model(temperature=0.7, json_mode=False):
+        def mock_get_model(temperature=0.7, json_mode=False, **kwargs):
             nonlocal call_count
             call_count += 1
             raise RuntimeError("GROQ_API_KEY is not configured.")
@@ -641,7 +823,7 @@ class TestParseSyllabusContent:
 
         json_mode_calls: List[bool] = []
 
-        def mock_get_model(temperature=0.7, json_mode=False):
+        def mock_get_model(temperature=0.7, json_mode=False, **kwargs):
             json_mode_calls.append(json_mode)
             return fake
 
@@ -1005,7 +1187,7 @@ class TestParseSyllabusContent:
                     "name": "Computer Networking",
                     "chapters": [
                         {
-                            "name": "Introduction",
+                            "name": "Unit 1: Network Fundamentals",
                             "topics": "Network Models",
                         }
                     ],
@@ -1019,9 +1201,55 @@ class TestParseSyllabusContent:
                     "description": "",
                     "chapters": [
                         {
-                            "name": "Introduction",
+                            "name": "Unit 1: Network Fundamentals",
                             "description": "",
                             "topics": ["Network Models"],
+                            "estimated_hours": 0,
+                        }
+                    ],
+                }
+            ]
+        }
+        svc, fake = _make_service([json.dumps(raw_llm)])
+        result = await svc.parse_syllabus_content("Networking syllabus")
+        assert result == expected
+        assert fake.calls == 1
+
+    @pytest.mark.asyncio
+    async def test_pseudo_unit_heading_rejected_through_pipeline(self):
+        """End-to-end: generic section headings must never become units.
+
+        A bare 'Introduction' chapter is rejected by validation even when
+        the LLM emits it with valid topics, because it is not defined as
+        a numbered unit in the source syllabus.
+        """
+        raw_llm = {
+            "subjects": [
+                {
+                    "name": "Computer Networking",
+                    "chapters": [
+                        {
+                            "name": "Introduction",
+                            "topics": ["Network Models"],
+                        },
+                        {
+                            "name": "Unit 2: Network Models",
+                            "topics": ["OSI Model", "TCP/IP"],
+                        },
+                    ],
+                }
+            ]
+        }
+        expected = {
+            "subjects": [
+                {
+                    "name": "Computer Networking",
+                    "description": "",
+                    "chapters": [
+                        {
+                            "name": "Unit 2: Network Models",
+                            "description": "",
+                            "topics": ["OSI Model", "TCP/IP"],
                             "estimated_hours": 0,
                         }
                     ],
@@ -1244,7 +1472,9 @@ class TestAttemptSyllabusParseErrors:
 
     @pytest.mark.asyncio
     async def test_413_error_returns_oversized_not_retry(self):
-        """A 413 oversized error returns None immediately (no retry)."""
+        """A 413 oversized error propagates immediately (no retry)."""
+        from app.services.llm_service import _OversizedRequestError
+
         error_413 = Exception(
             "Error code: 413 - Request too large for model `allam-2-7b` "
             "TPM Limit: 6000 Requested: 6308"
@@ -1253,7 +1483,7 @@ class TestAttemptSyllabusParseErrors:
         svc = LLMService()
         call_count = 0
 
-        def mock_get_model(temperature=0.7, json_mode=False):
+        def mock_get_model(temperature=0.7, json_mode=False, **kwargs):
             nonlocal call_count
             call_count += 1
             raise error_413
@@ -1266,12 +1496,14 @@ class TestAttemptSyllabusParseErrors:
             template_format="mustache",
         )
 
-        # _attempt_syllabus_parse catches _OversizedRequestError and returns None
-        result = await svc._attempt_syllabus_parse(
-            prompt, temperature=0.7, json_mode=True, text="test",
-            max_retries=3,
-        )
-        assert result is None
+        # Oversized request must propagate as _OversizedRequestError so the
+        # caller splits the input — it must NOT be swallowed into a None
+        # that the caller would retry at a lower temperature.
+        with pytest.raises(_OversizedRequestError):
+            await svc._attempt_syllabus_parse(
+                prompt, temperature=0.7, json_mode=True, text="test",
+                max_retries=3,
+            )
         # Should be called exactly once — no retry
         assert call_count == 1
 
@@ -1283,7 +1515,7 @@ class TestAttemptSyllabusParseErrors:
         svc = LLMService()
         call_count = 0
 
-        def mock_get_model(temperature=0.7, json_mode=False):
+        def mock_get_model(temperature=0.7, json_mode=False, **kwargs):
             nonlocal call_count
             call_count += 1
             if call_count <= 3:
@@ -1316,7 +1548,7 @@ class TestAttemptSyllabusParseErrors:
         svc = LLMService()
         call_count = 0
 
-        def mock_get_model(temperature=0.7, json_mode=False):
+        def mock_get_model(temperature=0.7, json_mode=False, **kwargs):
             nonlocal call_count
             call_count += 1
             raise error_msg
@@ -1329,12 +1561,12 @@ class TestAttemptSyllabusParseErrors:
             template_format="mustache",
         )
 
-        result = await svc._attempt_syllabus_parse(
-            prompt, temperature=0.7, json_mode=True, text="test",
-            max_retries=3,
-        )
-        # Oversized request returns None immediately — no retry
-        assert result is None
+        with pytest.raises(_OversizedRequestError):
+            await svc._attempt_syllabus_parse(
+                prompt, temperature=0.7, json_mode=True, text="test",
+                max_retries=3,
+            )
+        # Oversized request propagates immediately — no retry
         assert call_count == 1
 
 
@@ -1391,7 +1623,7 @@ class TestParseSyllabusContentSplitting:
         # but doesn't cause sentence-level splitting
         svc = LLMService()
         fake = FakeChatModel([json.dumps(chunk1_data), json.dumps(chunk2_data)])
-        svc._get_model = lambda temperature=0.7, json_mode=False: fake  # type: ignore[assignment]
+        svc._get_model = lambda temperature=0.7, json_mode=False, **kwargs: fake  # type: ignore[assignment]
 
         # Temporarily override the budget — use a budget smaller than each
         # section but larger than one chunk to force exactly 2 heading-based chunks
@@ -1436,7 +1668,7 @@ class TestParseSyllabusContentSplitting:
 
         svc = LLMService()
         fake = FakeChatModel([json.dumps(chunk1_data), json.dumps(chunk2_data)])
-        svc._get_model = lambda temperature=0.7, json_mode=False: fake  # type: ignore[assignment]
+        svc._get_model = lambda temperature=0.7, json_mode=False, **kwargs: fake  # type: ignore[assignment]
 
         import app.core.config as cfg
         original = cfg.settings.GROQ_SYLLABUS_MAX_INPUT_CHARS
@@ -1456,27 +1688,22 @@ class TestParseSyllabusContentSplitting:
 
     @pytest.mark.asyncio
     async def test_no_content_loss_in_large_syllabus(self):
-        """All units/topics from all chunks should appear in the merged result."""
-        chunk1_data = {
-            "subjects": [
-                {"name": "Unit 1", "description": "", "chapters": [
-                    {"name": "Networking Basics", "description": "", "topics": ["OSI", "TCP/IP", "HTTP"], "estimated_hours": 3}
-                ]}
-            ]
-        }
-        chunk2_data = {
-            "subjects": [
-                {"name": "Unit 2", "description": "", "chapters": [
-                    {"name": "Security Fundamentals", "description": "", "topics": ["Cryptography", "Firewalls", "VPN"], "estimated_hours": 4}
-                ]}
-            ]
-        }
-        chunk3_data = {
-            "subjects": [
-                {"name": "Unit 3", "description": "", "chapters": [
-                    {"name": "Cloud Computing", "description": "", "topics": ["AWS", "Azure", "GCP"], "estimated_hours": 5}
-                ]}
-            ]
+        """All units/topics from all chunks should appear in the merged result.
+
+        The fake model is input-aware: it extracts whichever 'Unit k' headings
+        appear in the chunk it receives and returns their data.  This verifies
+        true content survival through splitting + merging, independent of how
+        many pieces the splitter produces or how they align."""
+        unit_payloads = {
+            "Unit 1": {"name": "Unit 1", "description": "", "chapters": [
+                {"name": "Networking Basics", "description": "", "topics": ["OSI", "TCP/IP", "HTTP"], "estimated_hours": 3}
+            ]},
+            "Unit 2": {"name": "Unit 2", "description": "", "chapters": [
+                {"name": "Security Fundamentals", "description": "", "topics": ["Cryptography", "Firewalls", "VPN"], "estimated_hours": 4}
+            ]},
+            "Unit 3": {"name": "Unit 3", "description": "", "chapters": [
+                {"name": "Cloud Computing", "description": "", "topics": ["AWS", "Azure", "GCP"], "estimated_hours": 5}
+            ]},
         }
         large_text = (
             "Unit 1: Networking (3 Hrs.)\n"
@@ -1490,13 +1717,27 @@ class TestParseSyllabusContentSplitting:
             + "\n"
         )
 
+        class UnitAwareModel(Runnable):
+            """Returns subject data for every unit heading present in input."""
+
+            def invoke(self, input, config=None, **kwargs):
+                raise NotImplementedError("sync path not used")
+
+            async def ainvoke(self, input, config=None, **kwargs):
+                # The chain hands the model a ChatPromptValue (or a message
+                # list); render it to text either way.
+                if hasattr(input, "to_string"):
+                    blob = input.to_string()
+                else:
+                    blob = str(input)
+                subjects = [
+                    payload for name, payload in unit_payloads.items()
+                    if name in blob
+                ]
+                return AIMessage(content=json.dumps({"subjects": subjects}))
+
         svc = LLMService()
-        fake = FakeChatModel([
-            json.dumps(chunk1_data),
-            json.dumps(chunk2_data),
-            json.dumps(chunk3_data),
-        ])
-        svc._get_model = lambda temperature=0.7, json_mode=False: fake  # type: ignore[assignment]
+        svc._get_model = lambda temperature=0.7, json_mode=False, **kwargs: UnitAwareModel()  # type: ignore[assignment]
 
         import app.core.config as cfg
         original = cfg.settings.GROQ_SYLLABUS_MAX_INPUT_CHARS
@@ -1534,7 +1775,7 @@ class TestParseSyllabusContentSplitting:
 
         svc = LLMService()
 
-        def mock_get_model(temperature=0.7, json_mode=False):
+        def mock_get_model(temperature=0.7, json_mode=False, **kwargs):
             raise _OversizedRequestError("413 too large")
 
         svc._get_model = mock_get_model  # type: ignore[assignment]
@@ -1543,9 +1784,281 @@ class TestParseSyllabusContentSplitting:
         original = cfg.settings.GROQ_SYLLABUS_MAX_INPUT_CHARS
         cfg.settings.GROQ_SYLLABUS_MAX_INPUT_CHARS = 50  # Very small budget
         try:
-            # Should not crash — _parse_single_chunk returns None,
-            # then parse_syllabus_content raises ValueError
+            # Should not crash — parse_syllabus_content raises ValueError
             with pytest.raises(ValueError, match="Failed to parse syllabus"):
                 await svc.parse_syllabus_content("Some syllabus text that exceeds budget")
         finally:
             cfg.settings.GROQ_SYLLABUS_MAX_INPUT_CHARS = original
+
+    @pytest.mark.asyncio
+    async def test_oversized_mid_chunk_splits_and_merges(self):
+        """An oversized chunk must be split further (not retried at lower
+        temperature), and the piece results must be merged."""
+        from app.services.llm_service import _OversizedRequestError
+
+        piece1_data = {
+            "subjects": [
+                {"name": "Unit 1", "description": "", "chapters": [
+                    {"name": "Networking", "description": "", "topics": ["OSI", "TCP/IP"], "estimated_hours": 3}
+                ]}
+            ]
+        }
+        piece2_data = {
+            "subjects": [
+                {"name": "Unit 2", "description": "", "chapters": [
+                    {"name": "Security", "description": "", "topics": ["AES", "RSA"], "estimated_hours": 4}
+                ]}
+            ]
+        }
+
+        svc = LLMService()
+        fake = FakeChatModel([json.dumps(piece1_data), json.dumps(piece2_data)])
+        svc._get_model = lambda temperature=0.7, json_mode=False, **kwargs: fake  # type: ignore[assignment]
+
+        # First attempt always oversized; after splitting, the pieces succeed.
+        original_attempt = svc._attempt_syllabus_parse
+        calls = {"n": 0}
+
+        async def attempt_that_splits_once(*a, **kw):
+            calls["n"] += 1
+            if calls["n"] <= 1:
+                raise _OversizedRequestError("413 too large")
+            return await original_attempt(*a, **kw)
+
+        svc._attempt_syllabus_parse = attempt_that_splits_once  # type: ignore[assignment]
+
+        # Use a very small budget so the single-request path is exercised
+        # and the oversized error forces an in-place split.
+        import app.core.config as cfg
+        original = cfg.settings.GROQ_SYLLABUS_MAX_INPUT_CHARS
+        cfg.settings.GROQ_SYLLABUS_MAX_INPUT_CHARS = 5000
+        try:
+            text = (
+                "Unit 1: Networking (3 Hrs.)\n"
+                + "Detail line about networking.\n" * 80
+                + "\nUnit 2: Security (4 Hrs.)\n"
+                + "Detail line about security.\n" * 80
+            )
+            result = await svc.parse_syllabus_content(text)
+        finally:
+            cfg.settings.GROQ_SYLLABUS_MAX_INPUT_CHARS = original
+
+        assert calls["n"] > 1
+        names = [s["name"] for s in result["subjects"]]
+        assert "Unit 1" in names
+        assert "Unit 2" in names
+        all_topics = [
+            t
+            for s in result["subjects"]
+            for c in s.get("chapters", [])
+            for t in (c.get("topics") or [])
+        ]
+        assert "OSI" in all_topics
+        assert "TCP/IP" in all_topics
+        assert "AES" in all_topics
+        assert "RSA" in all_topics
+
+
+class TestGenerationFailureHandling:
+    """Groq json_validate_failed / failed_generation handling.
+
+    These errors mean THIS request produced unusable output.  The parser
+    must respond by reducing the chunk size (bounded retries), never by
+    re-sending an identical request forever."""
+
+    @staticmethod
+    def _make_prompt():
+        from langchain_core.prompts import ChatPromptTemplate
+
+        return ChatPromptTemplate.from_messages(
+            [("system", "Extract syllabus JSON."), ("human", "{{text}}")],
+            template_format="mustache",
+        )
+
+    @pytest.mark.asyncio
+    async def test_json_validate_failed_raises_generation_error_once(self):
+        """A json_validate_failed API error surfaces as _GenerationFailedError
+        immediately -- the identical request is never retried."""
+        from app.services.llm_service import _GenerationFailedError
+
+        api_error = Exception(
+            "Error code: 400 - {'error': {'message': 'Failed to generate JSON', "
+            "'type': 'invalid_request_error', 'code': 'json_validate_failed'}}"
+        )
+        svc = LLMService()
+        calls = {"n": 0}
+
+        def mock_get_model(temperature=0.7, json_mode=False, **kwargs):
+            calls["n"] += 1
+            raise api_error
+
+        svc._get_model = mock_get_model  # type: ignore[assignment]
+
+        with pytest.raises(_GenerationFailedError):
+            await svc._attempt_syllabus_parse(
+                self._make_prompt(),
+                temperature=0.2,
+                json_mode=True,
+                text="Some syllabus content",
+                max_retries=3,
+            )
+
+        assert calls["n"] == 1
+
+    @pytest.mark.asyncio
+    async def test_json_validate_failed_reduces_chunk_and_recovers(self):
+        """End-to-end: the full-size chunk fails generation, smaller
+        sub-chunks succeed.  Attempts stay bounded and content survives."""
+        from app.services.llm_service import _GenerationFailedError
+
+        good = {"subjects": [{"name": "Unit 1", "description": "", "chapters": [
+            {"name": "Basics", "description": "", "topics": ["OSI"], "estimated_hours": 3}]}]}
+        svc = LLMService()
+        fake = FakeChatModel([json.dumps(good)])
+        svc._get_model = lambda temperature=0.7, json_mode=False, **kw: fake  # type: ignore[assignment]
+
+        original_attempt = svc._attempt_syllabus_parse
+        seen_lengths: List[int] = []
+
+        async def fail_large_chunks(*args, **kwargs):
+            text = kwargs.get("text", "")
+            seen_lengths.append(len(text))
+            if len(text) > 400:
+                raise _GenerationFailedError("json_validate_failed")
+            return await original_attempt(*args, **kwargs)
+
+        svc._attempt_syllabus_parse = fail_large_chunks  # type: ignore[assignment]
+
+        text = (
+            "Unit 1: Networking (3 Hrs.)\n"
+            + "Detail line about networking here.\n" * 30
+        )
+        from app.core.config import settings
+        # Must fit a single first-pass request (no top-level split sleeps)
+        assert len(text.strip()) <= settings.GROQ_SYLLABUS_MAX_INPUT_CHARS
+
+        result = await svc.parse_syllabus_content(text)
+
+        assert seen_lengths[0] == len(text.strip())
+        assert any(l <= 400 for l in seen_lengths)  # recovered on smaller chunks
+        assert len(seen_lengths) < 15               # bounded, not endless
+        names = [s["name"] for s in result["subjects"]]
+        assert names == ["Unit 1"]
+        topics = [
+            t for s in result["subjects"]
+            for c in s.get("chapters", [])
+            for t in (c.get("topics") or [])
+        ]
+        assert "OSI" in topics
+
+    @pytest.mark.asyncio
+    async def test_persistent_generation_failure_terminates(self):
+        """If every chunk fails generation, parsing terminates with a
+        ValueError after a bounded number of attempts."""
+        from app.services.llm_service import _GenerationFailedError
+
+        svc = LLMService()
+        calls = {"n": 0}
+
+        async def always_fails(*args, **kwargs):
+            calls["n"] += 1
+            raise _GenerationFailedError("json_validate_failed")
+
+        svc._attempt_syllabus_parse = always_fails  # type: ignore[assignment]
+
+        text = (
+            "Unit 1: Networking (3 Hrs.)\n"
+            + "Detail line content here.\n" * 30
+        )
+        with pytest.raises(ValueError, match="Failed to parse syllabus"):
+            await svc.parse_syllabus_content(text)
+
+        assert calls["n"] < 15
+
+    @pytest.mark.asyncio
+    async def test_oversized_mid_size_chunk_is_split_not_abandoned(self):
+        """Regression: a ~694-char chunk that fails with an oversized error
+        used to hit 'splitter made no progress; giving up' because the old
+        sub-budget derived only from max_chars stayed above the chunk size.
+        It must now be halved and parsed."""
+        from app.services.llm_service import _OversizedRequestError
+
+        p1 = {"subjects": [{"name": "Unit 1", "description": "", "chapters": [
+            {"name": "A", "description": "", "topics": ["x"], "estimated_hours": 1}]}]}
+        p2 = {"subjects": [{"name": "Unit 2", "description": "", "chapters": [
+            {"name": "B", "description": "", "topics": ["y"], "estimated_hours": 1}]}]}
+
+        svc = LLMService()
+        fake = FakeChatModel([json.dumps(p1), json.dumps(p2)])
+        svc._get_model = lambda temperature=0.7, json_mode=False, **kw: fake  # type: ignore[assignment]
+
+        original_attempt = svc._attempt_syllabus_parse
+        calls = {"n": 0}
+
+        async def oversized_once(*a, **kw):
+            calls["n"] += 1
+            if calls["n"] == 1:
+                raise _OversizedRequestError("413 too large")
+            return await original_attempt(*a, **kw)
+
+        svc._attempt_syllabus_parse = oversized_once  # type: ignore[assignment]
+
+        chunk = (
+            "Unit 1: Networking (3 Hrs.)\n"
+            + "Some detail topic line here.\n" * 23
+        )
+        assert 650 < len(chunk) < 750  # mirrors the production failure log
+
+        result = await svc._parse_chunk_with_splitting(
+            prompt=self._make_prompt(),
+            chunk=chunk,
+            temperature=0.2,
+            max_chars=1800,
+        )
+
+        assert calls["n"] >= 2
+        names = [s["name"] for s in result["subjects"]]
+        assert "Unit 1" in names
+        assert "Unit 2" in names
+
+    def test_hard_split_always_makes_progress(self):
+        text = "word " * 300  # 1500 chars, spaces but no newlines
+        pieces = LLMService._hard_split(text, 300)
+        assert len(pieces) >= 4
+        assert all(len(p) <= 300 for p in pieces)
+
+    def test_split_with_no_whitespace_still_progresses(self):
+        text = "A" * 500
+        chunks = LLMService._split_syllabus_text(text, 120)
+        assert len(chunks) >= 4
+        assert "".join(chunks) == "A" * 500
+
+    def test_recursive_splitting_makes_progress_at_every_budget(self):
+        text = "Unit 1: Networking\n" + "Detail line about networking.\n" * 12
+        n = len(text)
+        budgets = sorted({n // k for k in range(2, 9)} | {97, 48})
+        for max_chars in budgets:
+            chunks = LLMService._split_syllabus_text(text, max_chars)
+            assert len(chunks) >= 2, f"max_chars={max_chars}"
+            joined = "\n".join(chunks)
+            assert "Unit 1: Networking" in joined, f"max_chars={max_chars}"
+            assert sum(len(c) for c in chunks) >= int(n * 0.85), (
+                f"content lost at max_chars={max_chars}"
+            )
+
+    def test_unit_heading_stays_with_its_content(self):
+        text = (
+            "Intro paragraph.\n" * 8
+            + "Unit 2: Security Concepts\n"
+            + "Firewalls; VPN; IDS\n" * 6
+            + "Unit 3: Databases\n"
+            + "SQL; Normalization\n" * 6
+        )
+        chunks = LLMService._split_syllabus_text(text, 150)
+        assert any(
+            "Unit 2: Security Concepts" in c and "Firewalls" in c
+            for c in chunks
+        )
+        assert any(
+            "Unit 3: Databases" in c and "SQL" in c for c in chunks
+        )
