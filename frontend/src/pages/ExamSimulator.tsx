@@ -16,12 +16,12 @@ export default function ExamSimulator() {
 
   if (done) return (
     <AppLayout title="Exam Simulator">
-      <div className="max-w-xl mx-auto card p-10 flex flex-col items-center gap-6 text-center">
-        <div className={`w-24 h-24 rounded-full flex items-center justify-center text-white text-3xl font-black ${ pct >= 60 ? "bg-gradient-to-br from-emerald-400 to-emerald-600" : "bg-gradient-to-br from-danger-400 to-danger-600" }`}>
+      <div className="max-w-xl mx-auto card p-6 sm:p-10 flex flex-col items-center gap-6 text-center">
+        <div className={`w-20 h-20 sm:w-24 sm:h-24 rounded-full flex items-center justify-center text-white text-2xl sm:text-3xl font-black ${ pct >= 60 ? "bg-gradient-to-br from-success-400 to-success-600" : "bg-gradient-to-br from-danger-400 to-danger-600" }`}>
           {pct}%
         </div>
         <div>
-          <h2 className="text-2xl font-bold text-slate-800 dark:text-slate-100">{pct >= 60 ? "🎉 Passed!" : "📚 Keep Practicing"}</h2>
+          <h2 className="text-xl sm:text-2xl font-bold text-slate-800 dark:text-slate-100">{pct >= 60 ? "🎉 Passed!" : "📚 Keep Practicing"}</h2>
           <p className="text-slate-500 mt-1">{score}/{questions.length} correct</p>
         </div>
         <button onClick={() => { setDone(false); setStarted(false); setAnswers({}); setTimeLeft(45*60); }} className="btn-primary btn-lg">
@@ -34,15 +34,15 @@ export default function ExamSimulator() {
   if (!started) return (
     <AppLayout title="Exam Simulator">
       <div className="max-w-xl mx-auto space-y-6">
-        <div className="card p-8 flex flex-col items-center gap-6 text-center">
+        <div className="card p-5 sm:p-8 flex flex-col items-center gap-6 text-center">
           <div className="w-20 h-20 rounded-3xl bg-gradient-to-br from-primary-500 to-secondary-500 flex items-center justify-center shadow-glow-primary">
             <Trophy className="w-10 h-10 text-white" />
           </div>
           <div>
-            <h2 className="text-2xl font-bold text-slate-800 dark:text-slate-100">DBMS Mock Exam</h2>
+            <h2 className="text-xl sm:text-2xl font-bold text-slate-800 dark:text-slate-100">DBMS Mock Exam</h2>
             <p className="text-slate-500 mt-2">Simulate real exam conditions. {questions.length} questions • 45 minutes</p>
           </div>
-          <div className="grid grid-cols-3 gap-4 w-full">
+          <div className="grid grid-cols-3 gap-2 sm:gap-4 w-full">
             {[{ label: "Questions", value: questions.length, icon: BookOpen }, { label: "Time", value: "45 min", icon: Clock }, { label: "Pass Mark", value: "60%", icon: Trophy }].map(s => (
               <div key={s.label} className="bg-slate-50 dark:bg-slate-700/50 rounded-xl p-3 text-center">
                 <s.icon className="w-5 h-5 text-primary-500 mx-auto mb-1" />
@@ -51,7 +51,7 @@ export default function ExamSimulator() {
               </div>
             ))}
           </div>
-          <div className="flex items-start gap-2 p-3 bg-warning-50 dark:bg-yellow-900/20 rounded-xl text-sm text-warning-700 dark:text-yellow-300 w-full">
+          <div className="flex items-start gap-2 p-3 bg-warning-50 dark:bg-warning-900/20 rounded-xl text-sm text-warning-700 dark:text-warning-300 w-full">
             <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
             Do not refresh the page once the exam starts. Timer cannot be paused.
           </div>
@@ -64,7 +64,7 @@ export default function ExamSimulator() {
   return (
     <AppLayout title="Exam Simulator">
       <div className="max-w-3xl mx-auto space-y-4">
-        <div className="card p-4 flex items-center justify-between">
+        <div className="card p-4 flex flex-wrap items-center justify-between gap-2">
           <span className="font-medium text-slate-600 dark:text-slate-400">{Object.keys(answers).length}/{questions.length} answered</span>
           <div className="flex items-center gap-2 text-warning-600 font-mono font-bold">
             <Clock className="w-4 h-4" />

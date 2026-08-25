@@ -67,7 +67,7 @@ export default function SyllabusDetailPage() {
     return (
       <AppLayout title="Not Found">
         <div className="max-w-md mx-auto text-center py-12">
-          <AlertCircle className="w-16 h-16 text-red-500 mx-auto mb-4" />
+          <AlertCircle className="w-16 h-16 text-danger-500 mx-auto mb-4" />
           <h2 className="text-xl font-bold text-slate-800 dark:text-slate-100">Syllabus Not Found</h2>
           <p className="text-slate-500 dark:text-slate-400 mt-2">{error || "The syllabus you're looking for doesn't exist."}</p>
           <Link to="/search" className="btn-primary mt-6 inline-block">Back to Search</Link>
@@ -88,7 +88,7 @@ export default function SyllabusDetailPage() {
               <FileText className="w-8 h-8 text-primary-600 dark:text-primary-400" />
             </div>
             <div className="flex-1 min-w-0">
-              <h1 className="text-2xl font-bold text-slate-800 dark:text-slate-100 truncate">
+              <h1 className="text-xl sm:text-2xl font-bold text-slate-800 dark:text-slate-100 break-words">
                 {syllabus.title}
               </h1>
               {syllabus.description && (
@@ -108,8 +108,8 @@ export default function SyllabusDetailPage() {
                   {syllabus.estimatedHours}h Est.
                 </span>
                 <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${
-                  syllabus.status === "parsed" ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400" :
-                  syllabus.status === "processing" ? "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400" :
+                  syllabus.status === "parsed" ? "bg-success-100 text-success-700 dark:bg-success-900/30 dark:text-success-400" :
+                  syllabus.status === "processing" ? "bg-warning-100 text-warning-700 dark:bg-warning-900/30 dark:text-warning-400" :
                   "bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-300"
                 }`}>
                   {syllabus.status}
@@ -143,7 +143,7 @@ export default function SyllabusDetailPage() {
             </nav>
           </div>
 
-          <div className="p-6">
+          <div className="p-4 sm:p-6">
             {activeTab === "overview" && (
               <div className="space-y-6">
                 {syllabus.description && (
@@ -163,7 +163,7 @@ export default function SyllabusDetailPage() {
                     <p className="text-sm text-slate-500 dark:text-slate-400">Topics</p>
                   </div>
                   <div className="bg-slate-50 dark:bg-slate-700/50 rounded-xl p-4 text-center">
-                    <p className="text-3xl font-bold text-emerald-600 dark:text-emerald-400">{syllabus.estimatedHours}h</p>
+                    <p className="text-3xl font-bold text-success-600 dark:text-success-400">{syllabus.estimatedHours}h</p>
                     <p className="text-sm text-slate-500 dark:text-slate-400">Est. Hours</p>
                   </div>
                 </div>
@@ -203,7 +203,7 @@ export default function SyllabusDetailPage() {
                 {syllabus.units && syllabus.units.length > 0 ? (
                   syllabus.units.map((unit: UnitOut) => (
                     <div key={unit.unitNumber} id={`unit-${unit.unitNumber}`} className="space-y-4">
-                      <div className="flex items-center gap-3 p-4 bg-primary-50 dark:bg-primary-900/20 rounded-xl border border-primary-100 dark:border-primary-900/30">
+                      <div className="flex flex-wrap items-center gap-3 p-4 bg-primary-50 dark:bg-primary-900/20 rounded-xl border border-primary-100 dark:border-primary-900/30">
                         <span className="w-10 h-10 rounded-xl bg-primary-100 dark:bg-primary-900/40 text-primary-700 dark:text-primary-300 text-lg font-bold flex items-center justify-center">
                           U{unit.unitNumber}
                         </span>
@@ -214,7 +214,7 @@ export default function SyllabusDetailPage() {
                           )}
                         </div>
                         <div className="flex-1" />
-                        <div className="flex items-center gap-4 text-sm text-slate-500 dark:text-slate-400">
+                        <div className="flex items-center gap-4 text-sm text-slate-500 dark:text-slate-400 w-full sm:w-auto">
                           <span className="flex items-center gap-1.5">
                             <Target className="w-4 h-4" />
                             {unit.topics?.length || 0} topics
@@ -255,7 +255,7 @@ export default function SyllabusDetailPage() {
         </div>
 
         {/* Actions */}
-        <div className="flex items-center gap-3 justify-end">
+        <div className="flex flex-wrap items-center gap-3 justify-end">
           <Link to="/search" className="btn-ghost">
             Back to Search
           </Link>

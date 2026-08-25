@@ -8,7 +8,7 @@ import { syllabusService } from "@/services/syllabusService";
 import type { SyllabusSearchResult } from "@/types/api";
 
 export default function Header({ title }: { title?: string }) {
-  const { setSidebarOpen, sidebarOpen } = useUIStore();
+  const { setMobileNavOpen } = useUIStore();
   const { user, logout } = useAuthStore();
   const navigate = useNavigate();
   const [dark, setDark] = useState(document.documentElement.classList.contains("dark"));
@@ -108,27 +108,28 @@ export default function Header({ title }: { title?: string }) {
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case "parsed": return "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400";
-      case "processing": return "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400";
-      case "failed": return "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400";
+      case "parsed": return "bg-success-100 text-success-700 dark:bg-success-900/30 dark:text-success-400";
+      case "processing": return "bg-warning-100 text-warning-700 dark:bg-warning-900/30 dark:text-warning-400";
+      case "failed": return "bg-danger-100 text-danger-700 dark:bg-danger-900/30 dark:text-danger-400";
       default: return "bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-300";
     }
   };
 
   return (
     <>
-      <header className="sticky top-0 z-20 h-16 flex items-center gap-4 px-6 bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl border-b border-slate-200/80 dark:border-slate-700/50">
+      <header className="sticky top-0 z-20 h-16 flex items-center gap-2 sm:gap-4 px-4 sm:px-6 bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl border-b border-slate-200/80 dark:border-slate-700/50">
         {/* Mobile menu toggle */}
         <button
-          onClick={() => setSidebarOpen(!sidebarOpen)}
-          className="lg:hidden p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+          onClick={() => setMobileNavOpen(true)}
+          className="lg:hidden p-2 -ml-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+          aria-label="Open menu"
         >
           <Menu className="w-5 h-5 text-slate-600 dark:text-slate-400" />
         </button>
 
         {/* Page title */}
         {title && (
-          <h1 className="text-lg font-bold text-slate-800 dark:text-slate-100 hidden sm:block">
+          <h1 className="text-base sm:text-lg font-bold text-slate-800 dark:text-slate-100 truncate hidden sm:block">
             {title}
           </h1>
         )}
@@ -161,7 +162,7 @@ export default function Header({ title }: { title?: string }) {
             </button>
 
             {searchOpen && (
-              <div className="absolute right-0 top-full mt-2 w-96 z-50 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-xl overflow-hidden animate-in slide-in-from-top-2 duration-150">
+              <div className="absolute left-2 right-2 sm:left-auto sm:right-0 top-full mt-2 sm:w-96 z-50 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-xl overflow-hidden animate-in slide-in-from-top-2 duration-150">
                 {/* Search Input */}
                 <div className="p-3 border-b border-slate-200 dark:border-slate-700">
                   <div className="relative">
@@ -199,7 +200,7 @@ export default function Header({ title }: { title?: string }) {
                       <span className="ml-2 text-sm text-slate-500 dark:text-slate-400">Searching…</span>
                     </div>
                   ) : searchError ? (
-                    <div className="p-4 text-center text-red-500 text-sm">{searchError}</div>
+                    <div className="p-4 text-center text-danger-500 text-sm">{searchError}</div>
                   ) : searchResults.length === 0 && searchQuery ? (
                     <div className="p-8 text-center">
                       <FileText className="w-12 h-12 text-slate-300 dark:text-slate-600 mx-auto mb-3" />
@@ -265,7 +266,7 @@ export default function Header({ title }: { title?: string }) {
             aria-label="Toggle dark mode"
           >
             {dark ? (
-              <Sun className="w-5 h-5 text-amber-400" />
+              <Sun className="w-5 h-5 text-warning-500" />
             ) : (
               <Moon className="w-5 h-5 text-slate-500" />
             )}
@@ -329,7 +330,7 @@ export default function Header({ title }: { title?: string }) {
                       setUserMenuOpen(false);
                       logout();
                     }}
-                    className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-danger-600 dark:text-red-400 hover:bg-danger-50 dark:hover:bg-red-900/20 transition-colors"
+                    className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-danger-600 dark:text-danger-400 hover:bg-danger-50 dark:hover:bg-danger-900/20 transition-colors"
                   >
                     <LogOut className="w-4 h-4" /> Logout
                   </button>

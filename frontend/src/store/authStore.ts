@@ -1,8 +1,30 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import axios from "axios";
-import { User, Token } from "@/types";
+import { User, Token, UserRole } from "@/types";
 import apiClient from "@/lib/api";
+
+// Marker for frontend-only test sessions (no backend involved).
+export const TEST_ACCESS_TOKEN = "test-access-token";
+
+function createTestUser(role: UserRole): User {
+  const now = new Date().toISOString();
+  return {
+    id: role === "admin" ? -2 : -1,
+    email:
+      role === "admin"
+        ? "test-admin@mentora.local"
+        : "test-student@mentora.local",
+    username: role === "admin" ? "test_admin" : "test_student",
+    full_name: role === "admin" ? "Test Admin" : "Test Student",
+    role,
+    is_active: true,
+    is_verified: true,
+    avatar_url: null,
+    created_at: now,
+    updated_at: now,
+  };
+}
 
 function getApiError(error: unknown): Error {
   if (axios.isAxiosError(error)) {
@@ -23,6 +45,7 @@ interface AuthState {
   setUser: (user: User | null) => void;
   setTokens: (tokens: Token) => void;
   login: (emailOrUsername: string, password: string) => Promise<void>;
+  testLogin: (role: UserRole) => void;
   register: (userData: { email: string; username: string; password: string; full_name?: string }) => Promise<void>;
   registerAdmin: (userData: { email: string; username: string; password: string; full_name?: string; admin_secret: string }) => Promise<void>;
   forgotPassword: (email: string) => Promise<void>;
@@ -78,6 +101,20 @@ export const useAuthStore = create<AuthState>()(
         }
       },
 
+      testLogin: (role) => {
+        const tokens: Token = {
+          access_token: TEST_ACCESS_TOKEN,
+          refresh_token: TEST_ACCESS_TOKEN,
+          token_type: "bearer",
+        };
+        set({
+          user: createTestUser(role),
+          tokens,
+          isAuthenticated: true,
+          isLoading: false,
+        });
+      },
+
       register: async (userData) => {
         set({ isLoading: true });
         try {
@@ -122,6 +159,10 @@ export const useAuthStore = create<AuthState>()(
         const tokens = get().tokens;
         if (!tokens) {
           set({ isAuthenticated: false, user: null });
+          return;
+        }
+        if (tokens.access_token === TEST_ACCESS_TOKEN) {
+          set({ isAuthenticated: true });
           return;
         }
         try {

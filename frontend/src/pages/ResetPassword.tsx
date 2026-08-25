@@ -62,7 +62,7 @@ export default function ResetPassword() {
         <div className="card p-7 space-y-5">
           {success ? (
             <div className="flex flex-col items-center gap-4 text-center py-4">
-              <CheckCircle2 className="w-12 h-12 text-emerald-500" />
+              <CheckCircle2 className="w-12 h-12 text-success-500" />
               <h2 className="text-xl font-bold text-slate-800 dark:text-slate-100">Password Reset</h2>
               <p className="text-sm text-slate-500">Your password has been reset successfully</p>
               <Link to="/login" className="btn-primary btn-md w-full">Sign In</Link>
@@ -70,7 +70,7 @@ export default function ResetPassword() {
           ) : (
             <>
               {error && (
-                <div className="p-3 bg-danger-50 dark:bg-red-900/20 border border-danger-200 dark:border-red-700 rounded-xl text-sm text-danger-600 dark:text-red-400 flex items-center gap-2">
+                <div className="p-3 bg-danger-50 dark:bg-danger-900/20 border border-danger-200 dark:border-danger-700 rounded-xl text-sm text-danger-600 dark:text-danger-400 flex items-center gap-2">
                   <AlertCircle className="w-4 h-4 flex-shrink-0" />
                   {error}
                 </div>

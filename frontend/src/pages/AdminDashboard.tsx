@@ -126,17 +126,17 @@ export default function AdminDashboard() {
 
   const statCards = [
     { label: "Total Users", value: stats?.total_users ?? 0, icon: Users, color: "text-primary-600", bg: "bg-primary-50 dark:bg-primary-900/30" },
-    { label: "Students", value: stats?.total_students ?? 0, icon: UserPlus, color: "text-emerald-600", bg: "bg-emerald-50 dark:bg-emerald-900/30" },
-    { label: "Active Users", value: stats?.active_users ?? 0, icon: Activity, color: "text-teal-600", bg: "bg-teal-50 dark:bg-teal-900/30" },
-    { label: "Admins", value: stats?.total_admins ?? 0, icon: ShieldCheck, color: "text-violet-600", bg: "bg-violet-50 dark:bg-violet-900/30" },
-    { label: "Syllabi", value: stats?.total_syllabi ?? 0, icon: FileText, color: "text-sky-600", bg: "bg-sky-50 dark:bg-sky-900/30" },
-    { label: "Study Plans", value: stats?.total_study_plans ?? 0, icon: CalendarDays, color: "text-indigo-600", bg: "bg-indigo-50 dark:bg-indigo-900/30" },
-    { label: "Quizzes", value: stats?.total_quizzes ?? 0, icon: ClipboardList, color: "text-amber-600", bg: "bg-amber-50 dark:bg-amber-900/30" },
-    { label: "Quiz Attempts", value: stats?.total_quiz_attempts ?? 0, icon: BarChart3, color: "text-rose-600", bg: "bg-rose-50 dark:bg-rose-900/30" },
-    { label: "Coding Problems", value: stats?.total_coding_problems ?? 0, icon: Code2, color: "text-lime-600", bg: "bg-lime-50 dark:bg-lime-900/30" },
-    { label: "Flashcard Decks", value: stats?.total_flashcard_decks ?? 0, icon: CreditCard, color: "text-fuchsia-600", bg: "bg-fuchsia-50 dark:bg-fuchsia-900/30" },
-    { label: "Avg Quiz Score", value: `${stats?.avg_quiz_score ?? 0}%`, icon: BookOpen, color: "text-cyan-600", bg: "bg-cyan-50 dark:bg-cyan-900/30" },
-    { label: "Coding Submissions", value: stats?.total_coding_submissions ?? 0, icon: Code2, color: "text-orange-600", bg: "bg-orange-50 dark:bg-orange-900/30" },
+    { label: "Students", value: stats?.total_students ?? 0, icon: UserPlus, color: "text-primary-600", bg: "bg-primary-50 dark:bg-primary-900/30" },
+    { label: "Active Users", value: stats?.active_users ?? 0, icon: Activity, color: "text-primary-600", bg: "bg-primary-50 dark:bg-primary-900/30" },
+    { label: "Admins", value: stats?.total_admins ?? 0, icon: ShieldCheck, color: "text-primary-600", bg: "bg-primary-50 dark:bg-primary-900/30" },
+    { label: "Syllabi", value: stats?.total_syllabi ?? 0, icon: FileText, color: "text-primary-600", bg: "bg-primary-50 dark:bg-primary-900/30" },
+    { label: "Study Plans", value: stats?.total_study_plans ?? 0, icon: CalendarDays, color: "text-primary-600", bg: "bg-primary-50 dark:bg-primary-900/30" },
+    { label: "Quizzes", value: stats?.total_quizzes ?? 0, icon: ClipboardList, color: "text-primary-600", bg: "bg-primary-50 dark:bg-primary-900/30" },
+    { label: "Quiz Attempts", value: stats?.total_quiz_attempts ?? 0, icon: BarChart3, color: "text-primary-600", bg: "bg-primary-50 dark:bg-primary-900/30" },
+    { label: "Coding Problems", value: stats?.total_coding_problems ?? 0, icon: Code2, color: "text-primary-600", bg: "bg-primary-50 dark:bg-primary-900/30" },
+    { label: "Flashcard Decks", value: stats?.total_flashcard_decks ?? 0, icon: CreditCard, color: "text-primary-600", bg: "bg-primary-50 dark:bg-primary-900/30" },
+    { label: "Avg Quiz Score", value: `${stats?.avg_quiz_score ?? 0}%`, icon: BookOpen, color: "text-primary-600", bg: "bg-primary-50 dark:bg-primary-900/30" },
+    { label: "Coding Submissions", value: stats?.total_coding_submissions ?? 0, icon: Code2, color: "text-primary-600", bg: "bg-primary-50 dark:bg-primary-900/30" },
   ];
 
   if (loading) {
@@ -149,15 +149,15 @@ export default function AdminDashboard() {
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950">
-      <div className="max-w-7xl mx-auto p-6 space-y-6">
+      <div className="max-w-7xl mx-auto p-4 sm:p-5 md:p-6 space-y-6">
         {/* Header */}
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-black text-slate-800 dark:text-slate-100">Admin Dashboard</h1>
+        <div className="flex flex-wrap items-center justify-between gap-3 sm:gap-4">
+          <div className="min-w-0">
+            <h1 className="text-2xl font-black text-slate-800 dark:text-slate-100 truncate">Admin Dashboard</h1>
             <p className="text-sm text-slate-500">Platform overview & user management</p>
           </div>
-          <div className="flex items-center gap-3">
-            {actionMsg && <span className="text-sm text-emerald-600 bg-emerald-50 dark:bg-emerald-900/30 px-3 py-1.5 rounded-xl font-medium">{actionMsg}</span>}
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3 min-w-0">
+            {actionMsg && <span className="text-sm text-success-600 bg-success-50 dark:bg-success-900/30 px-3 py-1.5 rounded-xl font-medium max-w-full truncate">{actionMsg}</span>}
             <button onClick={() => { loadStats(); loadUsers(); }} className="flex items-center gap-2 px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-sm hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors">
               <RefreshCw className="w-4 h-4" /> Refresh
             </button>
@@ -167,7 +167,7 @@ export default function AdminDashboard() {
         {error && <div className="p-3 bg-danger-50 border border-danger-200 rounded-xl text-sm text-danger-600">{error}</div>}
 
         {/* Stats */}
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-4 sm:gap-6">
           {statCards.map(s => (
             <div key={s.label} className="stat-card">
               <div className={cn("w-9 h-9 rounded-xl flex items-center justify-center", s.bg)}>
@@ -182,7 +182,7 @@ export default function AdminDashboard() {
         </div>
 
         {/* Recent registrations */}
-        <div className="card p-5">
+        <div className="card p-4 sm:p-5">
           <h3 className="font-bold text-slate-800 dark:text-slate-100 mb-3">Recent Registrations</h3>
           {recent.length === 0 ? (
             <p className="text-sm text-slate-500">No users registered yet.</p>
@@ -205,23 +205,23 @@ export default function AdminDashboard() {
         </div>
 
         {/* User management */}
-        <div className="card p-5">
-          <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+        <div className="card p-4 sm:p-5">
+            <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
             <h3 className="font-bold text-slate-800 dark:text-slate-100">User Management</h3>
-            <div className="flex flex-wrap items-center gap-2">
-              <div className="relative">
+            <div className="flex flex-wrap items-center gap-2 sm:gap-3 w-full sm:w-auto">
+              <div className="relative w-full sm:w-auto min-w-0">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                 <input
                   value={search}
                   onChange={e => setSearch(e.target.value)}
                   placeholder="Search users…"
-                  className="input pl-9 py-2 text-sm"
+                  className="input pl-9 py-2 text-sm w-full sm:w-auto"
                 />
               </div>
               <select
                 value={roleFilter}
                 onChange={e => setRoleFilter(e.target.value)}
-                className="input py-2 text-sm"
+                className="input py-2 text-sm w-full sm:w-auto"
               >
                 <option value="">All roles</option>
                 <option value="student">Student</option>
@@ -233,7 +233,7 @@ export default function AdminDashboard() {
           {userLoading && <p className="text-sm text-slate-400 mb-3">Loading…</p>}
 
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="w-full min-w-[640px] text-sm">
               <thead>
                 <tr className="border-b border-slate-200 dark:border-slate-700 text-left text-[11px] uppercase tracking-wider text-slate-400">
                   {(["id", "username", "email", "role", "created_at"] as SortField[]).map(f => (
@@ -272,8 +272,8 @@ export default function AdminDashboard() {
                         className={cn(
                           "text-xs font-medium rounded-lg px-2 py-1 border",
                           u.role === "admin"
-                            ? "bg-violet-50 text-violet-600 border-violet-200 dark:bg-violet-900/30 dark:text-violet-300 dark:border-violet-700"
-                            : "bg-emerald-50 text-emerald-600 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-300 dark:border-emerald-700"
+                            ? "bg-primary-50 text-primary-600 border-primary-200 dark:bg-primary-900/30 dark:text-primary-300 dark:border-primary-700"
+                            : "bg-success-50 text-success-600 border-success-200 dark:bg-success-900/30 dark:text-success-300 dark:border-success-700"
                         )}
                       >
                         <option value="student">student</option>
@@ -285,7 +285,7 @@ export default function AdminDashboard() {
                       <span className={cn(
                         "inline-flex items-center gap-1 text-xs font-medium rounded-full px-2 py-0.5",
                         u.is_active
-                          ? "bg-emerald-50 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-300"
+                          ? "bg-success-50 text-success-600 dark:bg-success-900/30 dark:text-success-300"
                           : "bg-slate-100 text-slate-500 dark:bg-slate-700 dark:text-slate-400"
                       )}>
                         {u.is_active ? <CheckCircle2 className="w-3 h-3" /> : <Ban className="w-3 h-3" />}
@@ -298,7 +298,7 @@ export default function AdminDashboard() {
                           onClick={() => toggleActive(u)}
                           disabled={u.id === user?.id}
                           title={u.is_active ? "Deactivate" : "Activate"}
-                          className="p-1.5 rounded-lg text-slate-400 hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-900/20 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                          className="p-1.5 rounded-lg text-slate-400 hover:text-warning-600 hover:bg-warning-50 dark:hover:bg-warning-900/20 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                         >
                           {u.is_active ? <Ban className="w-4 h-4" /> : <CheckCircle2 className="w-4 h-4" />}
                         </button>
@@ -306,7 +306,7 @@ export default function AdminDashboard() {
                           onClick={() => removeUser(u)}
                           disabled={u.id === user?.id}
                           title="Delete user"
-                          className="p-1.5 rounded-lg text-slate-400 hover:text-danger-600 hover:bg-danger-50 dark:hover:bg-red-900/20 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                          className="p-1.5 rounded-lg text-slate-400 hover:text-danger-600 hover:bg-danger-50 dark:hover:bg-danger-900/20 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                         >
                           <Trash2 className="w-4 h-4" />
                         </button>

@@ -132,17 +132,17 @@ export default function AiTutor() {
   return (
     <AppLayout title="AI Tutor">
       <div className="max-w-4xl mx-auto h-[calc(100vh-10rem)] flex flex-col">
-        <div className="card p-4 mb-4 flex items-center gap-4">
+        <div className="card p-4 mb-4 flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
           <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-primary-500 to-secondary-500 flex items-center justify-center shadow-glow-primary">
             <Bot className="w-7 h-7 text-white" />
           </div>
-          <div className="flex-1">
+          <div className="flex-1 min-w-0">
             <h2 className="font-bold text-slate-800 dark:text-slate-100">Mentora AI</h2>
             <p className="text-sm text-slate-500 dark:text-slate-400">
               RAG-powered • {selectedSyllabus ? selectedSyllabus.title : "No subject selected"} • Always available
             </p>
           </div>
-          <div className="flex items-center gap-4">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-4">
             {syllabiLoading ? (
               <span className="text-sm text-slate-400">Loading syllabi…</span>
             ) : syllabi.length > 0 ? (
@@ -160,8 +160,8 @@ export default function AiTutor() {
             ) : (
               <span className="text-sm text-slate-400">No syllabi uploaded yet</span>
             )}
-            <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
-            <span className="text-sm text-emerald-600 font-medium">Online</span>
+            <span className="w-2 h-2 bg-success-500 rounded-full animate-pulse" />
+            <span className="text-sm text-success-600 font-medium">Online</span>
           </div>
             <button
             onClick={clearChat}
@@ -176,7 +176,7 @@ export default function AiTutor() {
           {messages.map((m) => (
             <div
               key={m.id}
-              className={`flex gap-3 ${m.role === "user" ? "flex-row-reverse" : ""}`}
+              className={`flex gap-3 min-w-0 ${m.role === "user" ? "flex-row-reverse" : ""}`}
             >
               <div
                 className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${
@@ -192,7 +192,7 @@ export default function AiTutor() {
                 )}
               </div>
               <div
-                className={`max-w-[75%] rounded-2xl px-4 py-3 text-sm leading-relaxed ${
+                className={`max-w-[75%] rounded-2xl px-4 py-3 text-sm leading-relaxed break-words ${
                   m.role === "user"
                     ? "bg-gradient-to-br from-primary-500 to-primary-600 text-white rounded-tr-sm"
                     : "bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 rounded-tl-sm"
@@ -250,7 +250,7 @@ export default function AiTutor() {
             }}
             placeholder="Ask anything about your syllabus…"
             rows={1}
-            className="flex-1 resize-none bg-transparent text-sm text-slate-700 dark:text-slate-200 placeholder-slate-400 focus:outline-none py-2"
+            className="flex-1 min-w-0 resize-none bg-transparent text-sm text-slate-700 dark:text-slate-200 placeholder-slate-400 focus:outline-none py-2"
           />
           <button
             onClick={() => send()}

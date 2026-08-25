@@ -61,8 +61,8 @@ export default function InstructorDashboard() {
   }, [students, sortField, sortDir]);
 
   const statCards = [
-    { label: "Total Students", value: students.length, icon: Users, color: "text-emerald-600", bg: "bg-emerald-50 dark:bg-emerald-900/30" },
-    { label: "Active Students", value: students.filter(s => s.is_active).length, icon: Users, color: "text-teal-600", bg: "bg-teal-50 dark:bg-teal-900/30" },
+    { label: "Total Students", value: students.length, icon: Users, color: "text-success-600", bg: "bg-success-50 dark:bg-success-900/30" },
+    { label: "Active Students", value: students.filter(s => s.is_active).length, icon: Users, color: "text-success-600", bg: "bg-success-50 dark:bg-success-900/30" },
   ];
 
   if (loading) {
@@ -75,10 +75,10 @@ export default function InstructorDashboard() {
 
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950">
-      <div className="max-w-7xl mx-auto p-6 space-y-6">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-black text-slate-800 dark:text-slate-100">Instructor Dashboard</h1>
+      <div className="max-w-7xl mx-auto p-4 sm:p-5 md:p-6 space-y-6">
+        <div className="flex flex-wrap items-center justify-between gap-3 sm:gap-4">
+          <div className="min-w-0">
+            <h1 className="text-2xl font-black text-slate-800 dark:text-slate-100 truncate">Instructor Dashboard</h1>
             <p className="text-sm text-slate-500">Manage your students & courses</p>
           </div>
           <button onClick={loadStudents} className="flex items-center gap-2 px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-sm hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors">
@@ -88,7 +88,7 @@ export default function InstructorDashboard() {
 
         {error && <div className="p-3 bg-danger-50 border border-danger-200 rounded-xl text-sm text-danger-600">{error}</div>}
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
           {statCards.map(s => (
             <div key={s.label} className="stat-card">
               <div className={cn("w-9 h-9 rounded-xl flex items-center justify-center", s.bg)}>
@@ -102,24 +102,24 @@ export default function InstructorDashboard() {
           ))}
         </div>
 
-        <div className="card p-5">
+        <div className="card p-4 sm:p-5">
           <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
             <h3 className="font-bold text-slate-800 dark:text-slate-100">Student Management</h3>
-            <div className="flex flex-wrap items-center gap-2">
-              <div className="relative">
+            <div className="flex flex-wrap items-center gap-2 sm:gap-3 w-full sm:w-auto">
+              <div className="relative w-full sm:w-auto min-w-0">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                 <input
                   value={search}
                   onChange={e => setSearch(e.target.value)}
                   placeholder="Search students…"
-                  className="input pl-9 py-2 text-sm"
+                  className="input pl-9 py-2 text-sm w-full sm:w-auto"
                 />
               </div>
             </div>
           </div>
 
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="w-full min-w-[640px] text-sm">
               <thead>
                 <tr className="border-b border-slate-200 dark:border-slate-700 text-left text-[11px] uppercase tracking-wider text-slate-400">
                   {(["id", "username", "email", "created_at"] as SortField[]).map(f => (
@@ -140,7 +140,7 @@ export default function InstructorDashboard() {
                     <td className="py-2.5 px-2 text-slate-500">{s.id}</td>
                     <td className="py-2.5 px-2">
                       <div className="flex items-center gap-2.5">
-                        <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-500 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
+                        <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-success-500 to-success-500 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
                           {s.full_name ? getInitials(s.full_name) : s.username?.[0]?.toUpperCase() ?? "U"}
                         </div>
                         <div className="min-w-0">
@@ -155,7 +155,7 @@ export default function InstructorDashboard() {
                       <span className={cn(
                         "inline-flex items-center gap-1 text-xs font-medium rounded-full px-2 py-0.5",
                         s.is_active
-                          ? "bg-emerald-50 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-300"
+                          ? "bg-success-50 text-success-600 dark:bg-success-900/30 dark:text-success-300"
                           : "bg-slate-100 text-slate-500 dark:bg-slate-700 dark:text-slate-400"
                       )}>
                         {s.is_active ? "Active" : "Inactive"}

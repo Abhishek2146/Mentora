@@ -15,14 +15,14 @@ export default function StudyPlan() {
   return (
     <AppLayout title="Study Plan">
       <div className="max-w-4xl mx-auto space-y-6">
-        <div className="card p-6 bg-gradient-to-r from-secondary-600 to-primary-600 text-white border-0">
-          <div className="flex items-center justify-between">
+        <div className="card p-5 sm:p-6 bg-gradient-to-r from-secondary-600 to-primary-600 text-white border-0">
+          <div className="flex items-center justify-between gap-4">
             <div>
               <p className="text-secondary-100 text-sm">Exam Date</p>
-              <h2 className="text-2xl font-bold">May 15, 2024</h2>
+              <h2 className="text-xl sm:text-2xl font-bold">May 15, 2024</h2>
               <p className="text-secondary-100 mt-1 text-sm">43 days remaining • 4h/day target</p>
             </div>
-            <div className="text-right">
+            <div className="text-right flex-shrink-0">
               <p className="text-4xl font-black">43</p>
               <p className="text-secondary-100 text-sm">days left</p>
             </div>
@@ -37,9 +37,9 @@ export default function StudyPlan() {
               </h3>
               <div className="space-y-2">
                 {day.sessions.map((s, i) => (
-                  <div key={i} className={`flex items-center gap-4 p-3 rounded-xl border ${typeColor(s.type)}`}>
-                    <span className="text-xs font-mono font-bold w-12">{s.time}</span>
-                    <span className="flex-1 text-sm font-medium">{s.topic}</span>
+                  <div key={i} className={`flex flex-wrap items-center gap-x-4 gap-y-1 p-3 rounded-xl border ${typeColor(s.type)}`}>
+                    <span className="text-xs font-mono font-bold w-12 flex-shrink-0">{s.time}</span>
+                    <span className="flex-1 min-w-[10rem] text-sm font-medium">{s.topic}</span>
                     <span className="text-xs flex items-center gap-1">
                       <Clock className="w-3 h-3" />{s.duration}m
                     </span>

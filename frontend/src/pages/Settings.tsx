@@ -98,13 +98,13 @@ export default function Settings() {
             <h3 className="font-bold text-slate-700 dark:text-slate-200 mb-4">Security</h3>
             <form onSubmit={handleChangePassword} className="space-y-4">
               {changePasswordError && (
-                <div className="p-3 bg-danger-50 dark:bg-red-900/20 border border-danger-200 dark:border-red-700 rounded-xl text-sm text-danger-600 dark:text-red-400 flex items-center gap-2">
+                <div className="p-3 bg-danger-50 dark:bg-danger-900/20 border border-danger-200 dark:border-danger-700 rounded-xl text-sm text-danger-600 dark:text-danger-400 flex items-center gap-2">
                   <AlertCircle className="w-4 h-4 flex-shrink-0" />
                   {changePasswordError}
                 </div>
               )}
               {changePasswordSuccess && (
-                <div className="p-3 bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-700 rounded-xl text-sm text-emerald-600 dark:text-emerald-400 flex items-center gap-2">
+                <div className="p-3 bg-success-50 dark:bg-success-900/20 border border-success-200 dark:border-success-700 rounded-xl text-sm text-success-600 dark:text-success-400 flex items-center gap-2">
                   <CheckCircle2 className="w-4 h-4 flex-shrink-0" />
                   {changePasswordSuccess}
                 </div>
@@ -163,9 +163,9 @@ export default function Settings() {
             </form>
           </div>
 
-          <div className="card p-5 border-danger-200 dark:border-red-700">
+          <div className="card p-5 border-danger-200 dark:border-danger-700">
           <h3 className="font-bold text-danger-600 mb-4">Account</h3>
-          <button onClick={logout} className="flex items-center gap-3 w-full p-3 rounded-xl hover:bg-danger-50 dark:hover:bg-red-900/20 text-danger-600 transition-colors">
+          <button onClick={logout} className="flex items-center gap-3 w-full p-3 rounded-xl hover:bg-danger-50 dark:hover:bg-danger-900/20 text-danger-600 transition-colors">
             <LogOut className="w-4 h-4" />
             <span className="text-sm font-medium">Sign Out</span>
           </button>

@@ -20,6 +20,8 @@ import RegisterPage from "@/pages/Register";
 import LoginPage from "@/pages/Login";
 import ForgotPasswordPage from "@/pages/ForgotPassword";
 import ResetPasswordPage from "@/pages/ResetPassword";
+import VerifyOtpPage from "@/pages/VerifyOtp";
+import SetNewPasswordPage from "@/pages/SetNewPassword";
 import SearchPage from "@/pages/Search";
 import SyllabusDetailPage from "@/pages/SyllabusDetail";
 import { ProtectedRoute, PublicRoute, AdminRoute } from "@/components/ProtectedRoute";
@@ -58,6 +60,8 @@ export default function App() {
         <Route path="/login" element={<PublicRoute><LoginPage /></PublicRoute>} />
         <Route path="/forgot-password" element={<PublicRoute><ForgotPasswordPage /></PublicRoute>} />
         <Route path="/reset-password" element={<PublicRoute><ResetPasswordPage /></PublicRoute>} />
+        <Route path="/verify-otp" element={<PublicRoute><VerifyOtpPage /></PublicRoute>} />
+        <Route path="/set-new-password" element={<PublicRoute><SetNewPasswordPage /></PublicRoute>} />
         <Route path="/admin/register" element={<AdminRegisterPage />} />
         <Route path="/admin/dashboard" element={<AdminRoute><AdminDashboardPage /></AdminRoute>} />
         <Route path="*" element={<Navigate to="/" replace />} />

@@ -10,11 +10,11 @@ export default function Analytics() {
   return (
     <AppLayout title="Analytics">
       <div className="max-w-6xl mx-auto space-y-6">
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
           {[
             { label:"Total Study Hours", value:"47.5h", icon:Clock, color:"text-primary-600", bg:"bg-primary-50 dark:bg-primary-900/30" },
-            { label:"Quiz Average", value:"78%", icon:Trophy, color:"text-emerald-600", bg:"bg-emerald-50 dark:bg-emerald-900/30" },
-            { label:"Current Streak", value:"12 days", icon:Flame, color:"text-orange-600", bg:"bg-orange-50 dark:bg-orange-900/30" },
+            { label:"Quiz Average", value:"78%", icon:Trophy, color:"text-success-600", bg:"bg-success-50 dark:bg-success-900/30" },
+            { label:"Current Streak", value:"12 days", icon:Flame, color:"text-success-600", bg:"bg-success-50 dark:bg-success-900/30" },
             { label:"Topics Mastered", value:"9/18", icon:TrendingUp, color:"text-secondary-600", bg:"bg-secondary-50 dark:bg-secondary-900/30" },
           ].map(s => (
             <div key={s.label} className="stat-card">
@@ -25,7 +25,7 @@ export default function Analytics() {
           ))}
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
           <div className="card p-5">
             <h3 className="font-bold text-slate-800 dark:text-slate-100 mb-4">Weekly Quiz Scores</h3>
             <ResponsiveContainer width="100%" height={220}>

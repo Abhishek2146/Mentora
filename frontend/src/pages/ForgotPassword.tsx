@@ -1,11 +1,11 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
-import { GraduationCap, Mail, ArrowLeft, CheckCircle2, AlertCircle } from "lucide-react";
+import { Link, useNavigate } from "react-router-dom";
+import { GraduationCap, Mail, ArrowLeft, AlertCircle } from "lucide-react";
 import { useAuthStore } from "@/store/authStore";
 
 export default function ForgotPassword() {
+  const navigate = useNavigate();
   const [email, setEmail] = useState("");
-  const [sent, setSent] = useState(false);
   const [error, setError] = useState("");
   const { forgotPassword, isLoading } = useAuthStore();
 
@@ -14,10 +14,10 @@ export default function ForgotPassword() {
     setError("");
     try {
       await forgotPassword(email);
-      setSent(true);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to send reset link. Please try again.");
+    } catch {
+      // Frontend-only flow: continue to OTP verification even without a backend.
     }
+    navigate("/verify-otp", { state: { email } });
   };
 
   return (
@@ -31,42 +31,33 @@ export default function ForgotPassword() {
         </div>
 
         <div className="card p-7 space-y-5">
-          {sent ? (
-            <div className="flex flex-col items-center gap-4 text-center py-4">
-              <CheckCircle2 className="w-12 h-12 text-emerald-500" />
-              <h2 className="text-xl font-bold text-slate-800 dark:text-slate-100">Check your email</h2>
-              <p className="text-sm text-slate-500">Reset link sent to <strong>{email}</strong></p>
-              <Link to="/login" className="btn-primary btn-md w-full">Back to Login</Link>
-            </div>
-          ) : (
-            <>
-              <h2 className="text-xl font-bold text-slate-800 dark:text-slate-100">Reset Password</h2>
-              <p className="text-sm text-slate-500">Enter your email to receive a reset link</p>
-              {error && (
-                <div className="p-3 bg-danger-50 dark:bg-red-900/20 border border-danger-200 dark:border-red-700 rounded-xl text-sm text-danger-600 dark:text-red-400 flex items-center gap-2">
-                  <AlertCircle className="w-4 h-4 flex-shrink-0" />
-                  {error}
-                </div>
-              )}
-              <form onSubmit={handleSubmit} className="space-y-4">
-                <div className="relative">
-                  <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                  <input type="email" value={email} onChange={e => setEmail(e.target.value)}
-                    placeholder="Your email address" className="input pl-10" required />
-                </div>
-                <button type="submit" disabled={isLoading} className="btn-primary btn-md w-full">
-                  {isLoading ? (
-                    <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
-                  ) : (
-                    'Send Reset Link'
-                  )}
-                </button>
-              </form>
-              <Link to="/login" className="flex items-center gap-2 text-sm text-slate-500 hover:text-slate-700 justify-center">
-                <ArrowLeft className="w-4 h-4" /> Back to login
-              </Link>
-            </>
-          )}
+          <>
+            <h2 className="text-xl font-bold text-slate-800 dark:text-slate-100">Reset Password</h2>
+            <p className="text-sm text-slate-500">Enter your email to receive a one-time password (OTP)</p>
+            {error && (
+              <div className="p-3 bg-danger-50 dark:bg-danger-900/20 border border-danger-200 dark:border-danger-700 rounded-xl text-sm text-danger-600 dark:text-danger-400 flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                {error}
+              </div>
+            )}
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div className="relative">
+                <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                <input type="email" value={email} onChange={e => setEmail(e.target.value)}
+                  placeholder="Your email address" className="input pl-10" required />
+              </div>
+              <button type="submit" disabled={isLoading} className="btn-primary btn-md w-full">
+                {isLoading ? (
+                  <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                ) : (
+                  'Send OTP'
+                )}
+              </button>
+            </form>
+            <Link to="/login" className="flex items-center gap-2 text-sm text-slate-500 hover:text-slate-700 justify-center">
+              <ArrowLeft className="w-4 h-4" /> Back to login
+            </Link>
+          </>
         </div>
       </div>
     </div>

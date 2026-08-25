@@ -115,11 +115,11 @@ export default function SearchPage() {
   const getStatusColor = (status: string) => {
     switch (status) {
       case "parsed":
-        return "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400";
+        return "bg-success-100 text-success-700 dark:bg-success-900/30 dark:text-success-400";
       case "processing":
-        return "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400";
+        return "bg-warning-100 text-warning-700 dark:bg-warning-900/30 dark:text-warning-400";
       case "failed":
-        return "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400";
+        return "bg-danger-100 text-danger-700 dark:bg-danger-900/30 dark:text-danger-400";
       default:
         return "bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-300";
     }
@@ -137,7 +137,7 @@ export default function SearchPage() {
     <AppLayout title="Search Syllabi">
       <div className="max-w-4xl mx-auto space-y-6">
         {/* Search Bar */}
-        <div className="card p-6 space-y-4">
+        <div className="card p-4 sm:p-6 space-y-4">
           <div className="relative">
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
             <input
@@ -232,7 +232,7 @@ export default function SearchPage() {
             </div>
           ) : error ? (
             <div className="p-6 text-center">
-              <p className="text-red-500">{error}</p>
+              <p className="text-danger-500">{error}</p>
             </div>
           ) : results.length === 0 && debouncedQuery ? (
             <div className="p-12 text-center">
@@ -299,7 +299,7 @@ export default function SearchPage() {
               {/* Pagination */}
               {pagination.pages > 1 && (
                 <div className="p-4 border-t border-slate-200 dark:border-slate-700">
-                  <nav className="flex items-center justify-center gap-1" aria-label="Pagination">
+                  <nav className="flex items-center justify-center gap-1 flex-wrap" aria-label="Pagination">
                     <button
                       onClick={() => handlePageChange(pagination.page - 1)}
                       disabled={pagination.page <= 1}

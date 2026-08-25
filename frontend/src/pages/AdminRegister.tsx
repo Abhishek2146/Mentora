@@ -40,7 +40,7 @@ export default function AdminRegister() {
           <p className="text-slate-500 text-sm">Register an administrator account</p>
         </div>
 
-        <div className="card p-7 space-y-5">
+        <div className="card p-5 sm:p-7 space-y-5">
           <h2 className="text-xl font-bold text-slate-800 dark:text-slate-100">Admin sign up</h2>
 
           {error && <div className="p-3 bg-danger-50 border border-danger-200 rounded-xl text-sm text-danger-600">{error}</div>}
