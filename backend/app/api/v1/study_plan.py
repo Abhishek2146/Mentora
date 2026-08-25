@@ -160,3 +160,23 @@ async def update_task(
     await db.commit()
     await db.refresh(task)
     return task
+
+
+@router.delete("/tasks/{task_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_task(
+    task_id: int,
+    db: AsyncSession = Depends(get_db),
+    user_id: int = Depends(get_current_user_id),
+):
+    result = await db.execute(
+        select(StudyTask).join(StudyPlan).where(
+            StudyTask.id == task_id, StudyPlan.user_id == user_id
+        )
+    )
+    task = result.scalars().first()
+    if not task:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
+
+    await db.delete(task)
+    await db.commit()
+    return None

@@ -24,6 +24,7 @@ import VerifyOtpPage from "@/pages/VerifyOtp";
 import SetNewPasswordPage from "@/pages/SetNewPassword";
 import SearchPage from "@/pages/Search";
 import SyllabusDetailPage from "@/pages/SyllabusDetail";
+import NotificationsPage from "@/pages/Notifications";
 import { ProtectedRoute, PublicRoute, AdminRoute } from "@/components/ProtectedRoute";
 import { useAuthStore } from "@/store/authStore";
 import AdminRegisterPage from "@/pages/AdminRegister";
@@ -40,6 +41,7 @@ export default function App() {
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
         <Route path="/dashboard" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
         <Route path="/search" element={<ProtectedRoute><SearchPage /></ProtectedRoute>} />
+        <Route path="/notifications" element={<ProtectedRoute><NotificationsPage /></ProtectedRoute>} />
         <Route path="/syllabus/:id" element={<ProtectedRoute><SyllabusDetailPage /></ProtectedRoute>} />
         <Route path="/ai-tutor" element={<ProtectedRoute><AiTutorPage /></ProtectedRoute>} />
         <Route path="/flashcards" element={<ProtectedRoute><FlashcardsPage /></ProtectedRoute>} />

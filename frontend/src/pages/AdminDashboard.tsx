@@ -3,16 +3,19 @@ import {
   Users, UserPlus, ShieldCheck, Activity, FileText, CalendarDays,
   ClipboardList, Code2, CreditCard, BookOpen, Trash2, RefreshCw,
   Search, ChevronUp, ChevronDown, Ban, CheckCircle2, BarChart3,
+  LogOut,
 } from "lucide-react";
 import { adminService } from "@/services/adminService";
 import { useAuthStore } from "@/store/authStore";
 import type { AdminDashboardStats, User } from "@/types";
 import { cn, getInitials, formatDate } from "@/lib/utils";
+import { useNavigate } from "react-router-dom";
 
 type SortField = "id" | "username" | "email" | "role" | "created_at";
 
 export default function AdminDashboard() {
-  const { user } = useAuthStore();
+  const { user, logout } = useAuthStore();
+  const navigate = useNavigate();
   const [stats, setStats] = useState<AdminDashboardStats["stats"] | null>(null);
   const [recent, setRecent] = useState<AdminDashboardStats["recent_registrations"]>([]);
   const [users, setUsers] = useState<User[]>([]);
@@ -160,6 +163,9 @@ export default function AdminDashboard() {
             {actionMsg && <span className="text-sm text-success-600 bg-success-50 dark:bg-success-900/30 px-3 py-1.5 rounded-xl font-medium max-w-full truncate">{actionMsg}</span>}
             <button onClick={() => { loadStats(); loadUsers(); }} className="flex items-center gap-2 px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-sm hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors">
               <RefreshCw className="w-4 h-4" /> Refresh
+            </button>
+            <button onClick={() => { logout(); navigate("/login"); }} className="flex items-center gap-2 px-3 py-2 rounded-xl bg-danger-50 dark:bg-red-900/30 text-danger-600 dark:text-red-400 text-sm hover:bg-danger-100 dark:hover:bg-red-900/50 transition-colors">
+              <LogOut className="w-4 h-4" /> Sign Out
             </button>
           </div>
         </div>

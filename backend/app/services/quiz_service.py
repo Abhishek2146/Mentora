@@ -28,7 +28,7 @@ class QuizService:
         questions_data = await self.llm_service.generate_quiz_questions(
             content=syllabus_content,
             num_questions=quiz.num_questions,
-            difficulty="medium",
+            difficulty=quiz.difficulty or "medium",
         )
 
         questions = []
@@ -41,7 +41,8 @@ class QuizService:
                 correct_answer=q_data.get("correct_answer", ""),
                 explanation=q_data.get("explanation", ""),
                 difficulty=q_data.get("difficulty", "medium"),
-                order=i,
+                question_order=i,
+                is_ai_generated=True,
             )
             db.add(question)
             questions.append(question)
@@ -73,14 +74,17 @@ class QuizService:
         quiz_id: int,
         answers: dict,
         db: AsyncSession,
-    ) -> dict:
-        """Grade a quiz attempt and return results."""
+    ) -> Optional[dict]:
+        """Grade a quiz attempt server-side and return results.
+
+        Returns None when the quiz does not exist.
+        """
         result = await db.execute(
             select(Quiz).where(Quiz.id == quiz_id)
         )
         quiz = result.scalars().first()
         if not quiz:
-            raise ValueError("Quiz not found")
+            return None
 
         questions_result = await db.execute(
             select(Question).where(Question.quiz_id == quiz_id)
@@ -88,31 +92,43 @@ class QuizService:
         questions = {q.id: q for q in questions_result.scalars().all()}
 
         correct = 0
+        incorrect = 0
         total = len(questions)
         results = []
+        answered = set()
 
         for q_id, answer in answers.items():
             question = questions.get(int(q_id))
-            if question:
-                is_correct = str(question.correct_answer).strip().lower() == str(answer).strip().lower()
+            if question and str(answer).strip() != "":
+                answered.add(question.id)
+                is_correct = (
+                    str(question.correct_answer).strip().lower()
+                    == str(answer).strip().lower()
+                )
                 if is_correct:
                     correct += 1
+                else:
+                    incorrect += 1
                 results.append({
-                    "question_id": q_id,
-                    "question": question.question_text,
+                    "question_id": question.id,
+                    "question_text": question.question_text,
                     "user_answer": answer,
                     "correct_answer": question.correct_answer,
                     "is_correct": is_correct,
                     "explanation": question.explanation,
                 })
 
+        results.sort(key=lambda r: r["question_id"])
+        unanswered = total - len(answered)
         score = int((correct / total) * 100) if total > 0 else 0
-        passed = score >= 60
+        passed = score >= (quiz.passing_score or 40)
 
         return {
             "score": score,
             "total_questions": total,
             "correct_answers": correct,
+            "incorrect_answers": incorrect,
+            "unanswered_questions": unanswered,
             "is_passed": passed,
             "results": results,
         }

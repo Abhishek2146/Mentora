@@ -52,7 +52,12 @@ async def get_problem(
     db: AsyncSession = Depends(get_db),
     user_id: int = Depends(get_current_user_id),
 ):
-    result = await db.execute(select(CodingProblem).where(CodingProblem.id == problem_id))
+    result = await db.execute(
+        select(CodingProblem).where(
+            CodingProblem.id == problem_id,
+            (CodingProblem.user_id == user_id) | (CodingProblem.user_id.is_(None)),
+        )
+    )
     problem = result.scalars().first()
     if not problem:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Problem not found")
@@ -66,7 +71,12 @@ async def submit_code(
     db: AsyncSession = Depends(get_db),
     user_id: int = Depends(get_current_user_id),
 ):
-    problem_result = await db.execute(select(CodingProblem).where(CodingProblem.id == problem_id))
+    problem_result = await db.execute(
+        select(CodingProblem).where(
+            CodingProblem.id == problem_id,
+            (CodingProblem.user_id == user_id) | (CodingProblem.user_id.is_(None)),
+        )
+    )
     problem = problem_result.scalars().first()
     if not problem:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Problem not found")

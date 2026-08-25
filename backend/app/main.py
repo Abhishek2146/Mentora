@@ -19,6 +19,7 @@ from app.api.v1 import (
     users,
     syllabus,
     study_plan,
+    flashcards,
     quizzes,
     coding,
     tutor,
@@ -142,6 +143,12 @@ app.include_router(
     study_plan.router,
     prefix=f"{settings.API_PREFIX}/study-plan",
     tags=["study-plan"],
+)
+
+app.include_router(
+    flashcards.router,
+    prefix=f"{settings.API_PREFIX}/flashcards",
+    tags=["flashcards"],
 )
 
 app.include_router(

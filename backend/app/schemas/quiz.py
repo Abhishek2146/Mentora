@@ -2,7 +2,8 @@
 Quiz schemas
 """
 from enum import Enum
-from typing import Optional, List, Any
+from datetime import datetime
+from typing import Optional, List, Any, Dict
 
 from pydantic import BaseModel, Field
 
@@ -21,7 +22,7 @@ class QuestionBase(BaseModel):
     correct_answer: str
     explanation: Optional[str] = None
     difficulty: str = Field("medium", max_length=20)
-    order: int = 0
+    question_order: int = 0
 
 
 class QuestionCreate(QuestionBase):
@@ -76,14 +77,29 @@ class QuizAttemptBase(BaseModel):
     is_passed: bool = False
 
 
-class QuizAttemptCreate(QuizAttemptBase):
-    pass
+class QuizAttemptSubmit(BaseModel):
+    """Payload for submitting a quiz attempt. Answers are graded server-side."""
+    answers: Dict[str, Any]
+    time_taken: Optional[int] = Field(None, ge=0)
+
+
+class QuestionResult(BaseModel):
+    question_id: int
+    question_text: str
+    user_answer: Optional[Any] = None
+    correct_answer: str
+    is_correct: bool
+    explanation: Optional[str] = None
 
 
 class QuizAttemptOut(QuizAttemptBase):
     id: int
     user_id: int
-    created_at: Optional[str] = None
+    created_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True
+
+
+class QuizAttemptResultOut(QuizAttemptOut):
+    results: List[QuestionResult] = []

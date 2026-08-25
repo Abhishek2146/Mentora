@@ -80,3 +80,44 @@ export interface SyllabusSearchResponse {
   pages: number;
   query: string;
 }
+
+export type NotificationType = "info" | "success" | "warning" | "error" | "reminder" | "achievement" | "system";
+export type NotificationPriority = "low" | "normal" | "high" | "urgent";
+
+export interface Notification {
+  id: number;
+  user_id: number;
+  type: NotificationType;
+  priority: NotificationPriority;
+  title: string;
+  message: string;
+  related_entity_type?: string;
+  related_entity_id?: number;
+  is_read: boolean;
+  is_archived: boolean;
+  read_at?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface NotificationListResponse {
+  items: Notification[];
+  total: number;
+  page: number;
+  per_page: number;
+  pages: number;
+  unread_count: number;
+}
+
+export interface NotificationStats {
+  total: number;
+  unread: number;
+  archived: number;
+  by_type: Record<string, number>;
+  by_priority: Record<string, number>;
+}
+
+export interface BulkNotificationAction {
+  notification_ids: number[];
+  action: "read" | "unread" | "archive" | "delete";
+}
