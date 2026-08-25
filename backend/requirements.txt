@@ -1,45 +1,26 @@
-# ==============================
 # AI / NLP
-# ==============================
-
 openai>=1.0.0
 langchain>=0.2.0
-langchain-groq>=0.1.9
 langchain-openai>=0.1.0
 langchain-community>=0.2.0
 langchain-core>=0.2.0
-langchain-text-splitters>=0.2.0
 
 # Vector Database
 chromadb>=0.5.0
-
-# Embeddings (local Sentence Transformers)
-sentence-transformers>=2.7.0
-scikit-learn>=1.4.0
 
 # OCR / Document Processing
 pytesseract>=0.3.10
 pdf2image>=1.16.3
 Pillow>=10.0.0
-pypdf>=4.0.0
-python-docx>=1.1.0
 
 # Speech / Audio
-openai-whisper>=20231117
+whisper==1.0
 gTTS>=2.5.0
 
-
-# ==============================
 # Browser Automation
-# ==============================
-
 selenium>=4.0.0
 
-
-# ==============================
 # FastAPI / Backend
-# ==============================
-
 fastapi>=0.110.0
 uvicorn[standard]>=0.29.0
 
@@ -56,41 +37,21 @@ python-multipart>=0.0.9
 aiofiles>=23.0.0
 httpx>=0.27.0
 
-
-# ==============================
 # PostgreSQL / Database
-# ==============================
-
 SQLAlchemy>=2.0.0
 asyncpg>=0.29.0
 psycopg2-binary>=2.9.0
 alembic>=1.13.0
 
-
-# ==============================
 # Redis
-# ==============================
-
 redis>=5.0.0
 
-
-# ==============================
 # Background Tasks
-# ==============================
-
 celery>=5.3.0
 
-
-# ==============================
 # Development / Testing
-# ==============================
-
 pytest>=8.0.0
 pytest-asyncio>=0.23.0
 black>=24.0.0
 ruff>=0.4.0
 mypy>=1.0.0
-
-python-dotenv
-email-validator
-argon2-cffi
