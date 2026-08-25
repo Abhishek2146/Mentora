@@ -6,11 +6,11 @@
 
 @layer base {
   :root {
-    --color-bg: #f8fafc;
+    --color-bg: #ffffff;
     --color-surface: #ffffff;
-    --color-border: #e2e8f0;
-    --color-text: #0f172a;
-    --color-text-muted: #64748b;
+    --color-border: #e5e7eb;
+    --color-text: #111111;
+    --color-text-muted: #6b7280;
     --sidebar-width: 260px;
   }
 
@@ -49,7 +49,7 @@
   }
 
   ::selection {
-    background: rgba(14, 165, 233, 0.2);
+    background: rgba(79, 70, 229, 0.2);
     color: inherit;
   }
 
@@ -63,12 +63,12 @@
   }
 
   ::-webkit-scrollbar-thumb {
-    background: #cbd5e1;
+    background: #d1d5db;
     border-radius: 100px;
   }
 
   ::-webkit-scrollbar-thumb:hover {
-    background: #94a3b8;
+    background: #9ca3af;
   }
 
   .dark ::-webkit-scrollbar-thumb {

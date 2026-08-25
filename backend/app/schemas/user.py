@@ -79,7 +79,6 @@ class UserRole(str, Enum):
     """Available user roles."""
 
     STUDENT = "student"
-    INSTRUCTOR = "instructor"
     ADMIN = "admin"
 
 
@@ -112,14 +111,56 @@ class UserCreate(UserBase):
     """
     Schema used when creating/registering a new user.
 
-    New users are always registered as students.
-    The role should not be supplied by the client.
+    Role can be 'student' (default: student).
+    Admin registration is restricted to the dedicated admin endpoint.
     """
 
     password: str = Field(
         ...,
         min_length=8,
         max_length=128
+    )
+
+    role: Optional[UserRole] = Field(
+        default=UserRole.STUDENT,
+        description="User role: 'student'"
+    )
+
+
+# ============================================================
+# Admin Registration
+# ============================================================
+
+class AdminCreate(BaseModel):
+    """
+    Schema used when registering a new admin account.
+
+    The ``admin_secret`` must match the configured
+    ``ADMIN_SECRET_KEY`` or the registration is rejected.
+    """
+
+    email: EmailStr
+
+    username: str = Field(
+        ...,
+        min_length=3,
+        max_length=50
+    )
+
+    full_name: Optional[str] = Field(
+        None,
+        max_length=255
+    )
+
+    password: str = Field(
+        ...,
+        min_length=8,
+        max_length=128
+    )
+
+    admin_secret: str = Field(
+        ...,
+        min_length=1
     )
 
 
@@ -169,6 +210,30 @@ class UserUpdate(BaseModel):
         None,
         max_length=500
     )
+
+
+# ============================================================
+# Admin Management
+# ============================================================
+
+class AdminUserUpdate(BaseModel):
+    """
+    Schema used by admins to manage other users.
+
+    Unlike ``UserUpdate``, admins may also change a user's
+    role and account status.
+    """
+
+    full_name: Optional[str] = Field(
+        None,
+        max_length=255
+    )
+
+    role: Optional[UserRole] = None
+
+    is_active: Optional[bool] = None
+
+    is_verified: Optional[bool] = None
 
 
 # ============================================================
@@ -227,4 +292,28 @@ class TokenPayload(BaseModel):
     type: Optional[str] = None
 
     exp: Optional[int] = None
+
+
+# ============================================================
+# Password Reset
+# ============================================================
+
+class ForgotPasswordRequest(BaseModel):
+    """Schema for forgot password request."""
+
+    email: EmailStr
+
+
+class ResetPasswordRequest(BaseModel):
+    """Schema for reset password request."""
+
+    token: str = Field(..., min_length=1)
+    password: str = Field(..., min_length=8, max_length=128)
+
+
+class ChangePasswordRequest(BaseModel):
+    """Schema for change password request (authenticated user)."""
+
+    current_password: str = Field(..., min_length=1)
+    new_password: str = Field(..., min_length=8, max_length=128)
 

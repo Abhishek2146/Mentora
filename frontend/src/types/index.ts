@@ -3,7 +3,7 @@ export interface User {
   email: string;
   username: string;
   full_name: string | null;
-  role: "student" | "instructor" | "admin";
+  role: "student" | "admin";
   is_active: boolean;
   is_verified: boolean;
   avatar_url: string | null;
@@ -17,7 +17,7 @@ export interface Token {
   token_type: string;
 }
 
-export type UserRole = "student" | "instructor" | "admin";
+export type UserRole = "student" | "admin";
 
 export interface Syllabus {
   id: number;
@@ -269,6 +269,32 @@ export interface DashboardResponse {
     title: string;
     due_date: string | null;
     task_type: string | null;
+  }[];
+}
+
+export interface AdminDashboardStats {
+  stats: {
+    total_users: number;
+    total_students: number;
+    total_admins: number;
+    active_users: number;
+    total_syllabi: number;
+    total_study_plans: number;
+    total_quizzes: number;
+    total_quiz_attempts: number;
+    total_coding_problems: number;
+    total_coding_submissions: number;
+    total_flashcard_decks: number;
+    avg_quiz_score: number;
+  };
+  recent_registrations: {
+    id: number;
+    username: string;
+    full_name: string | null;
+    email: string;
+    role: string;
+    is_active: boolean;
+    created_at: string | null;
   }[];
 }
 

@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 
-from app.core.auth import get_current_user_id
+from app.core.auth import get_current_user_id, require_admin
 from app.database.database import get_db
 from app.models.user import User, UserRole
 from app.schemas.user import UserOut, UserUpdate
@@ -21,7 +21,7 @@ async def list_users(
     limit: int = 100,
     role: Optional[str] = None,
     db: AsyncSession = Depends(get_db),
-    current_user_id: int = Depends(get_current_user_id),
+    _: User = Depends(require_admin),
 ):
     query = select(User).offset(skip).limit(limit)
     if role:
@@ -81,7 +81,7 @@ async def update_user(
 async def delete_user(
     user_id: int,
     db: AsyncSession = Depends(get_db),
-    current_user_id: int = Depends(get_current_user_id),
+    _: User = Depends(require_admin),
 ):
     result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalars().first()

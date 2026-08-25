@@ -35,6 +35,7 @@ User model
 from enum import Enum
 
 from sqlalchemy import Boolean, Column, DateTime, String
+from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 
 from app.database.base import BaseModel
@@ -44,7 +45,6 @@ class UserRole(str, Enum):
     """Available user roles."""
 
     STUDENT = "student"
-    INSTRUCTOR = "instructor"
     ADMIN = "admin"
 
 
@@ -86,9 +86,9 @@ class User(BaseModel):
     # New users are students by default.
     role = Column(
         String(20),
-        default=UserRole.STUDENT.value,
-        nullable=False
-    )
+         default=UserRole.STUDENT.value,
+         nullable=False
+     )
 
     # Account status
     is_active = Column(
@@ -124,4 +124,7 @@ class User(BaseModel):
         onupdate=func.now(),
         nullable=False
     )
+
+    # Notifications
+    notifications = relationship("Notification", back_populates="user", cascade="all, delete-orphan")
 

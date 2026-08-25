@@ -67,9 +67,16 @@ from sqlalchemy import (
     Boolean,
     JSON,
 )
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import relationship, backref
+from enum import Enum
 
 from app.database.base import BaseModel
+
+
+class Difficulty(str, Enum):
+    EASY = "easy"
+    MEDIUM = "medium"
+    HARD = "hard"
 
 
 class CodingProblem(BaseModel):
@@ -290,6 +297,6 @@ class CodingSubmission(BaseModel):
 
     user = relationship(
         "User",
-        backref="coding_submissions",
+        backref=backref("coding_submissions", passive_deletes=True),
     )
 

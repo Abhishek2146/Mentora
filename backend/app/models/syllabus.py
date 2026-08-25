@@ -67,7 +67,7 @@ from sqlalchemy import (
     Boolean,
     JSON,
 )
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import relationship, backref
 
 from app.database.base import BaseModel
 
@@ -165,13 +165,14 @@ class Syllabus(BaseModel):
     # Relationships
     user = relationship(
         "User",
-        backref="syllabuses",
+        backref=backref("syllabuses", passive_deletes=True),
     )
 
     subjects = relationship(
         "Subject",
         back_populates="syllabus",
         cascade="all, delete-orphan",
+        lazy="selectin",
     )
 
 
@@ -227,7 +228,12 @@ class Subject(BaseModel):
         "Chapter",
         back_populates="subject",
         cascade="all, delete-orphan",
+        lazy="selectin",
     )
+
+    @property
+    def order(self) -> int:
+        return self.subject_order
 
 
 class Chapter(BaseModel):
@@ -267,8 +273,19 @@ class Chapter(BaseModel):
         nullable=True,
     )
 
+    # Estimated study hours parsed from the syllabus (e.g. "(3 Hrs.)")
+    estimated_hours = Column(
+        Integer,
+        default=0,
+        nullable=False,
+    )
+
     # Relationships
     subject = relationship(
         "Subject",
         back_populates="chapters",
     )
+
+    @property
+    def order(self) -> int:
+        return self.chapter_order

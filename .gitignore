@@ -5,26 +5,42 @@
 .env.test.local
 .env.production.local
 
+# Node
+node_modules/
+frontend/node_modules/
+
 # Python virtual environments
+venv/
+.venv/
 backend/venv/
 
-# Python
+# Python cache
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
 
-# Node.js / Frontend
-node_modules/
-frontend/node_modules/
+# Logs
+logs/
+*.log
 
 # Build outputs
 frontend/dist/
 dist/
 build/
 
-# IDE & OS files
+# ChromaDB
+chromadb/
+*.bin
+
+# Uploads
+backend/uploads/
+
+# IDE
 .vscode/
 .idea/
+
+# OS
 .DS_Store
+Thumbs.db
 *.pem

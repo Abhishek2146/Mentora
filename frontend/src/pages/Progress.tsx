@@ -14,17 +14,17 @@ export default function Progress() {
   return (
     <AppLayout title="Progress">
       <div className="max-w-4xl mx-auto space-y-6">
-        <div className="card p-6 bg-gradient-to-r from-primary-600 to-secondary-600 text-white border-0">
+        <div className="card p-5 sm:p-6 bg-gradient-to-r from-primary-600 to-secondary-600 text-white border-0">
           <div className="flex items-center gap-4">
-            <TrendingUp className="w-10 h-10" />
+            <TrendingUp className="w-10 h-10 flex-shrink-0" />
             <div>
               <p className="text-primary-100">Overall Progress</p>
-              <p className="text-4xl font-black">69%</p>
+              <p className="text-3xl sm:text-4xl font-black">69%</p>
               <p className="text-primary-100 text-sm">9 of 18 topics mastered</p>
             </div>
           </div>
         </div>
-        <div className="card p-6 space-y-4">
+        <div className="card p-5 sm:p-6 space-y-4">
           <h3 className="font-bold text-slate-800 dark:text-slate-100">Topic-wise Mastery</h3>
           {topics.map(t => (
             <div key={t.name}>

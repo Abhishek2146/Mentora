@@ -7,7 +7,7 @@ export const codingService = {
       const params = new URLSearchParams();
       if (topic) params.append("topic", topic);
       if (difficulty) params.append("difficulty", difficulty);
-      const res = await apiClient.get(`/api/coding/problems?${params.toString()}`);
+      const res = await apiClient.get(`/api/v1/coding/problems?${params.toString()}`);
       return res.data;
     } catch {
       return mockCodingProblems;
@@ -16,7 +16,7 @@ export const codingService = {
 
   async runCode(problemId: number, code: string, language: string) {
     try {
-      const res = await apiClient.post(`/api/coding/${problemId}/run`, { code, language });
+      const res = await apiClient.post(`/api/v1/coding/${problemId}/run`, { code, language });
       return res.data;
     } catch {
       return {

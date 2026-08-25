@@ -87,7 +87,7 @@ from sqlalchemy import (
     Boolean,
     JSON,
 )
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import relationship, backref
 
 from app.database.base import BaseModel
 
@@ -360,7 +360,7 @@ class QuizAttempt(BaseModel):
     # Relationships
     user = relationship(
         "User",
-        backref="quiz_attempts",
+        backref=backref("quiz_attempts", passive_deletes=True),
     )
 
     quiz = relationship(

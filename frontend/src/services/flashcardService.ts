@@ -4,7 +4,7 @@ import { mockFlashcards } from "@/data/mockData";
 export const flashcardService = {
   async getFlashcards(topic?: string) {
     try {
-      const res = await apiClient.get(`/api/flashcards${topic ? `?topic=${topic}` : ""}`);
+      const res = await apiClient.get(`/api/v1/flashcards${topic ? `?topic=${topic}` : ""}`);
       return res.data;
     } catch {
       return mockFlashcards;
@@ -13,7 +13,7 @@ export const flashcardService = {
 
   async generateFlashcards(topic: string, count = 10) {
     try {
-      const res = await apiClient.post("/api/flashcards/generate", { topic, count });
+      const res = await apiClient.post("/api/v1/flashcards/generate", { topic, count });
       return res.data;
     } catch {
       return mockFlashcards.slice(0, count);
@@ -22,7 +22,7 @@ export const flashcardService = {
 
   async submitRating(cardId: number, rating: "Again" | "Hard" | "Good" | "Easy") {
     try {
-      const res = await apiClient.post(`/api/flashcards/${cardId}/rating`, { rating });
+      const res = await apiClient.post(`/api/v1/flashcards/${cardId}/rating`, { rating });
       return res.data;
     } catch {
       return { next_review: new Date().toISOString(), interval: 1 };
