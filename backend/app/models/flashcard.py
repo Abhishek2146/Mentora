@@ -127,6 +127,7 @@ class FlashcardDeck(BaseModel):
         "Flashcard",
         back_populates="deck",
         cascade="all, delete-orphan",
+        lazy="selectin",
     )
 
 

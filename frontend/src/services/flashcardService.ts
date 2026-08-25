@@ -4,28 +4,25 @@ import { mockFlashcards } from "@/data/mockData";
 export const flashcardService = {
   async getFlashcards(topic?: string) {
     try {
-      const res = await apiClient.get(`/api/v1/flashcards${topic ? `?topic=${topic}` : ""}`);
+      // Due cards across all decks, served by the backend review endpoint.
+      const res = await apiClient.get(`/api/v1/flashcards/review/all${topic ? `?topic=${topic}` : ""}`);
       return res.data;
     } catch {
       return mockFlashcards;
     }
   },
 
-  async generateFlashcards(topic: string, count = 10) {
-    try {
-      const res = await apiClient.post("/api/v1/flashcards/generate", { topic, count });
-      return res.data;
-    } catch {
-      return mockFlashcards.slice(0, count);
-    }
+  async generateFlashcards(topic: string, count = 10, syllabusId?: number) {
+    const res = await apiClient.post("/api/v1/flashcards/generate", {
+      topic: topic || null,
+      count,
+      syllabus_id: syllabusId || null,
+    });
+    return res.data;
   },
 
   async submitRating(cardId: number, rating: "Again" | "Hard" | "Good" | "Easy") {
-    try {
-      const res = await apiClient.post(`/api/v1/flashcards/${cardId}/rating`, { rating });
-      return res.data;
-    } catch {
-      return { next_review: new Date().toISOString(), interval: 1 };
-    }
+    const res = await apiClient.post(`/api/v1/flashcards/${cardId}/rating`, { rating });
+    return res.data;
   },
 };

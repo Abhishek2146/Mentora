@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react";
 import AppLayout from "@/components/layout/AppLayout";
-import { ChevronLeft, ChevronRight, RotateCcw, Zap } from "lucide-react";
+import { ChevronLeft, ChevronRight, RotateCcw, Zap, Sparkles, Loader2 } from "lucide-react";
 import { flashcardService } from "@/services/flashcardService";
+import { syllabusService } from "@/services/syllabusService";
 
 export default function Flashcards() {
   const [cards, setCards] = useState<any[]>([]);
@@ -9,10 +10,55 @@ export default function Flashcards() {
   const [flipped, setFlipped] = useState(false);
   const [loading, setLoading] = useState(true);
   const [sessionStats, setSessionStats] = useState({ correct: 0, incorrect: 0 });
+  const [error, setError] = useState<string | null>(null);
+
+  // Generation state
+  const [syllabi, setSyllabi] = useState<any[]>([]);
+  const [syllabusId, setSyllabusId] = useState<number | "">("");
+  const [topic, setTopic] = useState("");
+  const [count, setCount] = useState(10);
+  const [generating, setGenerating] = useState(false);
+  const [showGenerate, setShowGenerate] = useState(false);
+
+  async function loadCards() {
+    try {
+      const data = await flashcardService.getFlashcards();
+      setCards(data || []);
+    } catch {
+      setCards([]);
+    } finally {
+      setLoading(false);
+    }
+  }
 
   useEffect(() => {
-    flashcardService.getFlashcards().then((data) => { setCards(data); setLoading(false); });
+    loadCards();
+    syllabusService
+      .getAllSyllabi()
+      .then(setSyllabi)
+      .catch(() => {});
   }, []);
+
+  async function handleGenerate() {
+    setGenerating(true);
+    setError(null);
+    try {
+      await flashcardService.generateFlashcards(
+        topic.trim(),
+        count,
+        (syllabusId as number) || undefined
+      );
+      setShowGenerate(false);
+      setIndex(0);
+      setFlipped(false);
+      setSessionStats({ correct: 0, incorrect: 0 });
+      await loadCards();
+    } catch (e: any) {
+      setError(e?.response?.data?.detail || "Failed to generate flashcards");
+    } finally {
+      setGenerating(false);
+    }
+  }
 
   const current = cards[index];
 
@@ -32,6 +78,70 @@ export default function Flashcards() {
   return (
     <AppLayout title="Flashcards">
       <div className="max-w-2xl mx-auto space-y-6">
+        <div className="flex justify-end">
+          <button onClick={() => setShowGenerate((s) => !s)} className="btn-primary btn-md">
+            <Sparkles className="w-4 h-4 inline mr-2" />
+            Generate Flashcards
+          </button>
+        </div>
+
+        {showGenerate && (
+          <div className="card p-6 space-y-4">
+            <h3 className="font-bold text-slate-800 dark:text-slate-100">Generate AI Flashcards</h3>
+            {error && <p className="text-sm text-red-500">{error}</p>}
+            <div>
+              <label className="block text-sm font-medium text-slate-600 mb-1">Syllabus</label>
+              <select
+                value={syllabusId}
+                onChange={(e) => setSyllabusId(Number(e.target.value) || "")}
+                className="w-full border rounded-xl px-3 py-2 text-sm dark:bg-slate-800 dark:border-slate-600"
+              >
+                <option value="">Latest syllabus (auto)</option>
+                {syllabi.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.title}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-600 mb-1">
+                Topic (optional — leave blank for the whole syllabus)
+              </label>
+              <input
+                type="text"
+                value={topic}
+                onChange={(e) => setTopic(e.target.value)}
+                placeholder="e.g. Normalization, Logic Gates"
+                className="w-full border rounded-xl px-3 py-2 text-sm dark:bg-slate-800 dark:border-slate-600"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-600 mb-1">Number of cards</label>
+              <select
+                value={count}
+                onChange={(e) => setCount(Number(e.target.value))}
+                className="w-full border rounded-xl px-3 py-2 text-sm dark:bg-slate-800 dark:border-slate-600"
+              >
+                {[5, 10, 15, 20].map((n) => (
+                  <option key={n} value={n}>
+                    {n} cards
+                  </option>
+                ))}
+              </select>
+            </div>
+            <button onClick={handleGenerate} disabled={generating} className="btn-primary w-full">
+              {generating ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin inline mr-2" /> Generating...
+                </>
+              ) : (
+                "Generate"
+              )}
+            </button>
+          </div>
+        )}
+
         <div className="grid grid-cols-3 gap-4">
           <div className="card p-4 text-center">
             <p className="text-2xl font-bold text-primary-600">{cards.length}</p>
@@ -59,6 +169,17 @@ export default function Flashcards() {
         {loading ? (
           <div className="card p-12 flex items-center justify-center">
             <div className="w-10 h-10 border-4 border-primary-200 border-t-primary-500 rounded-full animate-spin" />
+          </div>
+        ) : cards.length === 0 ? (
+          <div className="card p-12 flex flex-col items-center justify-center gap-4 text-center">
+            <Sparkles className="w-12 h-12 text-primary-500" />
+            <p className="font-bold text-xl text-slate-700 dark:text-slate-200">No flashcards yet</p>
+            <p className="text-sm text-slate-500 max-w-sm">
+              Generate an AI flashcard deck from your uploaded syllabus to start a review session.
+            </p>
+            <button onClick={() => setShowGenerate(true)} className="btn-primary btn-md">
+              <Sparkles className="w-4 h-4 inline mr-2" /> Generate Flashcards
+            </button>
           </div>
         ) : current ? (
           <div>

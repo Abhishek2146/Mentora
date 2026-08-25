@@ -59,6 +59,11 @@ class LLMService:
     the API key is not configured.
     """
 
+    # Used when the primary model's quota is exhausted (e.g. Groq's
+    # tokens-per-day limit). Different models have independent TPD
+    # buckets, so this keeps AI features working after heavy usage.
+    FALLBACK_MODELS = ["qwen/qwen3.6-27b", "openai/gpt-oss-120b"]
+
     def __init__(self):
         self.model: Optional[ChatGroq] = None
         self.parser = StrOutputParser()
@@ -73,8 +78,10 @@ class LLMService:
         temperature: float = 0.7,
         json_mode: bool = False,
         max_output_tokens: Optional[int] = None,
+        model_name: Optional[str] = None,
     ) -> ChatGroq:
-        cache_key = (temperature, json_mode, max_output_tokens)
+        model_name = model_name or settings.GROQ_MODEL
+        cache_key = (temperature, json_mode, max_output_tokens, model_name)
 
         if self.model is None or cache_key != self._model_cache_key:
             api_key = getattr(settings, "GROQ_API_KEY", None)
@@ -94,31 +101,79 @@ class LLMService:
             # empty message). Requesting low reasoning effort keeps the
             # visible JSON answer within budget.
             extra_params: Dict[str, Any] = {}
-            model_name = settings.GROQ_MODEL.lower()
-            if any(marker in model_name for marker in ("gpt-oss", "qwen", "deepseek-r1")):
+            lowered = model_name.lower()
+            if "qwen" in lowered:
+                extra_params["reasoning_effort"] = "none"
+            elif any(marker in lowered for marker in ("gpt-oss", "deepseek-r1")):
                 extra_params["reasoning_effort"] = "low"
 
             # Syllabus parsing reserves a smaller output budget
             # (GROQ_SYLLABUS_MAX_OUTPUT_TOKENS) so input + output always fit
-            # inside the model's context window and a repetition loop cannot
-            # run away with the whole token budget.
-            effective_max_tokens = (
-                max_output_tokens
-                if max_output_tokens is not None
-                else settings.GROQ_MAX_TOKENS
-            )
-
+            # inside the model's context window.
             self.model = ChatGroq(
-                model=settings.GROQ_MODEL,
+                model=model_name,
                 api_key=api_key,
                 temperature=temperature,
-                max_tokens=effective_max_tokens,
+                max_tokens=(
+                    max_output_tokens
+                    if max_output_tokens is not None
+                    else settings.GROQ_MAX_TOKENS
+                ),
                 model_kwargs=model_kwargs,
                 **extra_params,
             )
             self._model_cache_key = cache_key
 
         return self.model
+
+    async def _ainvoke_text(
+        self,
+        messages: List[Any],
+        temperature: float,
+        json_mode: bool,
+    ) -> str:
+        """Invoke the model, falling back to alternate models when the
+        primary model hits its rate limit (e.g. tokens-per-day cap).
+        Returns the raw text output."""
+        attempted_rate_limit = False
+        candidates = [None] + [
+            m for m in self.FALLBACK_MODELS if m != settings.GROQ_MODEL
+        ]
+        last_error: Optional[Exception] = None
+
+        for idx, model_name in enumerate(candidates):
+            try:
+                model = self._get_model(
+                    temperature=temperature,
+                    json_mode=json_mode,
+                    model_name=model_name,
+                )
+                chain = model | self.parser
+                result = await chain.ainvoke(messages)
+                self._remember_model(model_name)
+                return result or ""
+            except Exception as e:  # noqa: BLE001
+                is_rate_limit = (
+                    "rate_limit_exceeded" in str(e) or "429" in str(e)
+                )
+                if idx == 0 and not is_rate_limit:
+                    # Primary model failing for a non-quota reason is a real
+                    # error - don't mask it with fallbacks.
+                    raise
+                last_error = e
+                attempted_rate_limit = True
+                logger.warning(
+                    "Model %s unavailable (%s); trying fallback...",
+                    model_name or settings.GROQ_MODEL,
+                    str(e)[:160],
+                )
+                continue
+
+        raise last_error  # type: ignore[misc]
+
+    def _remember_model(self, model_name: Optional[str]) -> None:
+        """Track which model produced output for logging/debugging."""
+        self.last_model_used = model_name or settings.GROQ_MODEL
 
     # ================================================================
     # JSON EXTRACTION
@@ -1302,63 +1357,157 @@ class LLMService:
         content: str,
         num_questions: int = 10,
         difficulty: str = "medium",
+        topics: Optional[List[str]] = None,
+        previous_questions: Optional[List[str]] = None,
     ) -> List[Dict[str, Any]]:
-        system_prompt = f"""
-You are an expert educational quiz generator.
+        """Generate MCQs grounded strictly in the provided (RAG-retrieved)
+        content. Returns validated questions whose ``correct_answer`` is the
+        verbatim text of the correct option."""
+        topics = topics or []
+        previous_questions = previous_questions or []
 
-Generate exactly {num_questions} multiple-choice questions from the provided content.
+        system_prompt = """
+You are an expert educational quiz generator for Mentora - AI Learning Companion.
 
-Difficulty: {difficulty}
+Generate high-quality multiple-choice questions strictly from the provided
+syllabus/retrieved content.
 
-IMPORTANT:
-- Questions must be based ONLY on the provided content.
-- Do not invent information.
+RULES:
+- Questions must be based ONLY on the provided content. Do not invent facts.
 - Each question must have exactly four options.
-- There must be one correct answer.
+- Exactly ONE option must be correct.
+- "correct_answer" MUST be the verbatim text of the correct option - never a
+  letter like "A" or "B".
+- Every question must include a short explanation of why the answer is right.
+- Do not repeat questions. Keep each question focused on ONE concept.
+- Preserve important technical terminology.
+- Mix conceptual understanding, application and recall - avoid trivially
+  obvious distractors.
 
-Each question must contain:
-- question_text
-- options
-- correct_answer
-- explanation
-
-Return ONLY a valid JSON array.
-
-Example:
+Return ONLY a valid JSON array:
 
 [
-  {{
-    "question_text": "Example question?",
-    "options": ["A", "B", "C", "D"],
-    "correct_answer": "A",
-    "explanation": "Explanation"
-  }}
+  {
+    "question_text": "...?",
+    "options": ["option1", "option2", "option3", "option4"],
+    "correct_answer": "<verbatim text of the correct option>",
+    "explanation": "...",
+    "difficulty": "easy|medium|hard"
+  }
 ]
 """
 
-        human_prompt = """
-Generate quiz questions from the following content:
-
-{content}
-"""
-
-        prompt = ChatPromptTemplate.from_messages(
-            [("system", system_prompt), ("human", human_prompt)]
+        human_parts = []
+        if topics:
+            human_parts.append(
+                "Focus topics:\n" + "\n".join(f"- {t}" for t in topics)
+            )
+        if previous_questions:
+            shown = "\n".join(f"- {q}" for q in previous_questions[:50])
+            human_parts.append(
+                "Previously asked questions (do NOT repeat them):\n" + shown
+            )
+        human_parts.append(
+            f"Generate {num_questions} multiple-choice questions "
+            f"(overall difficulty: {difficulty})."
+        )
+        human_parts.append(
+            "Retrieved Content (primary source of truth):\n"
+            + (content or "(no content retrieved)")
         )
 
-        model = self._get_model(temperature=0.2, json_mode=False)
-        chain = prompt | model | self.parser
-        result = await chain.ainvoke({"content": content})
+        messages = [
+            SystemMessage(content=system_prompt),
+            HumanMessage(content="\n\n".join(human_parts)),
+        ]
 
-        try:
-            cleaned = self._extract_json(result)
-            data = json.loads(cleaned)
-            if isinstance(data, list):
-                return data
-        except (json.JSONDecodeError, TypeError, ValueError):
-            logger.warning("LLM returned invalid JSON for quiz generation.")
+        last_result: str = ""
+        for attempt in range(2):
+            result = await self._ainvoke_text(messages, temperature=0.3, json_mode=True)
+            last_result = result or ""
+
+            try:
+                cleaned = self._extract_json(last_result)
+                data = json.loads(cleaned)
+                questions = self._validate_quiz_questions(
+                    data, num_questions=num_questions, difficulty=difficulty
+                )
+                if questions:
+                    return questions
+            except (json.JSONDecodeError, TypeError, ValueError):
+                pass
+
+            logger.warning(
+                "Quiz generation attempt %d returned no valid questions. "
+                "Raw output (first 500 chars): %s",
+                attempt + 1,
+                last_result[:500],
+            )
 
         return []
+
+    @staticmethod
+    def _validate_quiz_questions(
+        data: Any,
+        num_questions: int,
+        difficulty: str,
+    ) -> List[Dict[str, Any]]:
+        """Normalize and validate raw LLM quiz output."""
+        allowed_difficulties = {"easy", "medium", "hard"}
+        raw_questions = data if isinstance(data, list) else (
+            data.get("questions") if isinstance(data, dict) else None
+        )
+        if not isinstance(raw_questions, list):
+            return []
+
+        seen = set()
+        validated: List[Dict[str, Any]] = []
+
+        for raw in raw_questions:
+            if not isinstance(raw, dict):
+                continue
+            question_text = str(raw.get("question_text") or "").strip()
+            options_raw = raw.get("options")
+            if not question_text or not isinstance(options_raw, list):
+                continue
+
+            options = [str(o).strip() for o in options_raw if str(o).strip()]
+            if len(options) < 2:
+                continue
+            options = options[:4]
+
+            correct = str(raw.get("correct_answer") or "").strip()
+            if correct not in options:
+                # LLM returned a letter/index instead of the option text.
+                if len(correct) <= 2 and correct.isalpha():
+                    idx = ord(correct.upper()) - ord("A")
+                    if 0 <= idx < len(options):
+                        correct = options[idx]
+                else:
+                    # fuzzy: find the option containing the answer text
+                    match = next(
+                        (o for o in options if correct.lower() in o.lower()), ""
+                    )
+                    correct = match or options[0]
+
+            key = question_text.lower()
+            if key in seen:
+                continue
+            seen.add(key)
+
+            q_difficulty = str(raw.get("difficulty") or difficulty).strip().lower()
+            if q_difficulty not in allowed_difficulties:
+                q_difficulty = "medium"
+
+            validated.append({
+                "question_text": question_text,
+                "options": options,
+                "correct_answer": correct,
+                "explanation": str(raw.get("explanation") or "").strip(),
+                "difficulty": q_difficulty,
+            })
+
+        return validated[:num_questions]
 
     # ================================================================
     # FLASHCARDS
@@ -1366,49 +1515,227 @@ Generate quiz questions from the following content:
 
     async def generate_flashcards(
         self,
-        content: str,
-        num_cards: int = 10,
-    ) -> List[Dict[str, str]]:
-        system_prompt = f"""
-You are an expert flashcard creator.
+        retrieved_content: str,
+        subject: str = "",
+        unit: str = "",
+        topics: Optional[List[str]] = None,
+        student_level: str = "Bachelor",
+        weak_topics: Optional[List[str]] = None,
+        num_cards: Optional[int] = None,
+        previous_questions: Optional[List[str]] = None,
+    ) -> Dict[str, Any]:
+        """Flashcard Generation Engine.
 
-Create exactly {num_cards} useful educational flashcards from the provided content.
+        Generates exam-oriented flashcards strictly from the syllabus /
+        RAG-retrieved content, with a balanced mix of card types and a
+        30/50/20 easy/medium/hard difficulty distribution.
+        """
+        topics = topics or []
+        weak_topics = weak_topics or []
+        previous_questions = previous_questions or []
 
-IMPORTANT:
-- Use ONLY the provided content.
-- Do not invent information.
-- Do not add information from your own knowledge.
+        if not num_cards:
+            # Small topic -> 5, normal -> 10, large -> 15
+            content_len = len(retrieved_content or "")
+            if content_len < 1500:
+                num_cards = 5
+            elif content_len < 6000:
+                num_cards = 10
+            else:
+                num_cards = 15
 
-Each flashcard must contain:
-- front
-- back
+        system_prompt = """
+You are the Flashcard Generation Engine for Mentora - AI Learning Companion.
 
-Return ONLY a valid JSON array.
+Generate high-quality, exam-oriented flashcards strictly from the student's
+syllabus and retrieved study content.
+
+CORE RULES:
+- Generate flashcards ONLY from the provided syllabus and retrieved content.
+- Do NOT introduce unrelated concepts.
+- Do NOT generate generic textbook questions that are not supported by the content.
+- If the retrieved content is insufficient for a reliable flashcard, do not
+  invent information: return fewer flashcards instead.
+- The retrieved content is the primary source of truth. If it conflicts with
+  your general knowledge, prioritize the retrieved content.
+- Do not hallucinate missing syllabus topics.
+
+FLASHCARD TYPES (use a balanced combination):
+definition, concept, explanation, comparison, process, example,
+application, exam, recall, higher_order
+
+Avoid generating too many simple definition cards.
+
+DIFFICULTY DISTRIBUTION per batch:
+- 30% easy   : basic definitions and direct recall
+- 50% medium : conceptual understanding, comparisons, explanations, applications
+- 20% hard   : reasoning, scenario-based questions, relationships between concepts
+
+QUALITY RULES - every flashcard must:
+- Focus on ONE concept.
+- Have a clear, unambiguous question.
+- Have a concise but complete answer (usually 1-5 sentences; use bullet
+  points when listing multiple items).
+- Be understandable without extra context, in simple language.
+- Preserve important technical terminology.
+- Include formulas, steps, syntax, examples or key properties when they are
+  present in the source material.
+- Never duplicate another question.
+For comparison answers use a structured format:
+X:
+- ...
+Y:
+- ...
+
+OUTPUT FORMAT - return ONLY valid JSON with this exact structure:
+{
+  "subject": "...",
+  "unit": "...",
+  "topic": "...",
+  "flashcards": [
+    {
+      "id": 1,
+      "question": "...",
+      "answer": "...",
+      "type": "definition",
+      "difficulty": "easy",
+      "topic": "..."
+    }
+  ]
+}
+
+Every flashcard MUST contain: id, question, answer, type, difficulty, topic.
+Allowed types: definition, concept, explanation, comparison, process,
+example, application, exam, recall, higher_order.
+Allowed difficulties: easy, medium, hard.
+
+Before returning, verify: valid JSON, no duplicate questions, no
+hallucinated information, correct type/difficulty labels, answers supported
+by the retrieved content. Return ONLY the JSON object.
 """
 
-        human_prompt = """
-Generate flashcards from the following content:
-
-{content}
-"""
-
-        prompt = ChatPromptTemplate.from_messages(
-            [("system", system_prompt), ("human", human_prompt)]
+        human_parts = [f"Subject: {subject or 'Not specified'}"]
+        if unit:
+            human_parts.append(f"Unit: {unit}")
+        if topics:
+            human_parts.append("Topics:\n" + "\n".join(f"- {t}" for t in topics))
+        if weak_topics:
+            human_parts.append(
+                "Weak Topics (prioritize these with more conceptual, application "
+                "and exam-oriented cards):\n"
+                + "\n".join(f"- {t}" for t in weak_topics)
+            )
+        if previous_questions:
+            shown = "\n".join(f"- {q}" for q in previous_questions[:50])
+            human_parts.append(
+                "Previously generated flashcard questions (do NOT repeat them):\n" + shown
+            )
+        human_parts.append(f"Number of Flashcards: {num_cards}")
+        human_parts.append(f"Student Level: {student_level}")
+        human_parts.append(
+            "Retrieved Content (primary source of truth):\n"
+            + (retrieved_content or "(no content retrieved)")
         )
 
-        model = self._get_model(temperature=0.2, json_mode=False)
-        chain = prompt | model | self.parser
-        result = await chain.ainvoke({"content": content})
+        messages = [
+            SystemMessage(content=system_prompt),
+            HumanMessage(content="\n\n".join(human_parts)),
+        ]
 
-        try:
-            cleaned = self._extract_json(result)
-            data = json.loads(cleaned)
-            if isinstance(data, list):
-                return data
-        except (json.JSONDecodeError, TypeError, ValueError):
-            logger.warning("LLM returned invalid JSON for flashcards.")
+        last_result: str = ""
+        for attempt in range(2):
+            result = await self._ainvoke_text(messages, temperature=0.3, json_mode=True)
+            last_result = result or ""
 
-        return []
+            try:
+                cleaned = self._extract_json(last_result)
+                data = json.loads(cleaned)
+                cards = self._validate_flashcards(
+                    data, topics=topics, unit=unit, subject=subject, max_cards=num_cards
+                )
+                if cards:
+                    return {
+                        "subject": subject or data.get("subject", ""),
+                        "unit": unit or data.get("unit", ""),
+                        "topic": data.get("topic") or (topics[0] if topics else ""),
+                        "flashcards": cards,
+                    }
+            except (json.JSONDecodeError, TypeError, ValueError):
+                pass
+
+            logger.warning(
+                "Flashcard generation attempt %d returned no valid cards. "
+                "Raw output (first 500 chars): %s",
+                attempt + 1,
+                last_result[:500],
+            )
+
+        return {"subject": subject, "unit": unit, "topic": "", "flashcards": []}
+
+    @staticmethod
+    def _validate_flashcards(
+        data: Any,
+        topics: List[str],
+        unit: str,
+        subject: str,
+        max_cards: Optional[int],
+    ) -> List[Dict[str, Any]]:
+        """Normalize and validate raw LLM flashcard output."""
+        allowed_types = {
+            "definition", "concept", "explanation", "comparison", "process",
+            "example", "application", "exam", "recall", "higher_order",
+        }
+        allowed_difficulties = {"easy", "medium", "hard"}
+
+        if isinstance(data, list):
+            raw_cards = data
+        elif isinstance(data, dict):
+            raw_cards = data.get("flashcards")
+            if not isinstance(raw_cards, list):
+                return []
+        else:
+            return []
+
+        fallback_topic = topics[0] if topics else ""
+        seen_questions = set()
+        validated: List[Dict[str, Any]] = []
+
+        for raw in raw_cards:
+            if not isinstance(raw, dict):
+                continue
+            question = str(raw.get("question") or "").strip()
+            answer = str(raw.get("answer") or raw.get("back") or "").strip()
+            if not question or not answer:
+                continue
+
+            key = question.lower()
+            if key in seen_questions:
+                continue
+            seen_questions.add(key)
+
+            card_type = str(raw.get("type") or "concept").strip().lower()
+            if card_type not in allowed_types:
+                card_type = "concept"
+
+            difficulty = str(raw.get("difficulty") or "medium").strip().lower()
+            if difficulty not in allowed_difficulties:
+                difficulty = "medium"
+
+            validated.append({
+                "question": question,
+                "answer": answer,
+                "type": card_type,
+                "difficulty": difficulty,
+                "topic": str(raw.get("topic") or fallback_topic).strip(),
+            })
+
+        if max_cards:
+            validated = validated[:max_cards]
+
+        for i, card in enumerate(validated, start=1):
+            card["id"] = i
+
+        return validated
 
     # ================================================================
     # STUDY PLAN
@@ -1465,13 +1792,12 @@ End date: {end_date}
 
         last_result: str = ""
         for attempt in range(2):
-            model = self._get_model(temperature=0.3, json_mode=True)
-            chain = prompt | model | self.parser
-            result = await chain.ainvoke({
-                "text": json.dumps(syllabus_data, ensure_ascii=False, indent=2),
-                "start_date": start_date,
-                "end_date": end_date,
-            })
+            messages = prompt.format_messages(
+                text=json.dumps(syllabus_data, ensure_ascii=False, indent=2),
+                start_date=start_date,
+                end_date=end_date,
+            )
+            result = await self._ainvoke_text(messages, temperature=0.3, json_mode=True)
             last_result = result or ""
 
             try:
