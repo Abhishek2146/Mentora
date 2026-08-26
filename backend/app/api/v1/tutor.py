@@ -49,7 +49,7 @@ async def chat_with_tutor(
     return result
 
 
-@router.get("/sessions", response_model=List)
+@router.get("/sessions")
 async def get_sessions(
     db: AsyncSession = Depends(get_db),
     user_id: int = Depends(get_current_user_id),
@@ -60,7 +60,7 @@ async def get_sessions(
     return result.scalars().all()
 
 
-@router.get("/sessions/{session_id}/messages", response_model=List)
+@router.get("/sessions/{session_id}/messages")
 async def get_session_messages(
     session_id: int,
     db: AsyncSession = Depends(get_db),

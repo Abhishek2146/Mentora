@@ -16,7 +16,7 @@ router = APIRouter()
 progress_service = ProgressService()
 
 
-@router.get("/", response_model=List)
+@router.get("/")
 async def list_weak_topics(
     syllabus_id: Optional[int] = None,
     min_accuracy: Optional[float] = None,
@@ -32,7 +32,7 @@ async def list_weak_topics(
     return result.scalars().all()
 
 
-@router.post("/detect", response_model=List)
+@router.post("/detect")
 async def detect_weak_topics(
     syllabus_id: Optional[int] = None,
     db: AsyncSession = Depends(get_db),
@@ -41,7 +41,7 @@ async def detect_weak_topics(
     return await progress_service.detect_weak_topics(user_id, syllabus_id, db)
 
 
-@router.get("/{topic_id}", response_model=dict)
+@router.get("/{topic_id}")
 async def get_weak_topic(
     topic_id: int,
     db: AsyncSession = Depends(get_db),

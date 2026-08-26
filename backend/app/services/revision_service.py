@@ -56,18 +56,45 @@ class RevisionService:
             await db.commit()
             await db.refresh(schedule)
 
-            interval = 1
-            topics = schedule_data.get("items", [])
-            for item in topics[:20]:
-                scheduled_date = start_date + timedelta(days=interval)
+            items = schedule_data.get("items", [])
+            if not items:
+                # Fallback: derive topics directly from the syllabus so a
+                # plan is always generated, even when the LLM fails.
+                from app.services.quiz_service import extract_syllabus_topics
+
+                items = [
+                    {"topic": t, "difficulty": "medium"}
+                    for t in extract_syllabus_topics(syllabus_data, limit=20)
+                ]
+
+            # Spaced repetition: growing gaps of 1, 2, 3, 5, 8, ... days,
+            # capped at the schedule's end date when provided.
+            gap_pattern = [1, 1, 2, 3, 5, 5, 7]
+            day_offset = 0
+            for idx, item in enumerate(items[:30]):
+                topic_name = str(item.get("topic") or item.get("title") or "").strip()
+                if not topic_name:
+                    continue
+                day_offset += gap_pattern[min(idx, len(gap_pattern) - 1)]
+                scheduled_date = start_date + timedelta(days=day_offset)
+                if end_date and scheduled_date > end_date:
+                    scheduled_date = end_date
+
+                difficulty = str(item.get("difficulty") or "medium").lower()
+                priority = (
+                    "high" if difficulty == "hard"
+                    else "low" if difficulty == "easy"
+                    else "medium"
+                )
                 revision_item = RevisionItem(
                     schedule_id=schedule.id,
-                    topic_name=item.get("topic", ""),
+                    topic_name=topic_name[:255],
                     scheduled_date=scheduled_date,
+                    revision_method="review",
+                    priority=priority,
                     completed=False,
                 )
                 db.add(revision_item)
-                interval += 1 if interval < 7 else 0
 
             await db.commit()
 

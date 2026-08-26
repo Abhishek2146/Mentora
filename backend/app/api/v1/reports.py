@@ -18,7 +18,7 @@ router = APIRouter()
 report_service = ReportService()
 
 
-@router.get("/weekly", response_model=list)
+@router.get("/weekly")
 async def get_weekly_reports(
     limit: int = 12,
     db: AsyncSession = Depends(get_db),
@@ -34,7 +34,7 @@ async def get_weekly_reports(
     return result.scalars().all()
 
 
-@router.get("/weekly/{week_start}", response_model=dict)
+@router.get("/weekly/{week_start}")
 async def get_weekly_report(
     week_start: str,
     db: AsyncSession = Depends(get_db),
@@ -60,7 +60,6 @@ async def get_weekly_report(
 
 @router.post(
     "/generate-weekly",
-    response_model=dict,
     status_code=status.HTTP_201_CREATED,
 )
 async def generate_weekly_report(

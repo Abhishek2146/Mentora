@@ -11,6 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
 from app.core.auth import get_current_user_id
+from app.core.logger import get_logger
 from app.core.quotas import QuotaContext, record_usage, require_ai_quota
 from app.database.database import get_db
 from app.models.quiz import Quiz, Question, QuizAttempt
@@ -25,9 +26,20 @@ from app.schemas.quiz import (
     QuestionOut,
 )
 from app.services.quiz_service import QuizService
+from app.services.progress_service import ProgressService
 
 router = APIRouter()
 quiz_service = QuizService()
+progress_service = ProgressService()
+logger = get_logger(__name__)
+
+
+async def _refresh_weak_topics(user_id: int, db: AsyncSession) -> None:
+    """Best-effort weak-topic refresh so analytics pages stay current."""
+    try:
+        await progress_service.detect_weak_topics(user_id, None, db)
+    except Exception:  # noqa: BLE001
+        logger.warning("Weak-topic refresh failed for user %s", user_id, exc_info=True)
 
 
 class GenerateMCQRequest(BaseModel):
@@ -122,7 +134,7 @@ async def submit_quiz(
 ):
     """Grade a submitted quiz attempt and save it."""
     try:
-        return await quiz_service.submit_quiz(
+        result = await quiz_service.submit_quiz(
             quiz_id=quiz_id,
             user_id=user_id,
             answers=body.answers,
@@ -131,6 +143,9 @@ async def submit_quiz(
         )
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+    await _refresh_weak_topics(user_id, db)
+    return result
 
 
 
@@ -244,6 +259,8 @@ async def submit_attempt(
     db.add(attempt)
     await db.commit()
     await db.refresh(attempt)
+
+    await _refresh_weak_topics(user_id, db)
 
     return {
         "id": attempt.id,
