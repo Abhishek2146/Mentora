@@ -19,7 +19,7 @@ router = APIRouter()
 analytics_service = AnalyticsService()
 
 
-@router.get("/", response_model=dict)
+@router.get("/")
 async def get_dashboard(
     db: AsyncSession = Depends(get_db),
     user_id: int = Depends(get_current_user_id),

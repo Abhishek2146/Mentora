@@ -329,7 +329,7 @@ async def analyze_syllabus(
     return syllabus
 
 
-@router.get("/{syllabus_id}/subjects", response_model=List)
+@router.get("/{syllabus_id}/subjects")
 async def get_syllabus_subjects(
     syllabus_id: int,
     db: AsyncSession = Depends(get_db),

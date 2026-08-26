@@ -60,7 +60,7 @@ async def voice_learning(
     return result
 
 
-@router.post("/speak", response_model=dict)
+@router.post("/speak")
 async def text_to_speech(
     text: str,
     voice: str = "default",
@@ -78,7 +78,7 @@ async def text_to_speech(
     }
 
 
-@router.get("/sessions", response_model=list)
+@router.get("/sessions")
 async def get_voice_sessions(
     db: AsyncSession = Depends(get_db),
     user_id: int = Depends(get_current_user_id),

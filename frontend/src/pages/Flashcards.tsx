@@ -54,7 +54,12 @@ export default function Flashcards() {
       setSessionStats({ correct: 0, incorrect: 0 });
       await loadCards();
     } catch (e: any) {
-      setError(e?.response?.data?.detail || "Failed to generate flashcards");
+      const detail = e?.response?.data?.detail;
+      setError(
+        typeof detail === "string" && detail
+          ? detail
+          : e?.message || "Failed to generate flashcards"
+      );
     } finally {
       setGenerating(false);
     }

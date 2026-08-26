@@ -1899,19 +1899,20 @@ For each weak topic return:
 - topic_name
 - accuracy
 - confidence_level
+- total_attempts
 - recommended_action
 
 Return ONLY a valid JSON array.
 """
 
         human_prompt = """
+Quiz results:
+
+{quiz_results}
+
 Syllabus:
 
 {text}
-
-Start date: {start_date}
-
-End date: {end_date}
 """
 
         prompt = ChatPromptTemplate.from_messages(
@@ -1921,9 +1922,8 @@ End date: {end_date}
         model = self._get_model(temperature=0.3, json_mode=False)
         chain = prompt | model | self.parser
         result = await chain.ainvoke({
+            "quiz_results": json.dumps(quiz_results, ensure_ascii=False, indent=2),
             "text": json.dumps(syllabus_data, ensure_ascii=False, indent=2),
-            "start_date": start_date,
-            "end_date": end_date,
         })
 
         try:

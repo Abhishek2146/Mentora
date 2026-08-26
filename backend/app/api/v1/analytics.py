@@ -29,7 +29,7 @@ async def get_dashboard_analytics(
     return await analytics_service.get_dashboard_analytics(user_id, db)
 
 
-@router.get("/study-time", response_model=List)
+@router.get("/study-time")
 async def get_study_time_trend(
     days: int = 30,
     db: AsyncSession = Depends(get_db),
@@ -38,7 +38,7 @@ async def get_study_time_trend(
     return await analytics_service.get_study_time_trend(user_id, days, db)
 
 
-@router.get("/quiz-performance", response_model=List)
+@router.get("/quiz-performance")
 async def get_quiz_performance(
     db: AsyncSession = Depends(get_db),
     user_id: int = Depends(get_current_user_id),
@@ -46,7 +46,7 @@ async def get_quiz_performance(
     return await analytics_service.get_quiz_performance(user_id, db)
 
 
-@router.get("/subject-breakdown", response_model=List)
+@router.get("/subject-breakdown")
 async def get_subject_breakdown(
     db: AsyncSession = Depends(get_db),
     user_id: int = Depends(get_current_user_id),
@@ -54,7 +54,7 @@ async def get_subject_breakdown(
     return await analytics_service.get_subject_breakdown(user_id, db)
 
 
-@router.get("/activity", response_model=List)
+@router.get("/activity")
 async def get_activity_log(
     limit: int = 50,
     db: AsyncSession = Depends(get_db),

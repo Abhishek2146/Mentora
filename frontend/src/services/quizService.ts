@@ -2,12 +2,18 @@ import apiClient from "@/lib/api";
 
 export const quizService = {
   async getDailyQuiz(count = 5) {
-    const res = await apiClient.get(`/api/v1/quizzes/daily?count=${count}`);
+    const res = await apiClient.get(`/api/v1/quizzes/daily?count=${count}`, {
+      timeout: 300000,
+    });
     return res.data;
   },
 
   async generateMCQ(topic: string, difficulty: string, count = 5) {
-    const res = await apiClient.post("/api/v1/quizzes/generate-mcq", { topic, difficulty, count });
+    const res = await apiClient.post(
+      "/api/v1/quizzes/generate-mcq",
+      { topic, difficulty, count },
+      { timeout: 300000 }
+    );
     return res.data;
   },
 

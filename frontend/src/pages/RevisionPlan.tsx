@@ -37,30 +37,35 @@ export default function RevisionPlan() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [completingId, setCompletingId] = useState<number | null>(null);
+  const [generating, setGenerating] = useState(false);
+
+  const loadItems = async () => {
+    const schedulesRes = await apiClient.get("/api/v1/revision/schedules");
+    const schedules = schedulesRes.data ?? [];
+
+    const details = await Promise.all(
+      schedules.map((s: { id: number; title: string }) =>
+        apiClient
+          .get(`/api/v1/revision/schedules/${s.id}`)
+          .then(res => ({
+            title: s.title,
+            items: (res.data?.items ?? []) as RevisionItem[],
+          }))
+          .catch(() => ({ title: s.title, items: [] as RevisionItem[] }))
+      )
+    );
+
+    setItems(
+      details.flatMap((d: { title: string; items: RevisionItem[] }) =>
+        d.items.map(item => ({ ...item, schedule_title: d.title }))
+      )
+    );
+  };
 
   useEffect(() => {
     (async () => {
       try {
-        const schedulesRes = await apiClient.get("/api/v1/revision/schedules");
-        const schedules = schedulesRes.data ?? [];
-
-        const details = await Promise.all(
-          schedules.map((s: { id: number; title: string }) =>
-            apiClient
-              .get(`/api/v1/revision/schedules/${s.id}`)
-              .then(res => ({
-                title: s.title,
-                items: (res.data?.items ?? []) as RevisionItem[],
-              }))
-              .catch(() => ({ title: s.title, items: [] as RevisionItem[] }))
-          )
-        );
-
-        setItems(
-          details.flatMap((d: { title: string; items: RevisionItem[] }) =>
-            d.items.map(item => ({ ...item, schedule_title: d.title }))
-          )
-        );
+        await loadItems();
       } catch {
         setError("Could not load your revision plan. Please try again later.");
       } finally {
@@ -68,6 +73,43 @@ export default function RevisionPlan() {
       }
     })();
   }, []);
+
+  const generatePlan = async () => {
+    setGenerating(true);
+    setError("");
+    try {
+      const syllabusRes = await apiClient.get("/api/v1/syllabus/");
+      const syllabi = [...(syllabusRes.data ?? [])].sort(
+        (a: any, b: any) =>
+          new Date(b.created_at ?? 0).getTime() - new Date(a.created_at ?? 0).getTime()
+      );
+      if (!syllabi.length) {
+        setError("Upload a syllabus first to generate a revision plan.");
+        return;
+      }
+      const start = new Date();
+      const end = new Date();
+      end.setDate(end.getDate() + 13);
+      await apiClient.post("/api/v1/revision/schedule", null, {
+        params: {
+          syllabus_id: syllabi[0].id,
+          start_date: start.toISOString().slice(0, 10),
+          end_date: end.toISOString().slice(0, 10),
+        },
+        timeout: 300000,
+      });
+      await loadItems();
+    } catch (e: any) {
+      const detail = e?.response?.data?.detail;
+      setError(
+        typeof detail === "string" && detail
+          ? detail
+          : e?.message || "Failed to generate the revision plan"
+      );
+    } finally {
+      setGenerating(false);
+    }
+  };
 
   const markComplete = async (id: number) => {
     setCompletingId(id);
@@ -105,6 +147,12 @@ export default function RevisionPlan() {
         {!loading && error && (
           <div className="card p-5 text-sm text-danger-600 dark:text-danger-400">{error}</div>
         )}
+
+        <div className="flex justify-end">
+          <button className="btn-primary btn-sm" disabled={generating} onClick={generatePlan}>
+            {generating ? "Generating..." : "Generate Plan"}
+          </button>
+        </div>
 
         {!loading && !error && sorted.length === 0 && (
           <div className="card p-8 text-center">
