@@ -8,13 +8,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 
 from app.core.logger import get_logger
-from app.models.quiz import QuizAttempt
+from app.models.quiz import QuizAttempt, Quiz
 from app.models.study_plan import StudyTask, StudyPlan
 from app.models.coding_problem import CodingSubmission
 from app.models.progress import Progress, WeakTopic
 from app.models.flashcard import FlashcardDeck, Flashcard
 from app.models.syllabus import Syllabus, Subject, Chapter
 from app.schemas.common import ResponseModel
+from app.services.progress_service import ProgressService
 
 logger = get_logger(__name__)
 
@@ -23,6 +24,9 @@ MASTERY_THRESHOLD = 75.0
 
 
 class AnalyticsService:
+    def __init__(self):
+        self.progress_service = ProgressService()
+
     async def get_dashboard_stats(self, user_id: int, db: AsyncSession) -> dict:
         """Compute real stats for the frontend dashboard cards (with weekly deltas)."""
         now = datetime.utcnow()
@@ -151,7 +155,6 @@ class AnalyticsService:
             "tasks_due_today": tasks_due_today,
         }
 
-
     async def get_dashboard_analytics(self, user_id: int, db: AsyncSession) -> ResponseModel:
         """Get dashboard analytics summary."""
         total_attempts_result = await db.execute(
@@ -166,7 +169,7 @@ class AnalyticsService:
 
         coding_result = await db.execute(
             select(func.count(CodingSubmission.id))
-            .where(CodingSubmission.user_id == user_id, CodingSubmission.status == "passed")
+            .where(CodingSubmission.user_id == user_id, CodingSubmission.total_tests_cases > 0, CodingSubmission.passed_tests_cases == CodingSubmission.total_tests_cases)
         )
         coding_solved = coding_result.scalar() or 0
 
@@ -180,12 +183,20 @@ class AnalyticsService:
         )
         weak_topics_count = weak_topics_result.scalar() or 0
 
+        top_weak_topics = await self.progress_service.get_top_weak_topics(
+            user_id=user_id, db=db, limit=5
+        )
+
         data = {
             "total_quizzes_taken": total_quizzes,
             "avg_quiz_score": float(avg_score),
             "coding_problems_solved": coding_solved,
             "overall_progress": progress.value if progress else 0.0,
             "weak_topics_count": weak_topics_count,
+            "weak_topics": [
+                {"topic_name": wt.topic_name, "accuracy": wt.accuracy}
+                for wt in top_weak_topics
+            ],
         }
 
         return ResponseModel(success=True, data=data, message="Dashboard analytics retrieved")
@@ -225,15 +236,27 @@ class AnalyticsService:
         """Get performance breakdown by subject."""
         result = await db.execute(
             select(
-                QuizAttempt.quiz_id,
+                Subject.id.label("subject_id"),
+                Subject.name.label("subject_name"),
                 func.avg(QuizAttempt.score).label("avg_score"),
                 func.count(QuizAttempt.id).label("attempts"),
             )
+            .select_from(QuizAttempt)
+            .join(Quiz, QuizAttempt.quiz_id == Quiz.id)
+            .join(Subject, Quiz.subject_id == Subject.id)
             .where(QuizAttempt.user_id == user_id)
-            .group_by(QuizAttempt.quiz_id)
+            .group_by(Subject.id, Subject.name)
         )
 
-        return [{"quiz_id": row.quiz_id, "avg_score": float(row.avg_score), "attempts": row.attempts} for row in result.fetchall()]
+        return [
+            {
+                "subject_id": row.subject_id,
+                "subject_name": row.subject_name,
+                "avg_score": float(row.avg_score),
+                "attempts": row.attempts,
+            }
+            for row in result.fetchall()
+        ]
 
     async def get_activity_log(self, user_id: int, limit: int, db: AsyncSession) -> List[dict]:
         """Get user activity log."""

@@ -83,6 +83,14 @@ async def submit_code(
 
     result = await coding_service.execute_code(problem_id, submission_data.code, submission_data.language)
 
+    # coding_service.execute_code only reports overall pass/fail from the
+    # program's exit code - it does not grade against CodingProblem's
+    # individual test_cases. That's a separate, larger gap in the grading
+    # logic (out of scope here); this just maps the overall result onto
+    # the real CodingSubmission columns instead of the nonexistent
+    # passed/memory_used ones that were crashing every submission.
+    passed = bool(result.get("passed"))
+
     submission = CodingSubmission(
         user_id=user_id,
         problem_id=problem_id,
@@ -90,9 +98,11 @@ async def submit_code(
         language=submission_data.language,
         status=result["status"],
         output=result["output"],
-        passed=result["passed"],
-        execution_time=result["execution_time"],
-        memory_used=result["memory_used"],
+        score=100 if passed else 0,
+        passed_test_cases=1 if passed else 0,
+        total_test_cases=1,
+        execution_time=result.get("execution_time"),
+        error_message=result["output"] if result["status"] in ("error", "timeout") else None,
     )
     db.add(submission)
     await db.commit()

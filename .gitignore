@@ -44,3 +44,10 @@ backend/uploads/
 .DS_Store
 Thumbs.db
 *.pem
+
+# Chroma DB
+backend/chromadb/
+
+# Test scripts
+test_*.py
+check_db.py
