@@ -11,8 +11,10 @@ from sqlalchemy import select, or_
 from sqlalchemy.orm import selectinload
 
 from app.core.auth import get_current_user_id
+from app.core.quotas import QuotaContext, record_usage, require_ai_quota
 from app.database.database import get_db
 from app.models.flashcard import FlashcardDeck, Flashcard
+from app.models.subscription import UsageType
 from app.models.syllabus import Syllabus
 from app.schemas.flashcard import FlashcardDeckCreate, FlashcardDeckOut, FlashcardOut
 from app.services.flashcard_service import FlashcardService
@@ -37,6 +39,53 @@ class RatingRequest(BaseModel):
         return {"again": 1, "hard": 3, "good": 4, "easy": 5}.get(
             self.rating.strip().lower(), 4
         )
+
+
+@router.post(
+    "/generate",
+    response_model=FlashcardDeckOut,
+    status_code=status.HTTP_201_CREATED,
+)
+async def generate_flashcards(
+    payload: GenerateFlashcardsRequest,
+    db: AsyncSession = Depends(get_db),
+    user_id: int = Depends(get_current_user_id),
+    quota: QuotaContext = Depends(
+        require_ai_quota(UsageType.FLASHCARD_GENERATION)
+    ),
+):
+    """AI-generate a flashcard deck from a syllabus (RAG-grounded)."""
+    if not payload.syllabus_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="syllabus_id is required",
+        )
+
+    try:
+        deck = await flashcard_service.generate_flashcards(
+            user_id=user_id,
+            syllabus_id=payload.syllabus_id,
+            num_cards=payload.count,
+            unit=payload.unit or "",
+            topics=[payload.topic] if payload.topic else None,
+            student_level=payload.student_level,
+            db=db,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        )
+
+    # Usage is recorded only after generation succeeded.
+    await record_usage(db, user_id, UsageType.FLASHCARD_GENERATION)
+
+    result = await db.execute(
+        select(FlashcardDeck)
+        .options(selectinload(FlashcardDeck.flashcards))
+        .where(FlashcardDeck.id == deck.id)
+    )
+    return result.scalars().first()
 
 
 @router.post("/", response_model=FlashcardDeckOut, status_code=status.HTTP_201_CREATED)
@@ -109,7 +158,51 @@ async def get_due_flashcards(
     return await flashcard_service.get_due_flashcards(deck_id, db)
 
 
-    flashcard_service.update_flashcard_schedule(card, body.score)
+@router.get("/review/all", response_model=List[FlashcardOut])
+async def get_all_due_for_review(
+    topic: Optional[str] = None,
+    db: AsyncSession = Depends(get_db),
+    user_id: int = Depends(get_current_user_id),
+):
+    """Due-for-review cards across all of the user's decks."""
+    query = (
+        select(Flashcard)
+        .join(FlashcardDeck, Flashcard.deck_id == FlashcardDeck.id)
+        .where(
+            FlashcardDeck.user_id == user_id,
+            or_(
+                Flashcard.next_review.is_(None),
+                Flashcard.next_review <= datetime.utcnow().isoformat(),
+            ),
+        )
+        .order_by(Flashcard.next_review.isnot(None), Flashcard.id)
+    )
+    result = await db.execute(query)
+    return result.scalars().all()
+
+
+@router.post("/{flashcard_id}/rating", response_model=FlashcardOut)
+async def rate_flashcard(
+    flashcard_id: int,
+    body: RatingRequest,
+    db: AsyncSession = Depends(get_db),
+    user_id: int = Depends(get_current_user_id),
+):
+    """Record a spaced-repetition rating ("Again"/"Hard"/"Good"/"Easy")."""
+    result = await db.execute(
+        select(Flashcard)
+        .join(FlashcardDeck, Flashcard.deck_id == FlashcardDeck.id)
+        .where(Flashcard.id == flashcard_id, FlashcardDeck.user_id == user_id)
+    )
+    card = result.scalars().first()
+    if not card:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Flashcard not found")
+
+    try:
+        flashcard_service.update_flashcard_schedule(card, body.score)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc))
+
     db.add(card)
     await db.commit()
     await db.refresh(card)
