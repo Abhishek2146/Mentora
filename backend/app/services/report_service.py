@@ -1,116 +1,213 @@
 """
-Report Service - generates weekly and analytical reports.
+Revision & Report Services
 """
 from datetime import datetime, timedelta
+from typing import Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, case
+from sqlalchemy import select, func
 
 from app.core.logger import get_logger
-from app.models.chat_history import WeeklyReport
-from app.models.quiz import QuizAttempt
-from app.models.coding_problem import CodingSubmission
-from app.models.study_plan import StudyTask, StudyPlan
-from app.models.flashcard import Flashcard
+from app.models.revision import RevisionSchedule, RevisionItem
+from app.models.syllabus import Syllabus
+from app.models.chat_history import WeeklyReport, ChatSession, ChatMessage
+from app.services.llm_service import LLMService
+from app.services.progress_service import ProgressService
 
 logger = get_logger(__name__)
 
 
+class RevisionService:
+    def __init__(self):
+        self.llm_service = LLMService()
+        self.progress_service = ProgressService()
+
+    async def generate_revision_schedule(
+        self,
+        user_id: int,
+        syllabus_id: int,
+        start_date: datetime,
+        end_date: Optional[datetime] = None,
+        db: AsyncSession = None,
+    ) -> dict:
+        """Generate a spaced repetition revision schedule."""
+        syllabus_result = await db.execute(
+            select(Syllabus).where(Syllabus.id == syllabus_id, Syllabus.user_id == user_id)
+        )
+        syllabus = syllabus_result.scalars().first()
+        if not syllabus:
+            raise ValueError("Syllabus not found")
+
+        syllabus_data = syllabus.parsed_data or {"subjects": []}
+
+        schedule_data = await self.llm_service.generate_revision_schedule(
+            syllabus_data=syllabus_data,
+            start_date=start_date.isoformat(),
+            end_date=end_date.isoformat() if end_date else None,
+        )
+
+        # Pull the student's weak topics (reusing the same helper the AI
+        # Tutor uses for personalization) so revision prioritizes topics
+        # they've actually struggled with, not just a generic spaced
+        # repetition pass over the whole syllabus.
+        weak_topics = await self.progress_service.get_top_weak_topics(
+            user_id=user_id, db=db, syllabus_id=syllabus_id, limit=5
+        )
+        weak_topic_accuracy = {
+            wt.topic_name.strip().lower(): wt.accuracy for wt in weak_topics
+        }
+
+        schedule = RevisionSchedule(
+            user_id=user_id,
+            syllabus_id=syllabus_id,
+            title=f"Revision Plan - {start_date.strftime('%Y-%m-%d')}",
+            start_date=start_date,
+            end_date=end_date,
+        )
+
+        if db:
+            db.add(schedule)
+            await db.commit()
+            await db.refresh(schedule)
+
+            interval = 1
+            topics = schedule_data.get("items", [])
+            covered = set()
+
+            for item in topics[:20]:
+                topic_name = item.get("topic", "")
+                key = topic_name.strip().lower()
+                is_weak = key in weak_topic_accuracy
+
+                # Weak topics get scheduled immediately (day 1) instead of
+                # waiting their turn in the generic spaced-repetition order.
+                scheduled_date = start_date + timedelta(days=1 if is_weak else interval)
+
+                revision_item = RevisionItem(
+                    schedule_id=schedule.id,
+                    topic_name=topic_name,
+                    scheduled_date=scheduled_date,
+                    completed=False,
+                    priority="high" if is_weak else "medium",
+                    is_ai_recommended=is_weak,
+                    recommendation=(
+                        f"Prioritized: you scored {weak_topic_accuracy[key]:.0f}% "
+                        "on quizzes for this topic."
+                        if is_weak
+                        else None
+                    ),
+                )
+                db.add(revision_item)
+                covered.add(key)
+                interval += 1 if interval < 7 else 0
+
+            # If a weak topic wasn't picked up by the LLM-generated
+            # schedule at all (e.g. it grouped/renamed topics), still add
+            # it explicitly so it isn't silently dropped from revision.
+            for wt in weak_topics:
+                key = wt.topic_name.strip().lower()
+                if key in covered:
+                    continue
+                db.add(
+                    RevisionItem(
+                        schedule_id=schedule.id,
+                        topic_name=wt.topic_name,
+                        scheduled_date=start_date + timedelta(days=1),
+                        completed=False,
+                        priority="high",
+                        is_ai_recommended=True,
+                        recommendation=(
+                            f"Prioritized: you scored {wt.accuracy:.0f}% "
+                            "on quizzes for this topic."
+                        ),
+                    )
+                )
+                covered.add(key)
+
+            await db.commit()
+
+        return {"schedule": schedule, "schedule_data": schedule_data}
+
+
+    async def get_due_items(self, user_id: int, db: AsyncSession) -> list:
+        """Get revision items that are due today."""
+        today = datetime.utcnow().date()
+        result = await db.execute(
+            select(RevisionItem)
+            .join(RevisionSchedule)
+            .where(
+                RevisionSchedule.user_id == user_id,
+                RevisionItem.completed == False,
+                RevisionItem.scheduled_date <= today,
+            )
+        )
+        return result.scalars().all()
+
+
 class ReportService:
+    def __init__(self):
+        self.llm_service = LLMService()
+
     async def generate_weekly_report(self, user_id: int, db: AsyncSession) -> dict:
-        now = datetime.utcnow()
-        week_start = (now - timedelta(days=now.weekday())).replace(
-            hour=0, minute=0, second=0, microsecond=0
-        )
-        week_end = week_start + timedelta(days=7)
+        """Generate a weekly study report for the user."""
+        today = datetime.utcnow().date()
+        week_start = today - timedelta(days=today.weekday())
+        week_end = week_start + timedelta(days=6)
 
-        quiz_result = await db.execute(
-            select(
-                func.count(QuizAttempt.id).label("quizzes_taken"),
-                func.sum(case((QuizAttempt.is_passed.is_(True), 1), else_=0)).label("quizzes_passed"),
-                func.avg(QuizAttempt.score).label("avg_score"),
-                func.coalesce(func.sum(QuizAttempt.time_taken), 0).label("quiz_time"),
-            ).where(
-                QuizAttempt.user_id == user_id,
-                QuizAttempt.created_at >= week_start,
-                QuizAttempt.created_at < week_end,
-            )
-        )
-        quiz_stats = quiz_result.one()
-
-        coding_result = await db.execute(
-            select(func.count(CodingSubmission.id).label("problems_solved")).where(
-                CodingSubmission.user_id == user_id,
-                CodingSubmission.created_at >= week_start,
-                CodingSubmission.created_at < week_end,
-                CodingSubmission.status == "passed",
-            )
-        )
-        coding_stats = coding_result.one()
-
-        tasks_result = await db.execute(
-            select(func.count(StudyTask.id).label("tasks_completed"))
-            .join(StudyPlan, StudyTask.study_plan_id == StudyPlan.id)
+        # Get study sessions from this week
+        sessions_result = await db.execute(
+            select(ChatSession)
+            .join(ChatMessage)
             .where(
-                StudyPlan.user_id == user_id,
-                StudyTask.completed.is_(True),
-                StudyTask.updated_at >= week_start,
-                StudyTask.updated_at < week_end,
+                ChatSession.user_id == user_id,
+                ChatMessage.created_at >= datetime.combine(week_start, datetime.min.time()),
+                ChatMessage.created_at <= datetime.combine(week_end, datetime.max.time()),
             )
+            .distinct()
         )
-        task_stats = tasks_result.one()
+        sessions = sessions_result.scalars().all()
 
-        # Flashcards belong to users through their deck.
-        from app.models.flashcard import FlashcardDeck
-        flashcard_result = await db.execute(
-            select(func.count(Flashcard.id))
-            .join(FlashcardDeck, Flashcard.deck_id == FlashcardDeck.id)
+        # Count messages as proxy for study time
+        messages_result = await db.execute(
+            select(func.count(ChatMessage.id))
+            .join(ChatSession)
             .where(
-                FlashcardDeck.user_id == user_id,
-                Flashcard.last_reviewed.is_not(None),
-                Flashcard.last_reviewed >= week_start.isoformat(),
-                Flashcard.last_reviewed < week_end.isoformat(),
+                ChatSession.user_id == user_id,
+                ChatMessage.created_at >= datetime.combine(week_start, datetime.min.time()),
+                ChatMessage.created_at <= datetime.combine(week_end, datetime.max.time()),
             )
         )
-        flashcards_reviewed = flashcard_result.scalar_one()
+        message_count = messages_result.scalar() or 0
+        study_time_minutes = message_count * 2  # Rough estimate
 
-        avg_score = float(quiz_stats.avg_score or 0.0)
+        # Get topics studied from chat sessions
+        topics = []
+        for session in sessions:
+            if session.title:
+                topics.append(session.title)
+
+        # Create the report
         report = WeeklyReport(
             user_id=user_id,
-            week_start=week_start.strftime("%Y-%m-%d"),
-            week_end=(week_end - timedelta(days=1)).strftime("%Y-%m-%d"),
-            study_time_minutes=int(quiz_stats.quiz_time or 0) // 60,
-            quizzes_taken=int(quiz_stats.quizzes_taken or 0),
-            quizzes_passed=int(quiz_stats.quizzes_passed or 0),
-            flashcards_reviewed=flashcards_reviewed,
-            coding_problems_solved=int(coding_stats.problems_solved or 0),
-            report_data=(
-                f"Weekly report for {week_start:%Y-%m-%d} to "
-                f"{week_end - timedelta(days=1):%Y-%m-%d}. "
-                f"Average quiz score: {avg_score:.1f}%."
-            ),
+            week_start=week_start.isoformat(),
+            week_end=week_end.isoformat(),
+            study_time_minutes=study_time_minutes,
+            topics_studied=",".join(topics[:10]) if topics else None,
+            quizzes_taken=0,
+            quizzes_passed=0,
+            flashcards_reviewed=0,
+            coding_problems_solved=0,
+            report_data=None,
         )
+
         db.add(report)
         await db.commit()
         await db.refresh(report)
 
         return {
-            "report": report,
-            "summary": {
-                "quizzes_taken": int(quiz_stats.quizzes_taken or 0),
-                "quizzes_passed": int(quiz_stats.quizzes_passed or 0),
-                "avg_score": avg_score,
-                "coding_solved": int(coding_stats.problems_solved or 0),
-                "tasks_completed": int(task_stats.tasks_completed or 0),
-                "flashcards_reviewed": flashcards_reviewed,
-            },
+            "id": report.id,
+            "week_start": report.week_start,
+            "week_end": report.week_end,
+            "study_time_minutes": report.study_time_minutes,
+            "topics_studied": topics[:10],
         }
-
-    async def get_reports(self, user_id: int, limit: int, db: AsyncSession) -> list:
-        result = await db.execute(
-            select(WeeklyReport)
-            .where(WeeklyReport.user_id == user_id)
-            .order_by(WeeklyReport.week_start.desc())
-            .limit(limit)
-        )
-        return result.scalars().all()

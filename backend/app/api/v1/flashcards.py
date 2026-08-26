@@ -1,21 +1,42 @@
 """
 Flashcards API endpoints
 """
+from datetime import datetime
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, or_
 from sqlalchemy.orm import selectinload
 
 from app.core.auth import get_current_user_id
 from app.database.database import get_db
 from app.models.flashcard import FlashcardDeck, Flashcard
+from app.models.syllabus import Syllabus
 from app.schemas.flashcard import FlashcardDeckCreate, FlashcardDeckOut, FlashcardOut
 from app.services.flashcard_service import FlashcardService
 
 router = APIRouter()
 flashcard_service = FlashcardService()
+
+
+class GenerateFlashcardsRequest(BaseModel):
+    topic: Optional[str] = None
+    syllabus_id: Optional[int] = None
+    unit: Optional[str] = None
+    count: int = Field(10, ge=1, le=30)
+    student_level: str = "Bachelor"
+
+
+class RatingRequest(BaseModel):
+    rating: str  # "Again" | "Hard" | "Good" | "Easy"
+
+    @property
+    def score(self) -> int:
+        return {"again": 1, "hard": 3, "good": 4, "easy": 5}.get(
+            self.rating.strip().lower(), 4
+        )
 
 
 @router.post("/", response_model=FlashcardDeckOut, status_code=status.HTTP_201_CREATED)
@@ -86,6 +107,13 @@ async def get_due_flashcards(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Flashcard deck not found")
 
     return await flashcard_service.get_due_flashcards(deck_id, db)
+
+
+    flashcard_service.update_flashcard_schedule(card, body.score)
+    db.add(card)
+    await db.commit()
+    await db.refresh(card)
+    return card
 
 
 @router.post("/{deck_id}/flashcards/{flashcard_id}/review", response_model=FlashcardOut)

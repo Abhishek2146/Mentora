@@ -1,49 +1,119 @@
 import { useState, useEffect } from "react";
 import AppLayout from "@/components/layout/AppLayout";
-import { CheckCircle2, XCircle, ChevronRight, Trophy } from "lucide-react";
+import { CheckCircle2, XCircle, ChevronRight, Trophy, Loader2, RefreshCw } from "lucide-react";
 import { quizService } from "@/services/quizService";
 
 export default function DailyQuiz() {
+  const [quizId, setQuizId] = useState<number | null>(null);
   const [questions, setQuestions] = useState<any[]>([]);
   const [current, setCurrent] = useState(0);
   const [selected, setSelected] = useState<string | null>(null);
-  const [answers, setAnswers] = useState<string[]>([]);
+  const [answers, setAnswers] = useState<{ question_id: number; selected: string }[]>([]);
+  const [result, setResult] = useState<any>(null);
   const [done, setDone] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [startedAt, setStartedAt] = useState<number>(Date.now());
 
-  useEffect(() => { quizService.getDailyQuiz().then(d => { setQuestions(d); setLoading(false); }); }, []);
+  async function loadQuiz() {
+    setLoading(true);
+    setError(null);
+    try {
+      const d = await quizService.getDailyQuiz();
+      setQuizId(d.quiz_id ?? null);
+      setQuestions(d.questions || []);
+      setCurrent(0);
+      setSelected(null);
+      setAnswers([]);
+      setDone(false);
+      setResult(null);
+      setStartedAt(Date.now());
+    } catch (e: any) {
+      setError(e?.response?.data?.detail || "Could not load today's quiz. Upload a syllabus first.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => { loadQuiz(); }, []);
 
   const q = questions[current];
-  const correct = answers.filter((a, i) => a === questions[i]?.correct_answer).length;
+  const correctCount = result ? result.correct : answers.filter((a) =>
+    questions.some((qq) => qq.id === a.question_id && qq.correct_answer === a.selected)
+  ).length;
 
-  const next = () => {
-    if (!selected) return;
-    setAnswers([...answers, selected]);
+  const next = async () => {
+    if (!selected || !q) return;
+    const newAnswers = [...answers, { question_id: q.id, selected }];
+    setAnswers(newAnswers);
     setSelected(null);
-    if (current + 1 >= questions.length) setDone(true);
-    else setCurrent(c => c + 1);
+    if (current + 1 >= questions.length) {
+      // Finish: submit to the backend for grading and persistence.
+      setSubmitting(true);
+      try {
+        if (quizId) {
+          const res = await quizService.submitQuiz(
+            quizId,
+            newAnswers,
+            Math.round((Date.now() - startedAt) / 1000)
+          );
+          setResult(res);
+        }
+      } catch {
+        // Fall back to local grading if submission fails.
+      } finally {
+        setSubmitting(false);
+        setDone(true);
+      }
+    } else {
+      setCurrent((c) => c + 1);
+    }
   };
 
   if (loading) return <AppLayout title="Daily Quiz"><div className="flex items-center justify-center h-64"><div className="w-10 h-10 border-4 border-primary-200 border-t-primary-500 rounded-full animate-spin" /></div></AppLayout>;
 
-  if (done) return (
+  if (error) return (
     <AppLayout title="Daily Quiz">
       <div className="max-w-xl mx-auto">
-        <div className="card p-6 sm:p-10 flex flex-col items-center gap-6 text-center">
-          <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-full bg-gradient-to-br from-success-400 to-success-600 flex items-center justify-center shadow-lg">
-            <Trophy className="w-8 h-8 sm:w-10 sm:h-10 text-white" />
-          </div>
-          <div>
-            <h2 className="text-2xl sm:text-3xl font-black text-slate-800 dark:text-slate-100">{Math.round((correct/questions.length)*100)}%</h2>
-            <p className="text-slate-500 mt-1">{correct} of {questions.length} correct</p>
-          </div>
-          <button onClick={() => { setCurrent(0); setSelected(null); setAnswers([]); setDone(false); }} className="btn-primary btn-lg">
-            Try Again
-          </button>
+        <div className="card p-10 flex flex-col items-center gap-4 text-center">
+          <p className="text-slate-500">{error}</p>
+          <button onClick={loadQuiz} className="btn-primary btn-md"><RefreshCw className="w-4 h-4 inline mr-2" /> Retry</button>
         </div>
       </div>
     </AppLayout>
   );
+
+  if (done) {
+    const pct = result ? result.score : questions.length ? Math.round((correctCount / questions.length) * 100) : 0;
+    return (
+      <AppLayout title="Daily Quiz">
+        <div className="max-w-xl mx-auto space-y-4">
+          <div className="card p-10 flex flex-col items-center gap-6 text-center">
+            <div className="w-20 h-20 rounded-full bg-gradient-to-br from-emerald-400 to-emerald-600 flex items-center justify-center shadow-lg">
+              <Trophy className="w-10 h-10 text-white" />
+            </div>
+            <div>
+              <h2 className="text-3xl font-black text-slate-800 dark:text-slate-100">{pct}%</h2>
+              <p className="text-slate-500 mt-1">{correctCount} of {questions.length} correct</p>
+              {!result && <p className="text-xs text-slate-400 mt-2">(score could not be saved)</p>}
+            </div>
+            {result?.results && (
+              <div className="w-full space-y-2 text-left">
+                {result.results.map((r: any) => (
+                  <div key={r.question_id} className={`p-3 rounded-xl border text-sm ${r.is_correct ? "border-emerald-200 bg-emerald-50 dark:bg-emerald-900/20" : "border-red-200 bg-red-50 dark:bg-red-900/20"}`}>
+                    <p className="font-medium">{r.is_correct ? "✓" : "✗"} {r.question}</p>
+                    {!r.is_correct && <p className="text-xs text-slate-500 mt-1">Correct: {r.correct_answer}</p>}
+                  </div>
+                ))}
+              </div>
+            )}
+            <button onClick={loadQuiz} className="btn-primary btn-md">Done</button>
+          </div>
+        </div>
+      </AppLayout>
+    );
+  }
 
   return (
     <AppLayout title="Daily Quiz">
@@ -90,8 +160,14 @@ export default function DailyQuiz() {
               </div>
             )}
 
-            <button onClick={next} disabled={!selected} className="btn-primary btn-md w-full disabled:opacity-40">
-              {current + 1 === questions.length ? "Finish Quiz" : "Next Question"} <ChevronRight className="w-4 h-4" />
+            <button onClick={next} disabled={!selected || submitting} className="btn-primary btn-md w-full disabled:opacity-40">
+              {submitting ? (
+                <><Loader2 className="w-4 h-4 animate-spin inline mr-2" /> Grading...</>
+              ) : (
+                <>
+                  {current + 1 === questions.length ? "Finish Quiz" : "Next Question"} <ChevronRight className="w-4 h-4" />
+                </>
+              )}
             </button>
           </div>
         )}

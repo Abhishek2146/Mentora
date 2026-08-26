@@ -109,6 +109,12 @@ async def upload_syllabus(
                 "Contact the administrator to enable syllabus processing."
             ),
         )
+    except ValueError as e:
+        await db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(e),
+        )
 
     # Usage is recorded only after processing succeeded.
     await record_usage(db, user_id, UsageType.SYLLABUS_ANALYSIS)
@@ -120,8 +126,11 @@ async def upload_syllabus(
         .options(
             selectinload(Syllabus.subjects).selectinload(Subject.chapters)
         )
+        .execution_options(populate_existing=True)
     )
     syllabus = result.scalars().first()
+
+    return syllabus
 
     if syllabus is None:
         raise HTTPException(
@@ -159,7 +168,11 @@ async def list_syllabuses(
     user_id: int = Depends(get_current_user_id),
 ):
     result = await db.execute(
-        select(Syllabus).where(Syllabus.user_id == user_id).offset(skip).limit(limit)
+        select(Syllabus)
+        .where(Syllabus.user_id == user_id)
+        .order_by(Syllabus.id.desc())
+        .offset(skip)
+        .limit(limit)
     )
     return result.scalars().all()
 
