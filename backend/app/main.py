@@ -31,7 +31,6 @@ from app.api.v1 import (
     reports,
     dashboard,
     admin,
-    flashcards,
     exams,
     notifications,
 )
@@ -217,12 +216,6 @@ app.include_router(
     admin.router,
     prefix=f"{settings.API_PREFIX}/admin",
     tags=["admin"],
-)
-
-app.include_router(
-    flashcards.router,
-    prefix=f"{settings.API_PREFIX}/flashcards",
-    tags=["flashcards"],
 )
 
 app.include_router(

@@ -55,12 +55,13 @@ export default function ExamSimulator() {
         syllabus_id: (syllabusId as number) || null,
         num_questions: numQuestions,
         duration_minutes: durationMinutes,
-      });
+      }, { timeout: 300000 });
       setExam(res.data.quiz);
       setQuestions(res.data.questions || []);
       setAnswers({});
       setResult(null);
       setTimeLeft((res.data.quiz?.time_limit || durationMinutes * 60));
+      setStarted(true);
     } catch (e: any) {
       setError(e?.response?.data?.detail || "Failed to generate the exam");
     } finally {

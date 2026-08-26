@@ -113,6 +113,18 @@ class FlashcardService:
         )
         flashcards_data = engine_result.get("flashcards", [])
 
+        if not flashcards_data:
+            if not content:
+                raise ValueError(
+                    "No study content was found for this syllabus/topic. "
+                    "Re-upload the syllabus (PDF/text works best) or pick a "
+                    "topic that exists in it, then try again."
+                )
+            raise ValueError(
+                "The AI could not generate flashcards from this content. "
+                "Try a different topic or try again in a moment."
+            )
+
         if db:
             deck_title = (
                 f"AI Generated - {topics[0]}" if topics and len(topics) == 1
