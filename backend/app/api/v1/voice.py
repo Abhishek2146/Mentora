@@ -9,7 +9,9 @@ from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import get_current_user_id
+from app.core.quotas import QuotaContext, record_usage, require_ai_quota
 from app.database.database import get_db
+from app.models.subscription import UsageType
 from app.services.voice_service import VoiceService
 
 
@@ -37,6 +39,7 @@ async def voice_learning(
     voice: str = "default",
     db: AsyncSession = Depends(get_db),
     user_id: int = Depends(get_current_user_id),
+    quota: QuotaContext = Depends(require_ai_quota(UsageType.AI_CHAT)),
 ):
     voice_service = VoiceService()
 
@@ -50,6 +53,9 @@ async def voice_learning(
         voice=voice,
         db=db,
     )
+
+    # Voice chat consumes the same AI_CHAT quota as text chat.
+    await record_usage(db, user_id, UsageType.AI_CHAT)
 
     return result
 

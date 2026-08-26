@@ -9,8 +9,10 @@ from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
 from app.core.auth import get_current_user_id
+from app.core.quotas import QuotaContext, record_usage, require_ai_quota
 from app.database.database import get_db
 from app.models.quiz import Quiz, QuizAttempt
+from app.models.subscription import UsageType
 from app.schemas.quiz import (
     QuizCreate,
     QuizOut,
@@ -46,6 +48,7 @@ async def create_quiz(
     quiz_data: QuizCreate,
     db: AsyncSession = Depends(get_db),
     user_id: int = Depends(get_current_user_id),
+    quota: QuotaContext = Depends(require_ai_quota(UsageType.QUIZ_GENERATION)),
 ):
     new_quiz = Quiz(user_id=user_id, **quiz_data.dict())
     db.add(new_quiz)
@@ -53,6 +56,7 @@ async def create_quiz(
     await db.refresh(new_quiz)
 
     await quiz_service.generate_questions(new_quiz, db)
+    await record_usage(db, user_id, UsageType.QUIZ_GENERATION)
 
     result = await db.execute(
         select(Quiz)

@@ -189,11 +189,45 @@ class Settings(BaseSettings):
         return ["*"]
 
     # ============================================================
-    # Rate Limiting
+    # Rate Limiting (global IP-based middleware)
     # ============================================================
 
     RATE_LIMIT_ENABLED: bool = True
     RATE_LIMIT_PER_MINUTE: int = 60
+
+    # ============================================================
+    # Subscriptions & Usage Quotas
+    # ============================================================
+
+    # Master switches for the subscription/quota system.
+    QUOTA_ENABLED: bool = True
+    USER_RATE_LIMIT_ENABLED: bool = True
+
+    # Per-plan daily feature quotas, keyed by UsageType value.
+    # Overridable via env as JSON.
+    FREE_DAILY_LIMITS: dict = {
+        "AI_CHAT": 10,
+        "NOTE_GENERATION": 3,
+        "QUIZ_GENERATION": 3,
+        "FLASHCARD_GENERATION": 3,
+        "STUDY_PLAN_GENERATION": 3,
+        "CODING_PROBLEM_GENERATION": 3,
+        "SYLLABUS_ANALYSIS": 2,
+    }
+
+    SUBSCRIPTION_DAILY_LIMITS: dict = {
+        "AI_CHAT": 100,
+        "NOTE_GENERATION": 30,
+        "QUIZ_GENERATION": 30,
+        "FLASHCARD_GENERATION": 30,
+        "STUDY_PLAN_GENERATION": 30,
+        "CODING_PROBLEM_GENERATION": 30,
+        "SYLLABUS_ANALYSIS": 20,
+    }
+
+    # Per-plan Redis request rate limits (requests per minute).
+    RATE_LIMIT_FREE_PER_MINUTE: int = 10
+    RATE_LIMIT_SUBSCRIPTION_PER_MINUTE: int = 30
 
 
 settings = Settings()

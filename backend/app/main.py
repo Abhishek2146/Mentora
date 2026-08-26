@@ -32,6 +32,7 @@ from app.api.v1 import (
     dashboard,
     admin,
     notifications,
+    subscriptions,
 )
 
 from app.middleware.rate_limit import RateLimitMiddleware
@@ -221,6 +222,18 @@ app.include_router(
     notifications.router,
     prefix=f"{settings.API_PREFIX}/notifications",
     tags=["notifications"],
+)
+
+app.include_router(
+    subscriptions.router,
+    prefix=f"{settings.API_PREFIX}/subscriptions",
+    tags=["subscriptions"],
+)
+
+app.include_router(
+    subscriptions.usage_router,
+    prefix=f"{settings.API_PREFIX}/usage",
+    tags=["usage"],
 )
 
 
