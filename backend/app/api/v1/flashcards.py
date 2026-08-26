@@ -1,6 +1,7 @@
 """
 Flashcards API endpoints
 """
+from datetime import datetime
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -11,8 +12,10 @@ from sqlalchemy.orm import selectinload
 
 from app.core.auth import get_current_user_id
 from app.core.logger import get_logger
+from app.core.quotas import QuotaContext, record_usage, require_ai_quota
 from app.database.database import get_db
 from app.models.flashcard import FlashcardDeck, Flashcard
+from app.models.subscription import UsageType
 from app.models.syllabus import Syllabus
 from app.schemas.flashcard import FlashcardDeckCreate, FlashcardDeckOut, FlashcardOut
 from app.services.flashcard_service import FlashcardService
@@ -38,6 +41,72 @@ class RatingRequest(BaseModel):
         return {"again": 1, "hard": 3, "good": 4, "easy": 5}.get(
             self.rating.strip().lower(), 4
         )
+
+
+@router.post(
+    "/generate",
+    response_model=FlashcardDeckOut,
+    status_code=status.HTTP_201_CREATED,
+)
+async def generate_flashcards(
+    payload: GenerateFlashcardsRequest,
+    db: AsyncSession = Depends(get_db),
+    user_id: int = Depends(get_current_user_id),
+    quota: QuotaContext = Depends(
+        require_ai_quota(UsageType.FLASHCARD_GENERATION)
+    ),
+):
+    """AI-generate a flashcard deck from a syllabus (RAG-grounded)."""
+    syllabus_id = payload.syllabus_id
+    if syllabus_id:
+        check = await db.execute(
+            select(Syllabus).where(Syllabus.id == syllabus_id, Syllabus.user_id == user_id)
+        )
+        if not check.scalars().first():
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Syllabus not found")
+    else:
+        res = await db.execute(
+            select(Syllabus)
+            .where(Syllabus.user_id == user_id)
+            .order_by(Syllabus.id.desc())
+            .limit(1)
+        )
+        syllabus = res.scalars().first()
+        if not syllabus:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Upload a syllabus first to generate flashcards.",
+            )
+        syllabus_id = syllabus.id
+
+    try:
+        deck = await flashcard_service.generate_flashcards(
+            user_id=user_id,
+            syllabus_id=syllabus_id,
+            num_cards=payload.count,
+            unit=payload.unit or "",
+            topics=[payload.topic] if payload.topic else None,
+            student_level=payload.student_level,
+            db=db,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("Flashcard generation failed for user %s", user_id)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="The AI service is temporarily unavailable. Please try again in a moment.",
+        ) from exc
+
+    # Usage is recorded only after generation succeeded.
+    await record_usage(db, user_id, UsageType.FLASHCARD_GENERATION)
+
+    result = await db.execute(
+        select(FlashcardDeck)
+        .options(selectinload(FlashcardDeck.flashcards))
+        .where(FlashcardDeck.id == deck.id)
+    )
+    return result.scalars().first()
 
 
 @router.post("/", response_model=FlashcardDeckOut, status_code=status.HTTP_201_CREATED)
@@ -83,22 +152,17 @@ async def review_all_flashcards(
     user_id: int = Depends(get_current_user_id),
 ):
     """Due-for-review flashcards across all of the user's decks."""
-    deck_ids_result = await db.execute(
-        select(FlashcardDeck.id).where(FlashcardDeck.user_id == user_id)
-    )
-    deck_ids = [row[0] for row in deck_ids_result.all()]
-    if not deck_ids:
-        return []
-
-    from datetime import datetime
-
-    now = datetime.utcnow().isoformat()
-    query = select(Flashcard).where(
-        Flashcard.deck_id.in_(deck_ids),
-        or_(
-            Flashcard.next_review.is_(None),
-            Flashcard.next_review <= now,
-        ),
+    query = (
+        select(Flashcard)
+        .join(FlashcardDeck, Flashcard.deck_id == FlashcardDeck.id)
+        .where(
+            FlashcardDeck.user_id == user_id,
+            or_(
+                Flashcard.next_review.is_(None),
+                Flashcard.next_review <= datetime.utcnow().isoformat(),
+            ),
+        )
+        .order_by(Flashcard.next_review.isnot(None), Flashcard.id)
     )
     result = await db.execute(query)
     cards = list(result.scalars().all())
@@ -107,55 +171,6 @@ async def review_all_flashcards(
         t = topic.strip().lower()
         cards = [c for c in cards if t in (c.front or "").lower()]
     return cards
-
-
-@router.post("/generate", response_model=FlashcardDeckOut, status_code=status.HTTP_201_CREATED)
-async def generate_flashcards(
-    request: GenerateFlashcardsRequest,
-    db: AsyncSession = Depends(get_db),
-    user_id: int = Depends(get_current_user_id),
-):
-    """Generate an AI flashcard deck from a syllabus (latest one by default)."""
-    syllabus_id = request.syllabus_id
-    if syllabus_id:
-        check = await db.execute(
-            select(Syllabus).where(Syllabus.id == syllabus_id, Syllabus.user_id == user_id)
-        )
-        if not check.scalars().first():
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Syllabus not found")
-    else:
-        res = await db.execute(
-            select(Syllabus)
-            .where(Syllabus.user_id == user_id)
-            .order_by(Syllabus.id.desc())
-            .limit(1)
-        )
-        syllabus = res.scalars().first()
-        if not syllabus:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Upload a syllabus first to generate flashcards.",
-            )
-        syllabus_id = syllabus.id
-
-    try:
-        return await flashcard_service.generate_flashcards(
-            user_id=user_id,
-            syllabus_id=syllabus_id,
-            num_cards=request.count,
-            db=db,
-            unit=request.unit or "",
-            topics=[request.topic] if request.topic else None,
-            student_level=request.student_level,
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
-    except Exception as exc:  # noqa: BLE001
-        logger.exception("Flashcard generation failed for user %s", user_id)
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="The AI service is temporarily unavailable. Please try again in a moment.",
-        ) from exc
 
 
 @router.post("/{card_id}/rating", response_model=FlashcardOut)

@@ -22,6 +22,12 @@ from app.core.auth import get_current_user_id, get_current_user
 from app.core.config import settings
 from app.database.database import get_db
 from app.models.user import User, UserRole
+from app.models.subscription import (
+    BillingCycle,
+    PlanType,
+    Subscription,
+    SubscriptionStatus,
+)
 from app.schemas.user import (
     UserCreate, UserLogin, UserOut, Token, AdminCreate,
     ForgotPasswordRequest, ResetPasswordRequest, ChangePasswordRequest
@@ -68,6 +74,17 @@ async def register(
         hashed_password=hashed_password,
     )
     db.add(new_user)
+    await db.flush()
+
+    # Every new student starts on the FREE plan.
+    db.add(
+        Subscription(
+            user_id=new_user.id,
+            plan_type=PlanType.FREE.value,
+            billing_cycle=BillingCycle.NONE.value,
+            status=SubscriptionStatus.ACTIVE.value,
+        )
+    )
     await db.commit()
     await db.refresh(new_user)
     return new_user
@@ -115,6 +132,17 @@ async def register_admin(
         hashed_password=hashed_password,
     )
     db.add(new_user)
+    await db.flush()
+
+    # Admins also start on the FREE plan.
+    db.add(
+        Subscription(
+            user_id=new_user.id,
+            plan_type=PlanType.FREE.value,
+            billing_cycle=BillingCycle.NONE.value,
+            status=SubscriptionStatus.ACTIVE.value,
+        )
+    )
     await db.commit()
     await db.refresh(new_user)
     return new_user

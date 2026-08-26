@@ -13,8 +13,10 @@ from sqlalchemy.orm import selectinload
 
 from app.core.auth import get_current_user_id
 from app.core.config import settings
+from app.core.quotas import QuotaContext, record_usage, require_ai_quota
 from app.database.database import get_db
 from app.models.syllabus import Syllabus, Subject, Chapter
+from app.models.subscription import UsageType
 from app.schemas.syllabus import (
     SyllabusCreate, SyllabusOut, SyllabusUpdate, SyllabusStatus,
     SyllabusSearchRequest, SyllabusSearchResponse
@@ -35,6 +37,7 @@ async def upload_syllabus(
     description: Optional[str] = Form(None),
     db: AsyncSession = Depends(get_db),
     user_id: int = Depends(get_current_user_id),
+    quota: QuotaContext = Depends(require_ai_quota(UsageType.SYLLABUS_ANALYSIS)),
 ):
     logger.info(
         "[UploadSyllabus] Received upload: title=%s, filename=%s, content_type=%s",
@@ -112,6 +115,9 @@ async def upload_syllabus(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=str(e),
         )
+
+    # Usage is recorded only after processing succeeded.
+    await record_usage(db, user_id, UsageType.SYLLABUS_ANALYSIS)
 
     # Reload the syllabus with subjects and chapters eager-loaded.
     result = await db.execute(
@@ -275,6 +281,7 @@ async def analyze_syllabus(
     syllabus_id: int,
     db: AsyncSession = Depends(get_db),
     user_id: int = Depends(get_current_user_id),
+    quota: QuotaContext = Depends(require_ai_quota(UsageType.SYLLABUS_ANALYSIS)),
 ):
     result = await db.execute(
         select(Syllabus).where(Syllabus.id == syllabus_id, Syllabus.user_id == user_id)
@@ -296,6 +303,9 @@ async def analyze_syllabus(
                 "Contact the administrator to enable syllabus processing."
             ),
         )
+
+    # Usage is recorded only after processing succeeded.
+    await record_usage(db, user_id, UsageType.SYLLABUS_ANALYSIS)
 
     from app.database.database import AsyncSessionLocal
 

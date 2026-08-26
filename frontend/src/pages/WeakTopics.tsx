@@ -1,9 +1,36 @@
+import { useEffect, useState } from "react";
 import AppLayout from "@/components/layout/AppLayout";
-import { AlertTriangle, TrendingUp, BookOpen } from "lucide-react";
-import { mockWeakTopics } from "@/data/mockData";
+import { AlertTriangle, TrendingUp, BookOpen, Loader2 } from "lucide-react";
 import { Link } from "react-router-dom";
+import apiClient from "@/lib/api";
+
+interface WeakTopic {
+  id: number;
+  topic_name: string;
+  accuracy: number;
+  confidence_level: number;
+  total_attempts: number;
+  recommended_action: string | null;
+}
 
 export default function WeakTopics() {
+  const [topics, setTopics] = useState<WeakTopic[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await apiClient.get("/api/v1/weak-topics/");
+        setTopics(res.data ?? []);
+      } catch {
+        setError("Could not load your weak topics. Please try again later.");
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, []);
+
   return (
     <AppLayout title="Weak Topics">
       <div className="max-w-4xl mx-auto space-y-6">
@@ -17,8 +44,26 @@ export default function WeakTopics() {
           </div>
         </div>
 
+        {loading && (
+          <div className="flex justify-center py-10">
+            <Loader2 className="w-6 h-6 animate-spin text-primary-500" />
+          </div>
+        )}
+
+        {!loading && error && (
+          <div className="card p-5 text-sm text-danger-600 dark:text-danger-400">{error}</div>
+        )}
+
+        {!loading && !error && topics.length === 0 && (
+          <div className="card p-8 text-center">
+            <TrendingUp className="w-10 h-10 mx-auto text-success-500 mb-3" />
+            <p className="font-semibold text-slate-700 dark:text-slate-200">No weak topics detected</p>
+            <p className="text-sm text-slate-500 mt-1">Take a quiz and we'll highlight the topics you need to work on.</p>
+          </div>
+        )}
+
         <div className="space-y-4">
-          {mockWeakTopics.map(topic => (
+          {topics.map(topic => (
             <div key={topic.id} className="card p-4 sm:p-5 hover:shadow-soft transition-all">
               <div className="flex flex-col sm:flex-row items-start justify-between gap-3 sm:gap-4">
                 <div className="flex-1">
@@ -28,12 +73,14 @@ export default function WeakTopics() {
                       {topic.accuracy < 50 ? "High Priority" : "Medium Priority"}
                     </span>
                   </div>
-                  <p className="text-sm text-slate-500 mb-3">{topic.recommended_action}</p>
+                  {topic.recommended_action && (
+                    <p className="text-sm text-slate-500 mb-3">{topic.recommended_action}</p>
+                  )}
 
                   <div className="grid grid-cols-3 gap-2 sm:gap-3 mb-3">
                     {[
-                      { label: "Accuracy", value: `${topic.accuracy}%` },
-                      { label: "Confidence", value: `${topic.confidence_level}%` },
+                      { label: "Accuracy", value: `${Math.round(topic.accuracy)}%` },
+                      { label: "Confidence", value: `${Math.round(topic.confidence_level)}%` },
                       { label: "Attempts", value: topic.total_attempts },
                     ].map(s => (
                       <div key={s.label} className="bg-slate-50 dark:bg-slate-700/50 rounded-lg p-2 text-center">
