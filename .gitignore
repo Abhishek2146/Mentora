@@ -16,6 +16,8 @@ backend/venv/
 
 # Python cache
 __pycache__/
+.mypy_cache/
+backend/.mypy_cache/
 *.py[cod]
 *$py.class
 *.so
