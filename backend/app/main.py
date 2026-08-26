@@ -32,6 +32,7 @@ from app.api.v1 import (
     admin,
     flashcards,
     exams,
+    notifications,
 )
 
 from app.middleware.rate_limit import RateLimitMiddleware
@@ -221,6 +222,12 @@ app.include_router(
     exams.router,
     prefix=f"{settings.API_PREFIX}/exams",
     tags=["exams"],
+)
+
+app.include_router(
+    notifications.router,
+    prefix=f"{settings.API_PREFIX}/notifications",
+    tags=["notifications"],
 )
 
 

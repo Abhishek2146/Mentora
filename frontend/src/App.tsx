@@ -19,6 +19,11 @@ import ProgressPage from "@/pages/Progress";
 import RegisterPage from "@/pages/Register";
 import LoginPage from "@/pages/Login";
 import ForgotPasswordPage from "@/pages/ForgotPassword";
+import ResetPasswordPage from "@/pages/ResetPassword";
+import VerifyOtpPage from "@/pages/VerifyOtp";
+import SetNewPasswordPage from "@/pages/SetNewPassword";
+import SearchPage from "@/pages/Search";
+import SyllabusDetailPage from "@/pages/SyllabusDetail";
 import { ProtectedRoute, PublicRoute, AdminRoute } from "@/components/ProtectedRoute";
 import { useAuthStore } from "@/store/authStore";
 import AdminRegisterPage from "@/pages/AdminRegister";
@@ -31,9 +36,11 @@ export default function App() {
 
   return (
     <BrowserRouter>
-      <Routes>
+<Routes>
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
         <Route path="/dashboard" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
+        <Route path="/search" element={<ProtectedRoute><SearchPage /></ProtectedRoute>} />
+        <Route path="/syllabus/:id" element={<ProtectedRoute><SyllabusDetailPage /></ProtectedRoute>} />
         <Route path="/ai-tutor" element={<ProtectedRoute><AiTutorPage /></ProtectedRoute>} />
         <Route path="/flashcards" element={<ProtectedRoute><FlashcardsPage /></ProtectedRoute>} />
         <Route path="/study-plan" element={<ProtectedRoute><StudyPlanPage /></ProtectedRoute>} />
@@ -52,6 +59,9 @@ export default function App() {
         <Route path="/register" element={<PublicRoute><RegisterPage /></PublicRoute>} />
         <Route path="/login" element={<PublicRoute><LoginPage /></PublicRoute>} />
         <Route path="/forgot-password" element={<PublicRoute><ForgotPasswordPage /></PublicRoute>} />
+        <Route path="/reset-password" element={<PublicRoute><ResetPasswordPage /></PublicRoute>} />
+        <Route path="/verify-otp" element={<PublicRoute><VerifyOtpPage /></PublicRoute>} />
+        <Route path="/set-new-password" element={<PublicRoute><SetNewPasswordPage /></PublicRoute>} />
         <Route path="/admin/register" element={<AdminRegisterPage />} />
         <Route path="/admin/dashboard" element={<AdminRoute><AdminDashboardPage /></AdminRoute>} />
         <Route path="*" element={<Navigate to="/" replace />} />

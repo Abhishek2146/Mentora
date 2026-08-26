@@ -96,3 +96,4 @@ mypy>=1.0.0
 python-dotenv
 email-validator
 argon2-cffi
+aiosmtplib

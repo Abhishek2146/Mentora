@@ -1,4 +1,5 @@
 import apiClient from "@/lib/api";
+import type { SyllabusSearchParams, SyllabusSearchResponse } from "@/types/api";
 
 const PROCESSING_TIMEOUT = 300000;
 
@@ -30,5 +31,19 @@ export const syllabusService = {
 
   async deleteSyllabus(syllabusId: number) {
     await apiClient.delete(`/api/v1/syllabus/${syllabusId}`);
+  },
+
+  async searchSyllabi(params: SyllabusSearchParams): Promise<SyllabusSearchResponse> {
+    const searchParams = new URLSearchParams();
+    searchParams.append("q", params.q);
+    if (params.search_in) {
+      params.search_in.forEach(field => searchParams.append("search_in", field));
+    }
+    if (params.status) searchParams.append("status", params.status);
+    if (params.page) searchParams.append("page", params.page.toString());
+    if (params.per_page) searchParams.append("per_page", params.per_page.toString());
+
+    const res = await apiClient.get(`/api/v1/syllabus/search?${searchParams.toString()}`);
+    return res.data;
   },
 };

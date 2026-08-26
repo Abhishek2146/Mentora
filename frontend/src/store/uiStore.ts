@@ -3,6 +3,8 @@ import { create } from "zustand";
 interface UIState {
   sidebarOpen: boolean;
   setSidebarOpen: (open: boolean) => void;
+  mobileNavOpen: boolean;
+  setMobileNavOpen: (open: boolean) => void;
   searchQuery: string;
   setSearchQuery: (query: string) => void;
   notifications: Notification[];
@@ -20,10 +22,11 @@ export interface Notification {
 
 export const useUIStore = create<UIState>((set) => ({
   sidebarOpen: true,
+  mobileNavOpen: false,
+  setSidebarOpen: (open) => set({ sidebarOpen: open }),
+  setMobileNavOpen: (open) => set({ mobileNavOpen: open }),
   searchQuery: "",
   notifications: [],
-
-  setSidebarOpen: (open) => set({ sidebarOpen: open }),
   setSearchQuery: (query) => set({ searchQuery: query }),
 
   addNotification: (notification) =>

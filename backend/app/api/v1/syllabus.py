@@ -6,7 +6,7 @@ from typing import List, Optional
 
 import pytesseract
 import logging
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, insert
 from sqlalchemy.orm import selectinload
@@ -15,7 +15,10 @@ from app.core.auth import get_current_user_id
 from app.core.config import settings
 from app.database.database import get_db
 from app.models.syllabus import Syllabus, Subject, Chapter
-from app.schemas.syllabus import SyllabusCreate, SyllabusOut, SyllabusUpdate, SyllabusStatus
+from app.schemas.syllabus import (
+    SyllabusCreate, SyllabusOut, SyllabusUpdate, SyllabusStatus,
+    SyllabusSearchRequest, SyllabusSearchResponse
+)
 from app.services.syllabus_service import SyllabusService
 
 router = APIRouter()
@@ -166,6 +169,36 @@ async def list_syllabuses(
         .limit(limit)
     )
     return result.scalars().all()
+
+
+@router.get("/search", response_model=SyllabusSearchResponse)
+async def search_syllabuses(
+    q: str = Query(..., min_length=1, max_length=500, description="Search query"),
+    search_in: Optional[List[str]] = Query(
+        None,
+        description="Fields to search in: title, description, extracted_text, subjects, chapters, topics"
+    ),
+    status: Optional[SyllabusStatus] = Query(None, description="Filter by status"),
+    page: int = Query(1, ge=1, description="Page number"),
+    per_page: int = Query(20, ge=1, le=100, description="Items per page"),
+    db: AsyncSession = Depends(get_db),
+    user_id: int = Depends(get_current_user_id),
+):
+    """
+    Search user's syllabuses by query string.
+    
+    Searches in title, description, extracted text (OCR), subject names, chapter names, and topics.
+    """
+    result = await syllabus_service.search_syllabuses(
+        db=db,
+        user_id=user_id,
+        query=q,
+        search_in=search_in,
+        status=status,
+        page=page,
+        per_page=per_page,
+    )
+    return result
 
 
 @router.get("/{syllabus_id}", response_model=SyllabusOut)

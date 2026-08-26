@@ -14,7 +14,7 @@ from sqlalchemy import (
     Date,
     JSON,
 )
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import relationship, backref
 
 from app.database.base import BaseModel
 
@@ -89,7 +89,7 @@ class RevisionSchedule(BaseModel):
     # Relationships
     user = relationship(
         "User",
-        backref="revision_schedules",
+        backref=backref("revision_schedules", passive_deletes=True),
     )
 
     syllabus = relationship(

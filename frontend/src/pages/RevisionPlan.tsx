@@ -16,9 +16,9 @@ export default function RevisionPlan() {
         </div>
 
         {mockRevisionPlan.map(item => (
-          <div key={item.id} className={`card p-5 hover:shadow-soft transition-all ${ item.status === "Overdue" ? "border-danger-200 dark:border-red-700" : "" }`}>
-            <div className="flex items-center justify-between gap-4">
-              <div className="flex items-center gap-4">
+          <div key={item.id} className={`card p-4 sm:p-5 hover:shadow-soft transition-all ${ item.status === "Overdue" ? "border-danger-200 dark:border-danger-700" : "" }`}>
+            <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+              <div className="flex items-center gap-2 sm:gap-4">
                 {item.status === "Overdue" && <AlertTriangle className="w-5 h-5 text-danger-500 flex-shrink-0" />}
                 <div>
                   <h3 className="font-bold text-slate-800 dark:text-slate-100">{item.topic}</h3>
@@ -28,7 +28,7 @@ export default function RevisionPlan() {
                   </div>
                 </div>
               </div>
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2 sm:gap-3">
                 <span className={`badge ${statusColor(item.status)}`}>{item.dueLabel}</span>
                 <button className="btn-primary btn-sm">Start</button>
               </div>

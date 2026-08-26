@@ -142,7 +142,7 @@ export default function MCQ() {
   if (!started) return (
     <AppLayout title="MCQ Practice">
       <div className="max-w-xl mx-auto space-y-6">
-        <div className="card p-6 space-y-5">
+        <div className="card p-4 sm:p-6 space-y-5">
           <h2 className="font-bold text-xl text-slate-800 dark:text-slate-100">Configure Your Practice Set</h2>
           {error && <p className="text-sm text-red-500">{error}</p>}
           <div>
@@ -193,7 +193,7 @@ export default function MCQ() {
   return (
     <AppLayout title="MCQ Practice">
       <div className="max-w-xl mx-auto space-y-4">
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex-1 progress-bar"><div className="progress-fill bg-gradient-to-r from-primary-500 to-secondary-500" style={{ width: `${(current/questions.length)*100}%` }} /></div>
           <span className="text-sm text-slate-500">{current+1}/{questions.length}</span>
         </div>

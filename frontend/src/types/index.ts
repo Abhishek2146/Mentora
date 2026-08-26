@@ -3,7 +3,7 @@ export interface User {
   email: string;
   username: string;
   full_name: string | null;
-  role: "student" | "instructor" | "admin";
+  role: "student" | "admin";
   is_active: boolean;
   is_verified: boolean;
   avatar_url: string | null;
@@ -17,7 +17,7 @@ export interface Token {
   token_type: string;
 }
 
-export type UserRole = "student" | "instructor" | "admin";
+export type UserRole = "student" | "admin";
 
 export interface Syllabus {
   id: number;

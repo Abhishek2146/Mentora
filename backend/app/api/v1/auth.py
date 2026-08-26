@@ -4,7 +4,9 @@ Auth API endpoints
 from datetime import timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordRequestForm
+from fastapi.security import OAuth2PasswordRequestForm, HTTPAuthorizationCredentials, HTTPBearer
+
+security = HTTPBearer()
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import (
@@ -13,12 +15,19 @@ from app.core.security import (
     create_access_token,
     create_refresh_token,
     verify_refresh_token,
+    create_password_reset_token,
+    verify_password_reset_token,
 )
-from app.core.auth import get_current_user_id
+from app.core.auth import get_current_user_id, get_current_user
 from app.core.config import settings
 from app.database.database import get_db
 from app.models.user import User, UserRole
-from app.schemas.user import UserCreate, UserLogin, UserOut, Token, AdminCreate
+from app.schemas.user import (
+    UserCreate, UserLogin, UserOut, Token, AdminCreate,
+    ForgotPasswordRequest, ResetPasswordRequest, ChangePasswordRequest
+)
+from app.services.email_service import email_service
+from app.services.token_blacklist import token_blacklist
 
 from sqlalchemy import select
 
@@ -41,12 +50,21 @@ async def register(
             detail="Email or username already registered",
         )
 
+    role = user_data.role
+    role_value = role.value if hasattr(role, "value") else role
+
+    if role_value != UserRole.STUDENT.value:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid role. Must be 'student'",
+        )
+
     hashed_password = get_password_hash(user_data.password)
     new_user = User(
         email=user_data.email,
         username=user_data.username,
         full_name=user_data.full_name,
-        #role=user_data.role.value if hasattr(user_data.role, "value") else user_data.role,
+        role=role_value,
         hashed_password=hashed_password,
     )
     db.add(new_user)
@@ -141,7 +159,7 @@ async def login(
 async def refresh_token(
     refresh_token: str,
 ):
-    payload = verify_refresh_token(refresh_token)
+    payload = await verify_refresh_token(refresh_token)
     if not payload:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -159,7 +177,17 @@ async def refresh_token(
 
 
 @router.post("/logout")
-async def logout():
+async def logout(
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+):
+    token = credentials.credentials
+    payload = await verify_access_token(token)
+    if payload:
+        exp = payload.get("exp")
+        if exp:
+            import time
+            expires_in = max(1, int(exp - time.time()))
+            await token_blacklist.add_token(token, expires_in)
     return {"message": "Successfully logged out"}
 
 
@@ -176,3 +204,86 @@ async def get_current_user(
             detail="User not found",
         )
     return user
+
+
+@router.post("/forgot-password")
+async def forgot_password(
+    request: ForgotPasswordRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Request a password reset email.
+
+    Sends a password reset link to the user's email if the account exists.
+    Always returns success to prevent email enumeration.
+    """
+    result = await db.execute(select(User).where(User.email == request.email))
+    user = result.scalars().first()
+
+    if user:
+        reset_token = create_password_reset_token(data={"sub": str(user.id)})
+        frontend_url = settings.ALLOWED_ORIGINS[0] if settings.ALLOWED_ORIGINS else "http://localhost:3000"
+        await email_service.send_password_reset_email(
+            to_email=user.email,
+            reset_token=reset_token,
+            frontend_url=frontend_url
+        )
+
+    return {"message": "If the email exists, a password reset link has been sent."}
+
+
+@router.post("/reset-password")
+async def reset_password(
+    request: ResetPasswordRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Reset password using a reset token.
+    """
+    payload = verify_password_reset_token(request.token)
+    if not payload:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired reset token",
+        )
+
+    user_id = payload.get("sub")
+    if not user_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid reset token",
+        )
+
+    result = await db.execute(select(User).where(User.id == int(user_id)))
+    user = result.scalars().first()
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found",
+        )
+
+    user.hashed_password = get_password_hash(request.password)
+    await db.commit()
+
+    return {"message": "Password has been reset successfully"}
+
+
+@router.post("/change-password")
+async def change_password(
+    request: ChangePasswordRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Change password for authenticated user.
+    """
+    if not verify_password(request.current_password, current_user.hashed_password):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Current password is incorrect",
+        )
+
+    current_user.hashed_password = get_password_hash(request.new_password)
+    await db.commit()
+
+    return {"message": "Password changed successfully"}

@@ -26,7 +26,8 @@ export function PublicRoute({ children }: { children: ReactNode }) {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const role = useAuthStore((s) => s.user?.role);
   if (isAuthenticated) {
-    return <Navigate to={role === "admin" ? "/admin/dashboard" : "/dashboard"} replace />;
+    if (role === "admin") return <Navigate to="/admin/dashboard" replace />;
+    return <Navigate to="/dashboard" replace />;
   }
   return <>{children}</>;
 }

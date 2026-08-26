@@ -13,16 +13,17 @@ export default function AppLayout({ children, title }: AppLayoutProps) {
   const { sidebarOpen } = useUIStore();
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex">
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-950">
       <Sidebar />
       <main
         className={cn(
-          "flex-1 flex flex-col min-h-screen transition-all duration-300",
-          sidebarOpen ? "ml-64" : "ml-16"
+          "flex flex-col min-h-screen min-w-0 transition-all duration-300",
+          "ml-0",
+          sidebarOpen ? "lg:ml-64" : "lg:ml-16"
         )}
       >
         <Header title={title} />
-        <div className="flex-1 p-6 animate-fade-in">
+        <div className="flex-1 w-full max-w-full p-4 sm:p-6 animate-fade-in">
           {children}
         </div>
       </main>

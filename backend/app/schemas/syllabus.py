@@ -4,7 +4,7 @@ Syllabus schemas
 from enum import Enum
 from typing import Any, List, Optional
 
-from pydantic import BaseModel, Field, computed_field
+from pydantic import BaseModel, Field, ConfigDict, computed_field
 
 
 class SyllabusStatus(str, Enum):
@@ -32,6 +32,44 @@ class SyllabusUpdate(BaseModel):
     status: Optional[SyllabusStatus] = None
 
 
+class SyllabusSearchRequest(BaseModel):
+    """Request schema for syllabus search."""
+    query: str = Field(..., min_length=1, max_length=500, description="Search query")
+    search_in: Optional[List[str]] = Field(
+        default=None,
+        description="Fields to search in: title, description, extracted_text, subjects, chapters, topics"
+    )
+    status: Optional[SyllabusStatus] = Field(default=None, description="Filter by status")
+    page: int = Field(default=1, ge=1, description="Page number")
+    per_page: int = Field(default=20, ge=1, le=100, description="Items per page")
+
+
+class SyllabusSearchResult(BaseModel):
+    """Search result for a syllabus."""
+    id: int
+    title: str
+    description: Optional[str] = None
+    file_type: Optional[str] = None
+    status: SyllabusStatus
+    is_processed: bool
+    is_ai_processed: bool
+    created_at: Any
+    updated_at: Any
+    matched_fields: List[str] = []
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class SyllabusSearchResponse(BaseModel):
+    """Response for syllabus search."""
+    items: List[SyllabusSearchResult]
+    total: int
+    page: int
+    per_page: int
+    pages: int
+    query: str
+
+
 class ChapterOut(BaseModel):
     id: int
     name: str
@@ -41,8 +79,7 @@ class ChapterOut(BaseModel):
     subject_id: int
     estimated_hours: int = 0
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class SubjectOut(BaseModel):
@@ -51,8 +88,7 @@ class SubjectOut(BaseModel):
     description: Optional[str] = None
     order: int
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class SubjectWithChapters(SubjectOut):
@@ -80,8 +116,7 @@ class SyllabusOut(BaseModel):
     parsed_data: Optional[Any] = None
     subjects: List[SubjectWithChapters] = []
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
     @computed_field
     @property

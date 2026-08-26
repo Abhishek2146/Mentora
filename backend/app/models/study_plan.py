@@ -61,7 +61,7 @@ from sqlalchemy import (
     JSON,
     Boolean,
 )
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import relationship, backref
 
 from app.database.base import BaseModel
 
@@ -119,7 +119,7 @@ class StudyPlan(BaseModel):
     # Relationships
     user = relationship(
         "User",
-        backref="study_plans",
+        backref=backref("study_plans", passive_deletes=True),
     )
 
     syllabus = relationship(

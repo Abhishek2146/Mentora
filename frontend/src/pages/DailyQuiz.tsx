@@ -118,7 +118,7 @@ export default function DailyQuiz() {
   return (
     <AppLayout title="Daily Quiz">
       <div className="max-w-xl mx-auto space-y-6">
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex-1 progress-bar">
             <div className="progress-fill bg-gradient-to-r from-primary-500 to-secondary-500" style={{ width: `${((current) / questions.length) * 100}%` }} />
           </div>
@@ -126,8 +126,8 @@ export default function DailyQuiz() {
         </div>
 
         {q && (
-          <div className="card p-6 space-y-6">
-            <div className="flex items-start justify-between gap-4">
+          <div className="card p-4 sm:p-6 space-y-6">
+            <div className="flex items-start justify-between gap-2 sm:gap-4">
               <p className="font-semibold text-slate-800 dark:text-slate-100 text-lg leading-snug">{q.question_text}</p>
               <span className={`badge flex-shrink-0 ${ q.difficulty === "Easy" ? "badge-green" : q.difficulty === "Hard" ? "badge-red" : "badge-yellow" }`}>{q.difficulty}</span>
             </div>
@@ -139,14 +139,14 @@ export default function DailyQuiz() {
                 return (
                   <button key={opt} onClick={() => !selected && setSelected(opt)}
                     className={`w-full text-left p-4 rounded-xl border-2 transition-all text-sm font-medium ${
-                      isCorrect ? "border-emerald-500 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300" :
-                      isWrong ? "border-danger-500 bg-danger-50 dark:bg-red-900/20 text-danger-700 dark:text-red-300" :
+                      isCorrect ? "border-success-500 bg-success-50 dark:bg-success-900/20 text-success-700 dark:text-success-300" :
+                      isWrong ? "border-danger-500 bg-danger-50 dark:bg-danger-900/20 text-danger-700 dark:text-danger-300" :
                       selected && opt !== selected ? "border-slate-200 dark:border-slate-600 text-slate-400 opacity-60" :
                       "border-slate-200 dark:border-slate-600 hover:border-primary-400 hover:bg-primary-50 dark:hover:bg-primary-900/20 text-slate-700 dark:text-slate-200"
                     }`}>
                     <span className="flex items-center justify-between gap-2">
                       {opt}
-                      {isCorrect && <CheckCircle2 className="w-5 h-5 text-emerald-500 flex-shrink-0" />}
+                      {isCorrect && <CheckCircle2 className="w-5 h-5 text-success-500 flex-shrink-0" />}
                       {isWrong && <XCircle className="w-5 h-5 text-danger-500 flex-shrink-0" />}
                     </span>
                   </button>

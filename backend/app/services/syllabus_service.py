@@ -9,7 +9,7 @@ import os
 import re
 from typing import Any, Dict, List, Optional
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, func, or_, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from langchain_core.documents import Document
@@ -17,6 +17,7 @@ from langchain_core.documents import Document
 from app.core.logger import get_logger
 from app.models.syllabus import Syllabus, Subject, Chapter
 from app.schemas.syllabus import SyllabusStatus
+from langchain_core.documents import Document
 from app.services.llm_service import LLMService
 from app.services.ocr_service import OCRService
 from app.services.embedding_service import EmbeddingService
@@ -134,6 +135,159 @@ class SyllabusService:
         )
 
         return result.scalars().all()
+
+    async def search_syllabuses(
+        self,
+        db: AsyncSession,
+        user_id: int,
+        query: str,
+        search_in: Optional[List[str]] = None,
+        status: Optional[SyllabusStatus] = None,
+        page: int = 1,
+        per_page: int = 20,
+    ) -> Dict[str, Any]:
+        """
+        Search syllabuses for a user.
+
+        Args:
+            db: Database session
+            user_id: User ID
+            query: Search query string
+            search_in: List of fields to search in (title, description, extracted_text, subjects, chapters, topics)
+            status: Optional status filter
+            page: Page number (1-indexed)
+            per_page: Items per page
+
+        Returns:
+            Dictionary with items, total, page, per_page, pages
+        """
+        # Default search fields if not specified
+        if search_in is None:
+            search_in = ["title", "description", "extracted_text", "subjects", "chapters", "topics"]
+
+        # Build base query
+        base_query = select(Syllabus).where(Syllabus.user_id == user_id)
+
+        # Apply status filter
+        if status:
+            base_query = base_query.where(Syllabus.status == status.value if hasattr(status, 'value') else status)
+
+        # Build search conditions
+        search_conditions = []
+        search_lower = query.lower()
+
+        if "title" in search_in:
+            search_conditions.append(Syllabus.title.ilike(f"%{search_lower}%"))
+
+        if "description" in search_in:
+            search_conditions.append(Syllabus.description.ilike(f"%{search_lower}%"))
+
+        if "extracted_text" in search_in:
+            search_conditions.append(Syllabus.extracted_text.ilike(f"%{search_lower}%"))
+
+        if "subjects" in search_in:
+            # Search in subject names via subquery
+            subject_subquery = select(Subject.syllabus_id).where(
+                Subject.name.ilike(f"%{search_lower}%")
+            )
+            search_conditions.append(Syllabus.id.in_(subject_subquery))
+
+        if "chapters" in search_in:
+            # Search in chapter names via subquery
+            chapter_subquery = select(Subject.syllabus_id).join(Chapter).where(
+                Chapter.name.ilike(f"%{search_lower}%")
+            )
+            search_conditions.append(Syllabus.id.in_(chapter_subquery))
+
+        if "topics" in search_in:
+            # Search in chapter topics (JSON field) via subquery
+            # This is more complex as topics is a JSON field
+            topic_subquery = select(Subject.syllabus_id).join(Chapter).where(
+                Chapter.topics.isnot(None)
+            )
+            search_conditions.append(Syllabus.id.in_(topic_subquery))
+
+        # Combine search conditions with OR
+        if search_conditions:
+            base_query = base_query.where(or_(*search_conditions))
+
+        # Get total count
+        count_query = select(func.count()).select_from(base_query.subquery())
+        total_result = await db.execute(count_query)
+        total = total_result.scalar() or 0
+
+        # Apply pagination and ordering
+        query_with_pagination = base_query.order_by(Syllabus.updated_at.desc())
+        query_with_pagination = query_with_pagination.offset((page - 1) * per_page).limit(per_page)
+
+        result = await db.execute(query_with_pagination)
+        syllabuses = result.scalars().all()
+
+        # Determine matched fields for each result
+        items = []
+        for syllabus in syllabuses:
+            matched_fields = []
+            syllabus_lower = str(syllabus.title or "").lower()
+            if search_lower in syllabus_lower:
+                matched_fields.append("title")
+
+            if syllabus.description and search_lower in (syllabus.description or "").lower():
+                matched_fields.append("description")
+
+            if syllabus.extracted_text and search_lower in (syllabus.extracted_text or "").lower():
+                matched_fields.append("extracted_text")
+
+            # Check subjects, chapters, topics
+            if "subjects" in search_in or "chapters" in search_in or "topics" in search_in:
+                # Load subjects and chapters to check
+                from sqlalchemy.orm import selectinload
+                detail_result = await db.execute(
+                    select(Syllabus)
+                    .where(Syllabus.id == syllabus.id)
+                    .options(selectinload(Syllabus.subjects).selectinload(Subject.chapters))
+                )
+                detail_syllabus = detail_result.scalars().first()
+
+                if detail_syllabus:
+                    for subject in detail_syllabus.subjects or []:
+                        if search_lower in (subject.name or "").lower():
+                            matched_fields.append("subjects")
+                            break
+                        for chapter in subject.chapters or []:
+                            if search_lower in (chapter.name or "").lower():
+                                matched_fields.append("chapters")
+                                break
+                            if chapter.topics:
+                                topics_str = str(chapter.topics).lower()
+                                if search_lower in topics_str:
+                                    matched_fields.append("topics")
+                                    break
+                        if "subjects" in matched_fields or "chapters" in matched_fields or "topics" in matched_fields:
+                            break
+
+            items.append({
+                "id": syllabus.id,
+                "title": syllabus.title,
+                "description": syllabus.description,
+                "file_type": syllabus.file_type,
+                "status": syllabus.status,
+                "is_processed": syllabus.is_processed,
+                "is_ai_processed": syllabus.is_ai_processed,
+                "created_at": syllabus.created_at,
+                "updated_at": syllabus.updated_at,
+                "matched_fields": list(set(matched_fields))
+            })
+
+        pages = (total + per_page - 1) // per_page
+
+        return {
+            "items": items,
+            "total": total,
+            "page": page,
+            "per_page": per_page,
+            "pages": pages,
+            "query": query
+        }
 
     # ============================================================
     # Processing Methods
@@ -422,6 +576,80 @@ class SyllabusService:
             syllabus.id,
         )
 
+    def _build_structured_documents(
+        self, parsed_data: dict, base_metadata: dict
+    ) -> List[Document]:
+        """Build chapter-aware RAG documents from the parsed syllabus
+        structure so retrieved chunks carry subject/chapter metadata.
+
+        Produces one "chapter list" document per subject (so queries like
+        "what are the chapters?" retrieve the full list) and one document
+        per chapter containing its description and topics.  Returns an
+        empty list when there is no usable structure, in which case the
+        caller falls back to plain full-text chunking.
+        """
+        documents: List[Document] = []
+        subjects = (parsed_data or {}).get("subjects") or []
+
+        for subject in subjects:
+            subject_name = (subject.get("name") or "").strip() or "Unknown"
+            chapters = subject.get("chapters") or []
+
+            chapter_names = [
+                (ch.get("name") or "").strip()
+                for ch in chapters
+                if (ch.get("name") or "").strip()
+            ]
+            if chapter_names:
+                listing_content = (
+                    f"Chapter list for subject {subject_name}:\n"
+                    + "\n".join(f"- {name}" for name in chapter_names)
+                )
+                documents.extend(
+                    self.embedding_service.chunk_text_with_metadata(
+                        listing_content,
+                        {
+                            **base_metadata,
+                            "subject": subject_name,
+                            "chapter": "",
+                            "topic": "",
+                            "doc_type": "chapter_list",
+                        },
+                    )
+                )
+
+            for chapter in chapters:
+                chapter_name = (chapter.get("name") or "").strip() or "Unknown"
+                parts: List[str] = []
+                description = (chapter.get("description") or "").strip()
+                if description:
+                    parts.append(description)
+                topics = chapter.get("topics") or []
+                for topic in topics:
+                    topic = str(topic).strip()
+                    if topic:
+                        parts.append(f"- {topic}")
+
+                content = "\n".join(parts).strip()
+                if not content:
+                    content = f"{subject_name}: {chapter_name}"
+
+                metadata = {
+                    **base_metadata,
+                    "subject": subject_name,
+                    "chapter": chapter_name,
+                    "topic": "",
+                    "doc_type": "chapter",
+                }
+                docs = self.embedding_service.chunk_text_with_metadata(
+                    content, metadata
+                )
+                if not docs:
+                    docs = [Document(page_content=content, metadata=metadata)]
+                documents.extend(docs)
+
+        return documents
+
     async def _embed_for_rag(
         self, syllabus: Syllabus, extracted_text: str, parsed_data: dict
     ) -> bool:
@@ -451,20 +679,20 @@ class SyllabusService:
             else "unknown",
         }
 
-        try:
-            chunks = self._build_rag_chunks(syllabus, parsed_data)
+        # Build chapter-aware documents from the parsed structure so every
+        # chunk carries subject/chapter metadata and the tutor can answer
+        # structural questions (chapter lists, per-chapter summaries).
+        # Fall back to plain full-text chunking when there is no structure.
+        documents = self._build_structured_documents(
+            parsed_data, base_metadata
+        )
+        if not documents:
+            documents = self.embedding_service.chunk_text_with_metadata(
+                extracted_text, base_metadata
+            )
 
-            if not chunks:
-                # Parsing produced nothing usable - fall back to raw text
-                # chunks so retrieval still has something to work with.
-                logger.warning(
-                    "[VECTOR] Syllabus %s: no structured units; embedding "
-                    "raw text fallback",
-                    syllabus.id,
-                )
-                chunks = self.embedding_service.chunk_text_with_metadata(
-                    extracted_text, base_metadata
-                )
+        try:
+            chunks = documents
 
             if not chunks:
                 logger.warning(

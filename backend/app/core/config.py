@@ -187,6 +187,7 @@ class Settings(BaseSettings):
     SMTP_PORT: int = 587
 
     SMTP_USER: str = ""
+    SMTP_EMAIL: str = ""
     SMTP_PASSWORD: str = ""
 
     # ============================================================
@@ -206,7 +207,7 @@ class Settings(BaseSettings):
 
         origins_str = os.getenv(
             "ALLOWED_ORIGINS",
-            "http://localhost:3000,http://localhost:5173,http://localhost:8000",
+            "http://localhost:3000,http://localhost:5173,http://127.0.0.1:5173,http://localhost:5174,http://127.0.0.1:5174,http://localhost:8000,http://127.0.0.1:8000",
         )
 
         return [

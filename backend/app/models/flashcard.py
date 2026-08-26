@@ -55,7 +55,7 @@ from sqlalchemy import (
     String,
     Text,
 )
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import relationship, backref
 
 from app.database.base import BaseModel
 
@@ -120,7 +120,7 @@ class FlashcardDeck(BaseModel):
 
     user = relationship(
         "User",
-        backref="flashcard_decks",
+        backref=backref("flashcard_decks", passive_deletes=True),
     )
 
     flashcards = relationship(

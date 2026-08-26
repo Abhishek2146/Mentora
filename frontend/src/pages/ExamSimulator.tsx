@@ -92,12 +92,12 @@ export default function ExamSimulator() {
 
   if (result) return (
     <AppLayout title="Exam Simulator">
-      <div className="max-w-xl mx-auto card p-10 flex flex-col items-center gap-6 text-center">
-        <div className={`w-24 h-24 rounded-full flex items-center justify-center text-white text-3xl font-black ${ pct >= 60 ? "bg-gradient-to-br from-emerald-400 to-emerald-600" : "bg-gradient-to-br from-danger-400 to-danger-600" }`}>
+      <div className="max-w-xl mx-auto card p-6 sm:p-10 flex flex-col items-center gap-6 text-center">
+        <div className={`w-20 h-20 sm:w-24 sm:h-24 rounded-full flex items-center justify-center text-white text-2xl sm:text-3xl font-black ${ pct >= 60 ? "bg-gradient-to-br from-success-400 to-success-600" : "bg-gradient-to-br from-danger-400 to-danger-600" }`}>
           {pct}%
         </div>
         <div>
-          <h2 className="text-2xl font-bold text-slate-800 dark:text-slate-100">{pct >= 60 ? "🎉 Passed!" : "📚 Keep Practicing"}</h2>
+          <h2 className="text-xl sm:text-2xl font-bold text-slate-800 dark:text-slate-100">{pct >= 60 ? "🎉 Passed!" : "📚 Keep Practicing"}</h2>
           <p className="text-slate-500 mt-1">{score}/{questions.length} correct</p>
         </div>
         {result.results && (
@@ -120,7 +120,7 @@ export default function ExamSimulator() {
   if (!started || !exam) return (
     <AppLayout title="Exam Simulator">
       <div className="max-w-xl mx-auto space-y-6">
-        <div className="card p-8 flex flex-col items-center gap-6 text-center">
+        <div className="card p-5 sm:p-8 flex flex-col items-center gap-6 text-center">
           <div className="w-20 h-20 rounded-3xl bg-gradient-to-br from-primary-500 to-secondary-500 flex items-center justify-center shadow-glow-primary">
             <Trophy className="w-10 h-10 text-white" />
           </div>

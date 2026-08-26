@@ -1,8 +1,30 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import axios from "axios";
-import { User, Token } from "@/types";
+import { User, Token, UserRole } from "@/types";
 import apiClient from "@/lib/api";
+
+// Marker for frontend-only test sessions (no backend involved).
+export const TEST_ACCESS_TOKEN = "test-access-token";
+
+function createTestUser(role: UserRole): User {
+  const now = new Date().toISOString();
+  return {
+    id: role === "admin" ? -2 : -1,
+    email:
+      role === "admin"
+        ? "test-admin@mentora.local"
+        : "test-student@mentora.local",
+    username: role === "admin" ? "test_admin" : "test_student",
+    full_name: role === "admin" ? "Test Admin" : "Test Student",
+    role,
+    is_active: true,
+    is_verified: true,
+    avatar_url: null,
+    created_at: now,
+    updated_at: now,
+  };
+}
 
 function getApiError(error: unknown): Error {
   if (axios.isAxiosError(error)) {
@@ -23,8 +45,12 @@ interface AuthState {
   setUser: (user: User | null) => void;
   setTokens: (tokens: Token) => void;
   login: (emailOrUsername: string, password: string) => Promise<void>;
-  register: (userData: { email: string; username: string; password: string; full_name?: string; role?: string }) => Promise<void>;
+  testLogin: (role: UserRole) => void;
+  register: (userData: { email: string; username: string; password: string; full_name?: string }) => Promise<void>;
   registerAdmin: (userData: { email: string; username: string; password: string; full_name?: string; admin_secret: string }) => Promise<void>;
+  forgotPassword: (email: string) => Promise<void>;
+  resetPassword: (token: string, password: string) => Promise<void>;
+  changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
   logout: () => void;
   checkAuth: () => Promise<void>;
   updateUser: (data: Partial<User>) => Promise<void>;
@@ -75,6 +101,20 @@ export const useAuthStore = create<AuthState>()(
         }
       },
 
+      testLogin: (role) => {
+        const tokens: Token = {
+          access_token: TEST_ACCESS_TOKEN,
+          refresh_token: TEST_ACCESS_TOKEN,
+          token_type: "bearer",
+        };
+        set({
+          user: createTestUser(role),
+          tokens,
+          isAuthenticated: true,
+          isLoading: false,
+        });
+      },
+
       register: async (userData) => {
         set({ isLoading: true });
         try {
@@ -111,7 +151,7 @@ export const useAuthStore = create<AuthState>()(
 
       logout: () => {
         apiClient.clearTokensOnLogout();
-        set({ user: null, isAuthenticated: false, tokens: null });
+        set({ user: null, isAuthenticated: false, tokens: null, isLoading: false });
         window.location.href = "/login";
       },
 
@@ -119,6 +159,10 @@ export const useAuthStore = create<AuthState>()(
         const tokens = get().tokens;
         if (!tokens) {
           set({ isAuthenticated: false, user: null });
+          return;
+        }
+        if (tokens.access_token === TEST_ACCESS_TOKEN) {
+          set({ isAuthenticated: true });
           return;
         }
         try {
@@ -154,8 +198,62 @@ export const useAuthStore = create<AuthState>()(
           set({ user: updatedUser });
         }
       },
+
+      forgotPassword: async (email: string) => {
+        set({ isLoading: true });
+        try {
+          await apiClient.post("/api/v1/auth/forgot-password", { email });
+        } catch (error) {
+          set({ isLoading: false });
+          throw getApiError(error);
+        }
+        set({ isLoading: false });
+      },
+
+      resetPassword: async (token: string, password: string) => {
+        set({ isLoading: true });
+        try {
+          await apiClient.post("/api/v1/auth/reset-password", { token, password });
+        } catch (error) {
+          set({ isLoading: false });
+          throw getApiError(error);
+        }
+        set({ isLoading: false });
+      },
+
+      changePassword: async (currentPassword: string, newPassword: string) => {
+        set({ isLoading: true });
+        try {
+          const tokens = get().tokens;
+          if (!tokens) throw new Error("Not authenticated");
+          const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:8000";
+          const response = await fetch(`${apiUrl}/api/v1/auth/change-password`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${tokens.access_token}`,
+            },
+            body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
+          });
+          if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.detail || "Failed to change password");
+          }
+        } catch (error) {
+          set({ isLoading: false });
+          throw getApiError(error);
+        }
+        set({ isLoading: false });
+      },
     }),
-    { name: "mentora_auth" }
+    { 
+      name: "mentora_auth",
+      partialize: (state) => ({
+        user: state.user,
+        isAuthenticated: state.isAuthenticated,
+        tokens: state.tokens,
+      })
+    }
   )
 );
 

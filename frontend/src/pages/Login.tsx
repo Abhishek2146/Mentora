@@ -1,11 +1,11 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { GraduationCap, Mail, Lock, Eye, EyeOff, LogIn } from "lucide-react";
+import { GraduationCap, Mail, Lock, Eye, EyeOff, LogIn, FlaskConical } from "lucide-react";
 import { useAuthStore } from "@/store/authStore";
 
 export default function Login() {
   const navigate = useNavigate();
-  const { login, isLoading } = useAuthStore();
+  const { login, testLogin, isLoading } = useAuthStore();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPw, setShowPw] = useState(false);
@@ -17,10 +17,20 @@ export default function Login() {
     try {
       await login(email, password);
       const role = useAuthStore.getState().user?.role;
-      navigate(role === "admin" ? "/admin/dashboard" : "/dashboard");
+      if (role === "admin") {
+        navigate("/admin/dashboard");
+      } else {
+        navigate("/dashboard");
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Invalid email or password");
     }
+  };
+
+  const handleTestAccess = (role: "student" | "admin") => {
+    setError("");
+    testLogin(role);
+    navigate(role === "admin" ? "/admin/dashboard" : "/dashboard");
   };
 
   return (
@@ -38,7 +48,7 @@ export default function Login() {
           <h2 className="text-xl font-bold text-slate-800 dark:text-slate-100">Welcome back</h2>
 
           {error && (
-            <div className="p-3 bg-danger-50 dark:bg-red-900/20 border border-danger-200 dark:border-red-700 rounded-xl text-sm text-danger-600 dark:text-red-400">
+            <div className="p-3 bg-danger-50 dark:bg-danger-900/20 border border-danger-200 dark:border-danger-700 rounded-xl text-sm text-danger-600 dark:text-danger-400">
               {error}
             </div>
           )}
@@ -70,11 +80,31 @@ export default function Login() {
             </button>
           </form>
 
+          <div className="flex items-center gap-3 text-xs text-slate-400">
+            <span className="h-px flex-1 bg-slate-200 dark:bg-slate-700" />
+            temporary test access
+            <span className="h-px flex-1 bg-slate-200 dark:bg-slate-700" />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <button
+              type="button"
+              onClick={() => handleTestAccess("student")}
+              className="btn-outline btn-md text-sm"
+            >
+              <FlaskConical className="w-4 h-4" /> Student
+            </button>
+            <button
+              type="button"
+              onClick={() => handleTestAccess("admin")}
+              className="btn-outline btn-md text-sm"
+            >
+              <FlaskConical className="w-4 h-4" /> Admin
+            </button>
+          </div>
+
           <p className="text-center text-sm text-slate-500">
             No account? <Link to="/register" className="text-primary-600 font-semibold hover:underline">Sign up</Link>
-          </p>
-          <p className="text-center text-xs text-slate-400">
-            Are you an admin? <Link to="/admin/register" className="text-violet-600 dark:text-violet-400 font-semibold hover:underline">Admin sign up</Link>
           </p>
         </div>
       </div>
