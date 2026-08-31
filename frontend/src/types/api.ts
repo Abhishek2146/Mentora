@@ -121,3 +121,23 @@ export interface BulkNotificationAction {
   notification_ids: number[];
   action: "read" | "unread" | "archive" | "delete";
 }
+
+export interface VoiceResponse {
+  transcript: string;
+  response: string;
+  audio_url: string | null;
+  session_id: number;
+}
+
+export interface VoiceSession {
+  id: number;
+  user_id: number;
+  session_id: number | null;
+  audio_path: string | null;
+  transcript: string | null;
+  response_text: string | null;
+  voice_used: string;
+  duration: number | null;
+  created_at: string;
+  updated_at: string | null;
+}

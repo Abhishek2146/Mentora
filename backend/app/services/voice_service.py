@@ -55,7 +55,7 @@ class VoiceService:
         tts = gTTS(text=text, lang="en")
         tts.save(file_path)
 
-        return f"/static/audio/{os.path.basename(file_path)}"
+        return f"/uploads/audio/{os.path.basename(file_path)}"
 
     async def process_voice_input(
         self,
