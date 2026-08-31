@@ -1,3 +1,10 @@
+export interface UserUpdate {
+  email?: string;
+  username?: string;
+  full_name?: string | null;
+  avatar_url?: string | null;
+}
+
 export interface User {
   id: number;
   email: string;
@@ -296,6 +303,73 @@ export interface AdminDashboardStats {
     is_active: boolean;
     created_at: string | null;
   }[];
+}
+
+export type PlanType = "FREE" | "SUBSCRIPTION";
+export type BillingCycle = "NONE" | "MONTHLY" | "YEARLY";
+export type SubscriptionStatus = "ACTIVE" | "EXPIRED" | "CANCELLED";
+
+export type UsageTypeKey =
+  | "AI_CHAT"
+  | "NOTE_GENERATION"
+  | "QUIZ_GENERATION"
+  | "FLASHCARD_GENERATION"
+  | "STUDY_PLAN_GENERATION"
+  | "CODING_PROBLEM_GENERATION"
+  | "SYLLABUS_ANALYSIS";
+
+export const USAGE_TYPE_LABELS: Record<UsageTypeKey, string> = {
+  AI_CHAT: "AI Tutor Chat",
+  NOTE_GENERATION: "Note Generation",
+  QUIZ_GENERATION: "Quiz Generation",
+  FLASHCARD_GENERATION: "Flashcard Generation",
+  STUDY_PLAN_GENERATION: "Study Plan Generation",
+  CODING_PROBLEM_GENERATION: "Coding Problem Generation",
+  SYLLABUS_ANALYSIS: "Syllabus Analysis",
+};
+
+export interface Subscription {
+  id: number;
+  user_id: number;
+  plan_type: PlanType;
+  billing_cycle: BillingCycle;
+  status: SubscriptionStatus;
+  started_at: string | null;
+  expires_at: string | null;
+  auto_renew: boolean;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export interface FeatureUsage {
+  usage_type: UsageTypeKey;
+  daily_limit: number;
+  used: number;
+  remaining: number;
+  usage_date: string;
+}
+
+export interface UsageReport {
+  user_id: number;
+  plan_type: PlanType;
+  billing_cycle: BillingCycle;
+  status: SubscriptionStatus;
+  expires_at: string | null;
+  effective_plan: PlanType;
+  rate_limit_per_minute: number;
+  features: FeatureUsage[];
+  usage_date: string;
+}
+
+export interface PlanInfo {
+  plan_type: PlanType;
+  billing_cycles: string[];
+  rate_limit_per_minute: number;
+  daily_limits: Record<UsageTypeKey, number>;
+}
+
+export interface PlansResponse {
+  plans: PlanInfo[];
 }
 
 export * from "./api";
