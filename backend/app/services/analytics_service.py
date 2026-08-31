@@ -90,7 +90,14 @@ class AnalyticsService:
         flashcards_done = flashcards_done_result.scalar() or 0
 
         flashcards_week_result = await db.execute(
-            flashcard_count_query.where(Flashcard.last_reviewed >= week_start.isoformat())
+            select(func.count(Flashcard.id))
+            .select_from(Flashcard)
+            .join(FlashcardDeck, Flashcard.deck_id == FlashcardDeck.id)
+            .where(
+                FlashcardDeck.user_id == user_id,
+                Flashcard.last_reviewed.isnot(None),
+                Flashcard.last_reviewed >= week_start.strftime("%Y-%m-%dT%H:%M:%S"),
+            )
         )
         flashcards_week = flashcards_week_result.scalar() or 0
 
@@ -169,7 +176,7 @@ class AnalyticsService:
 
         coding_result = await db.execute(
             select(func.count(CodingSubmission.id))
-            .where(CodingSubmission.user_id == user_id, CodingSubmission.total_tests_cases > 0, CodingSubmission.passed_tests_cases == CodingSubmission.total_tests_cases)
+            .where(CodingSubmission.user_id == user_id, CodingSubmission.total_test_cases > 0, CodingSubmission.passed_test_cases == CodingSubmission.total_test_cases)
         )
         coding_solved = coding_result.scalar() or 0
 

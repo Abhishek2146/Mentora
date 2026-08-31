@@ -60,7 +60,9 @@ async def get_dashboard(
 
     coding_result = await db.execute(
         select(func.count()).select_from(CodingSubmission).where(
-            CodingSubmission.user_id == user_id, CodingSubmission.passed == True
+            CodingSubmission.user_id == user_id,
+            CodingSubmission.total_test_cases > 0,
+            CodingSubmission.passed_test_cases == CodingSubmission.total_test_cases,
         )
     )
     coding_solved = coding_result.scalar()
