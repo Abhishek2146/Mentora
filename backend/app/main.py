@@ -108,6 +108,14 @@ if os.path.isdir(static_dir):
         name="static",
     )
 
+uploads_dir = settings.UPLOAD_DIR
+os.makedirs(os.path.join(uploads_dir, "audio"), exist_ok=True)
+app.mount(
+    "/uploads",
+    StaticFiles(directory=uploads_dir),
+    name="uploads",
+)
+
 
 # --------------------------------------------------
 # Rate Limit Middleware
