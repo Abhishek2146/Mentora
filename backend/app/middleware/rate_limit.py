@@ -16,8 +16,16 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         self.requests_per_minute = requests_per_minute
         self.request_history = {}
 
+    EXEMPT_PATHS = {
+        "/api/v1/health",
+        "/api/v1/notifications/unread-count",
+    }
+
     async def dispatch(self, request: Request, call_next):
         if not settings.RATE_LIMIT_ENABLED:
+            return await call_next(request)
+
+        if request.url.path in self.EXEMPT_PATHS:
             return await call_next(request)
 
         client_host = request.client.host
