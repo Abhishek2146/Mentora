@@ -20,6 +20,7 @@ from app.models.subscription import (
     SubscriptionStatus,
     UsageType,
 )
+from app.models.payment import Payment, PaymentStatus
 
 __all__ = [
     "User", "UserRole",
@@ -35,4 +36,5 @@ __all__ = [
     "Notification", "NotificationType", "NotificationPriority",
     "Subscription", "Usage",
     "PlanType", "BillingCycle", "SubscriptionStatus", "UsageType",
+    "Payment", "PaymentStatus",
 ]

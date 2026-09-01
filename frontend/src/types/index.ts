@@ -366,10 +366,67 @@ export interface PlanInfo {
   billing_cycles: string[];
   rate_limit_per_minute: number;
   daily_limits: Record<UsageTypeKey, number>;
+  price_monthly_paisa?: number | null;
+  price_yearly_paisa?: number | null;
+  price_monthly_npr?: number | null;
+  price_yearly_npr?: number | null;
 }
 
 export interface PlansResponse {
   plans: PlanInfo[];
+}
+
+export interface KhaltiInitiateResponse {
+  pidx: string;
+  payment_url: string;
+  expires_at: string | null;
+  expires_in: number | null;
+  purchase_order_id: string;
+  purchase_order_name: string;
+  amount: number;
+  billing_cycle: BillingCycle;
+}
+
+export interface KhaltiVerifyResponse {
+  pidx: string;
+  status: string;
+  transaction_id: string | null;
+  total_amount: number | null;
+  fee: number | null;
+  refunded: boolean | null;
+  purchase_order_id: string;
+  billing_cycle: string;
+  subscription: Subscription | null;
+  message: string;
+}
+
+export interface KhaltiConfig {
+  enabled: boolean;
+  base_url: string;
+  website_url: string;
+  return_url: string;
+  prices: {
+    monthly_paisa: number;
+    yearly_paisa: number;
+    monthly_npr: number;
+    yearly_npr: number;
+    currency: string;
+  };
+  billing_cycles: BillingCycle[];
+}
+
+export interface PaymentOut {
+  id: number;
+  purchase_order_id: string;
+  pidx: string;
+  billing_cycle: string;
+  amount: number;
+  total_amount: number | null;
+  status: string;
+  payment_url: string | null;
+  transaction_id: string | null;
+  expires_at: string | null;
+  created_at: string | null;
 }
 
 export * from "./api";

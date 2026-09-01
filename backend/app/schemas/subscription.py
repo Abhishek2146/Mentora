@@ -24,6 +24,11 @@ class PlanInfo(BaseModel):
     billing_cycles: List[str]
     rate_limit_per_minute: int
     daily_limits: Dict[str, int]
+    # Pricing in paisa and NPR (e.g. 99900 paisa = Rs 999). Null for FREE.
+    price_monthly_paisa: Optional[int] = None
+    price_yearly_paisa: Optional[int] = None
+    price_monthly_npr: Optional[float] = None
+    price_yearly_npr: Optional[float] = None
 
 
 class PlansResponse(BaseModel):

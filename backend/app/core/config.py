@@ -12,7 +12,9 @@ class Settings(BaseSettings):
     """Application settings."""
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        # Load from both project-root .env and backend/.env regardless of CWD.
+        # backend/.env takes precedence if both exist (last wins).
+        env_file=(".env", "backend/.env", "../.env"),
         env_file_encoding="utf-8",
         extra="ignore",
     )
@@ -280,6 +282,22 @@ class Settings(BaseSettings):
     # Per-plan Redis request rate limits (requests per minute).
     RATE_LIMIT_FREE_PER_MINUTE: int = 10
     RATE_LIMIT_SUBSCRIPTION_PER_MINUTE: int = 30
+
+    # ============================================================
+    # Khalti Payment Gateway (ePayment v2)
+    # Docs: https://docs.khalti.com/khalti-epayment/
+    # Flow: initiate -> redirect payment_url -> return_url -> lookup
+    # ============================================================
+
+    KHALTI_SECRET_KEY: str = ""  # live_secret_key from test-admin.khalti.com / admin.khalti.com
+    KHALTI_BASE_URL: str = "https://dev.khalti.com/api/v2"
+    # Frontend origin used for website_url and return_url.
+    # return_url must be a GET-capable URL on the merchant site.
+    KHALTI_WEBSITE_URL: str = "http://localhost:5173"
+    KHALTI_RETURN_URL: str = "http://localhost:5173/subscription"
+    # Pricing in paisa (Rs 1 = 100 paisa). Khalti minimum is 1000 paisa (Rs 10).
+    SUBSCRIPTION_PRICE_MONTHLY_PAISE: int = 99900  # Rs 999
+    SUBSCRIPTION_PRICE_YEARLY_PAISE: int = 999900  # Rs 9999 (save ~16%)
 
 
 settings = Settings()

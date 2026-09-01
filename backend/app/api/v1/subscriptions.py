@@ -13,11 +13,19 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.auth import get_current_user_id, require_admin
+from app.core.auth import get_current_user, get_current_user_id, require_admin
 from app.core.config import settings
 from app.database.database import get_db
-from app.models.subscription import PlanType, Subscription, SubscriptionStatus, UsageType
+from app.models.payment import Payment
+from app.models.subscription import BillingCycle, PlanType, Subscription, SubscriptionStatus, UsageType
 from app.models.user import User
+from app.schemas.payment import (
+    KhaltiInitiateRequest,
+    KhaltiInitiateResponse,
+    KhaltiVerifyRequest,
+    KhaltiVerifyResponse,
+    PaymentOut,
+)
 from app.schemas.subscription import (
     AdminActivateRequest,
     AdminSubscriptionOut,
@@ -27,6 +35,7 @@ from app.schemas.subscription import (
     SubscriptionOut,
     UsageOut,
 )
+from app.services.khalti_service import khalti_service
 from app.services.rate_limit_service import rate_limiter
 from app.services.subscription_service import (
     ensure_utc,
@@ -38,6 +47,9 @@ router = APIRouter()
 
 # Mounted separately at {API_PREFIX}/usage by main.py.
 usage_router = APIRouter()
+
+# Khalti payments — mounted at {API_PREFIX}/subscriptions/khalti/*
+khalti_router = APIRouter(prefix="/khalti", tags=["khalti"])
 
 
 # --------------------------------------------------
@@ -141,6 +153,10 @@ async def list_plans():
                     settings.RATE_LIMIT_SUBSCRIPTION_PER_MINUTE
                 ),
                 daily_limits=settings.SUBSCRIPTION_DAILY_LIMITS,
+                price_monthly_paisa=settings.SUBSCRIPTION_PRICE_MONTHLY_PAISE,
+                price_yearly_paisa=settings.SUBSCRIPTION_PRICE_YEARLY_PAISE,
+                price_monthly_npr=round(settings.SUBSCRIPTION_PRICE_MONTHLY_PAISE / 100, 2),
+                price_yearly_npr=round(settings.SUBSCRIPTION_PRICE_YEARLY_PAISE / 100, 2),
             ),
         ]
     )
@@ -277,3 +293,139 @@ async def admin_expire_subscription(
 ):
     """Force-expire a user's subscription."""
     return await subscription_service.expire_subscription(db, user_id)
+
+
+# --------------------------------------------------
+# Khalti ePayment endpoints (user)
+# --------------------------------------------------
+
+
+@khalti_router.post("/initiate", response_model=KhaltiInitiateResponse)
+async def khalti_initiate(
+    payload: KhaltiInitiateRequest,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """
+    Initiate a Khalti payment for Mentora Pro.
+
+    Creates a Payment row and returns payment_url for redirect.
+    """
+    payment, data = await khalti_service.initiate_payment(
+        db, user, billing_cycle=payload.billing_cycle
+    )
+    return KhaltiInitiateResponse(
+        pidx=payment.pidx,
+        payment_url=payment.payment_url or data.get("payment_url", ""),
+        expires_at=payment.expires_at,
+        expires_in=data.get("expires_in"),
+        purchase_order_id=payment.purchase_order_id,
+        purchase_order_name=payment.purchase_order_name,
+        amount=payment.amount,
+        billing_cycle=payload.billing_cycle,
+    )
+
+
+@khalti_router.post("/verify", response_model=KhaltiVerifyResponse)
+async def khalti_verify(
+    payload: KhaltiVerifyRequest,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """
+    Verify a Khalti payment via lookup and activate subscription if Completed.
+
+    Idempotent: re-verifying an already-Completed payment re-activates safely.
+    """
+    payment, data = await khalti_service.lookup_payment(db, user.id, payload.pidx)
+
+    status_str = data.get("status") or payment.status
+    msg = f"Payment status: {status_str}"
+
+    subscription_data = None
+    # Only Completed counts as success — per Khalti docs.
+    if status_str == "Completed":
+        # Activate the paid plan; auto_renew=True for paid subscriptions.
+        from app.models.subscription import BillingCycle as BC
+
+        try:
+            cycle = BC(payment.billing_cycle)
+        except ValueError:
+            cycle = BC.MONTHLY
+        sub = await subscription_service.activate_subscription(
+            db, user.id, billing_cycle=cycle, auto_renew=True
+        )
+        # Record provider linkage for audit.
+        sub.provider = "khalti"
+        sub.provider_subscription_id = payment.pidx
+        sub.provider_customer_id = payment.transaction_id or payment.tidx
+        await db.commit()
+        await db.refresh(sub)
+        subscription_data = {
+            "plan_type": sub.plan_type,
+            "billing_cycle": sub.billing_cycle,
+            "status": sub.status,
+            "expires_at": sub.expires_at.isoformat() if sub.expires_at else None,
+        }
+        msg = "Payment verified — Mentora Pro activated!"
+    elif status_str in ("Pending", "Initiated"):
+        msg = "Payment is still pending. Please complete it or try again."
+    elif status_str in ("User canceled", "Expired"):
+        msg = f"Payment {status_str.lower()}. No charge was made."
+    elif status_str in ("Refunded", "Partially Refunded"):
+        msg = "Payment was refunded."
+
+    return KhaltiVerifyResponse(
+        pidx=payment.pidx,
+        status=status_str,
+        transaction_id=payment.transaction_id,
+        total_amount=payment.total_amount or payment.amount,
+        fee=payment.fee,
+        refunded=data.get("refunded"),
+        purchase_order_id=payment.purchase_order_id,
+        billing_cycle=payment.billing_cycle,
+        subscription=subscription_data,
+        message=msg,
+    )
+
+
+@khalti_router.get("/lookup", response_model=KhaltiVerifyResponse)
+async def khalti_lookup_get(
+    pidx: str = Query(..., description="Payment pidx from Khalti"),
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """GET convenience wrapper for lookup (useful for return_url redirects)."""
+    return await khalti_verify(
+        KhaltiVerifyRequest(pidx=pidx), db=db, user=user
+    )
+
+
+@khalti_router.get("/payments", response_model=List[PaymentOut])
+async def khalti_list_payments(
+    limit: int = Query(20, ge=1, le=100),
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """List the authenticated user's recent Khalti payments."""
+    return await khalti_service.list_user_payments(db, user.id, limit=limit)
+
+
+@khalti_router.get("/config")
+async def khalti_config():
+    """Public config to drive the frontend (prices, return URL, enabled flag)."""
+    enabled = bool(settings.KHALTI_SECRET_KEY)
+    return {
+        "enabled": enabled,
+        "base_url": settings.KHALTI_BASE_URL,
+        "website_url": settings.KHALTI_WEBSITE_URL,
+        "return_url": settings.KHALTI_RETURN_URL,
+        "prices": {
+            "monthly_paisa": settings.SUBSCRIPTION_PRICE_MONTHLY_PAISE,
+            "yearly_paisa": settings.SUBSCRIPTION_PRICE_YEARLY_PAISE,
+            "monthly_npr": round(settings.SUBSCRIPTION_PRICE_MONTHLY_PAISE / 100, 2),
+            "yearly_npr": round(settings.SUBSCRIPTION_PRICE_YEARLY_PAISE / 100, 2),
+            "currency": "NPR",
+        },
+        "billing_cycles": ["MONTHLY", "YEARLY"],
+    }

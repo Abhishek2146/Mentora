@@ -246,6 +246,12 @@ app.include_router(
 )
 
 app.include_router(
+    subscriptions.khalti_router,
+    prefix=f"{settings.API_PREFIX}/subscriptions",
+    tags=["khalti"],
+)
+
+app.include_router(
     subscriptions.usage_router,
     prefix=f"{settings.API_PREFIX}/usage",
     tags=["usage"],

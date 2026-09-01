@@ -1,5 +1,15 @@
 import apiClient from "@/lib/api";
-import type { PlanInfo, PlansResponse, Subscription, UsageReport } from "@/types";
+import type {
+  KhaltiConfig,
+  KhaltiInitiateResponse,
+  KhaltiVerifyResponse,
+  PaymentOut,
+  PlanInfo,
+  PlansResponse,
+  Subscription,
+  UsageReport,
+  BillingCycle,
+} from "@/types";
 
 export const subscriptionService = {
   /** Public plan catalogue with limits. */
@@ -26,6 +36,44 @@ export const subscriptionService = {
     return res.data;
   },
 
+  // -------- Khalti ePayment (NPR via Khalti Wallet) --------
+
+  /** Public pricing/config + enabled flag. */
+  async getKhaltiConfig(): Promise<KhaltiConfig> {
+    const res = await apiClient.get("/api/v1/subscriptions/khalti/config");
+    return res.data;
+  },
+
+  /** Initiate a Khalti payment; returns payment_url for redirect. */
+  async initiateKhalti(billingCycle: BillingCycle): Promise<KhaltiInitiateResponse> {
+    const res = await apiClient.post("/api/v1/subscriptions/khalti/initiate", {
+      billing_cycle: billingCycle,
+    });
+    return res.data;
+  },
+
+  /** Verify a Khalti pidx via server-side lookup and activate plan if Completed. */
+  async verifyKhalti(pidx: string): Promise<KhaltiVerifyResponse> {
+    const res = await apiClient.post("/api/v1/subscriptions/khalti/verify", { pidx });
+    return res.data;
+  },
+
+  /** GET lookup convenience (same as verify but via query param). */
+  async lookupKhalti(pidx: string): Promise<KhaltiVerifyResponse> {
+    const res = await apiClient.get("/api/v1/subscriptions/khalti/lookup", {
+      params: { pidx },
+    });
+    return res.data;
+  },
+
+  /** Recent payments for the authenticated user. */
+  async listMyPayments(limit = 20): Promise<PaymentOut[]> {
+    const res = await apiClient.get("/api/v1/subscriptions/khalti/payments", {
+      params: { limit },
+    });
+    return res.data;
+  },
+
   featureLabel(usageType: string): string {
     return (
       (
@@ -46,5 +94,11 @@ export const subscriptionService = {
     return plan === "SUBSCRIPTION"
       ? { label: "PRO", className: "badge bg-gradient-to-r from-primary-500 to-secondary-500 text-white" }
       : { label: "FREE", className: "badge badge-blue" };
+  },
+
+  /** NPR formatter from paisa or NPR float. */
+  formatNPR(paisaOrNpr: number, isPaisa = false): string {
+    const npr = isPaisa ? paisaOrNpr / 100 : paisaOrNpr;
+    return `Rs. ${npr.toLocaleString("en-NP", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
   },
 };
