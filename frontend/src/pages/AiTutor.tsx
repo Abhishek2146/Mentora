@@ -192,7 +192,7 @@ export default function AiTutor() {
                 )}
               </div>
               <div
-                className={`max-w-[75%] rounded-2xl px-4 py-3 text-sm leading-relaxed break-words ${
+                className={`max-w-[75%] rounded-2xl px-4 py-3 text-sm leading-relaxed break-words whitespace-pre-line ${
                   m.role === "user"
                     ? "bg-gradient-to-br from-primary-500 to-primary-600 text-white rounded-tr-sm"
                     : "bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 rounded-tl-sm"

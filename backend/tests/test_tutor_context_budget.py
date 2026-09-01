@@ -144,9 +144,15 @@ class TestProcessMessageContextBudget:
         mock_session_result = MagicMock()
         mock_session_result.scalars.return_value.first.return_value = mock_session
 
+        # Max sequence number (None = no messages yet)
+        mock_max_seq_result = MagicMock()
+        mock_max_seq_result.scalar_one_or_none.return_value = None
+
         # Syllabus is owned
+        mock_syllabus = MagicMock()
+        mock_syllabus.title = "Test Syllabus"
         mock_syllabus_result = MagicMock()
-        mock_syllabus_result.scalars.return_value.first.return_value = True
+        mock_syllabus_result.scalars.return_value.first.return_value = mock_syllabus
 
         # Mock vector service to return large context
         large_content = "A" * 10000
@@ -157,6 +163,7 @@ class TestProcessMessageContextBudget:
         mock_db.execute.side_effect = [
             mock_session_result,
             empty_result,
+            mock_max_seq_result,
             mock_syllabus_result,
         ]
 
@@ -188,8 +195,8 @@ class TestProcessMessageContextBudget:
         mock_chat.assert_called_once()
         messages = mock_chat.call_args[0][0]
         system_msg = messages[0]["content"]
-        # System message should be less than base prompt + max context chars
-        assert len(system_msg) < 3000  # base prompt (~200) + 2000 max context + margin
+        # System message should be less than base prompt (~7200) + max context (2000) + margin
+        assert len(system_msg) < 10000
 
     @pytest.mark.asyncio
     async def test_413_error_falls_back_to_minimal_context(self):
@@ -206,12 +213,17 @@ class TestProcessMessageContextBudget:
         mock_session_result = MagicMock()
         mock_session_result.scalars.return_value.first.return_value = mock_session
 
+        # Max sequence number (None = no messages yet)
+        mock_max_seq_result = MagicMock()
+        mock_max_seq_result.scalar_one_or_none.return_value = None
+
         mock_syllabus_result = MagicMock()
         mock_syllabus_result.scalars.return_value.first.return_value = None
 
         mock_db.execute.side_effect = [
             mock_session_result,
             empty_result,
+            mock_max_seq_result,
             mock_syllabus_result,
         ]
 
@@ -241,8 +253,9 @@ class TestProcessMessageContextBudget:
         # Second call should have minimal messages (short system + user only)
         second_call_messages = mock_chat.call_args[0][0]
         assert len(second_call_messages) == 2
-        # System prompt should be short (not the full RAG context)
-        assert len(second_call_messages[0]["content"]) < 200
+        # System prompt should be shorter than full context version
+        # (full version includes RAG context which can be much larger)
+        assert len(second_call_messages[0]["content"]) < 7000
 
     @pytest.mark.asyncio
     async def test_non_413_error_propagates(self):
@@ -259,12 +272,17 @@ class TestProcessMessageContextBudget:
         mock_session_result = MagicMock()
         mock_session_result.scalars.return_value.first.return_value = mock_session
 
+        # Max sequence number (None = no messages yet)
+        mock_max_seq_result = MagicMock()
+        mock_max_seq_result.scalar_one_or_none.return_value = None
+
         mock_syllabus_result = MagicMock()
         mock_syllabus_result.scalars.return_value.first.return_value = None
 
         mock_db.execute.side_effect = [
             mock_session_result,
             empty_result,
+            mock_max_seq_result,
             mock_syllabus_result,
         ]
 

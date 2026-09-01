@@ -1,6 +1,7 @@
 """
 Tutor (AI Chatbot) Service
 """
+import re
 from typing import Optional, List, Dict, Any
 from sqlalchemy import func as sql_func
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -99,6 +100,25 @@ class TutorService:
     def _estimate_tokens(text: str) -> int:
         """Rough token estimate using the configured chars-per-token ratio."""
         return len(text) // settings.TUTOR_CHARS_PER_TOKEN
+
+    @staticmethod
+    def _ensure_newlines(text: str) -> str:
+        """Ensure numbered points each start on their own line.
+
+        If the LLM returns points like:
+            1. First. 2. Second. 3. Third.
+        This converts them to:
+            1. First.
+            2. Second.
+            3. Third.
+        """
+        # Insert newline before numbered items that follow text on the same line.
+        # Matches patterns like ". 2." or ") 2." where a number follows without a newline.
+        text = re.sub(r'(?<=\S)\s+(\d+)\.\s', r'\n\1. ', text)
+        # Also handle cases where label lines run into next numbered item
+        # e.g. "Key Points: 1. First" -> "Key Points:\n1. First"
+        text = re.sub(r'(Key Points:|Important Points:|Advantages:|Limitations:|Differences:)\s+(\d+)\.\s', r'\1\n\2. ', text)
+        return text
 
     async def process_message(
         self,
@@ -220,6 +240,8 @@ class TutorService:
                 )
             context = self.vector_service.format_context(context_docs)
 
+        context = self._truncate_context(context, settings.TUTOR_MAX_CONTEXT_CHARS)
+
         logger.info(f"TUTOR CONTEXT: retrieved_docs={len(context_docs)} context_length={len(context)}")
 
         personalization = await self._build_personalization_note(user_id, syllabus_id, db)
@@ -322,6 +344,8 @@ class TutorService:
                     )
                 else:
                     raise
+
+        ai_response = self._ensure_newlines(ai_response)
 
         user_msg = ChatMessage(
             session_id=session.id,
