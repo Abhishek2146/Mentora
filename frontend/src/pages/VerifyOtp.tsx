@@ -1,6 +1,7 @@
 import { useState, useRef } from "react";
 import { useLocation, useNavigate, Link } from "react-router-dom";
-import { GraduationCap, ShieldCheck, ArrowLeft, AlertCircle } from "lucide-react";
+import { GraduationCap, ShieldCheck, ArrowLeft, AlertCircle, Mail } from "lucide-react";
+import { useAuthStore } from "@/store/authStore";
 
 export default function VerifyOtp() {
   const location = useLocation();
@@ -12,8 +13,9 @@ export default function VerifyOtp() {
 
   const [digits, setDigits] = useState<string[]>(Array(6).fill(""));
   const [error, setError] = useState("");
-  const [resendMessage, setResendMessage] = useState(false);
+  const [resendMessage, setResendMessage] = useState("");
   const inputsRef = useRef<(HTMLInputElement | null)[]>([]);
+  const { verifyOtp, resendOtp, isLoading } = useAuthStore();
 
   const handleChange = (index: number, value: string) => {
     const char = value.replace(/\D/g, "").slice(-1);
@@ -42,7 +44,7 @@ export default function VerifyOtp() {
     inputsRef.current[Math.min(pasted.length, 5)]?.focus();
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
 
@@ -51,15 +53,34 @@ export default function VerifyOtp() {
       setError("Please enter all 6 digits of the OTP");
       return;
     }
+    if (!email) {
+      setError("Missing email. Please go back to Forgot Password.");
+      return;
+    }
 
-    // Frontend-only flow: accept the OTP and continue to set a new password.
-    navigate("/set-new-password", { state: { email, otp } });
+    try {
+      const resetToken = await verifyOtp(email, otp);
+      // Unify flows: OTP → reset token → same UI as email link
+      navigate(`/reset-password?token=${encodeURIComponent(resetToken)}`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Invalid or expired OTP");
+    }
   };
 
-  const handleResend = () => {
-    setDigits(Array(6).fill(""));
-    setResendMessage(true);
-    setTimeout(() => setResendMessage(false), 3000);
+  const handleResend = async () => {
+    if (!email) {
+      setError("Missing email. Please go back to Forgot Password.");
+      return;
+    }
+    setError("");
+    try {
+      await resendOtp(email);
+      setDigits(Array(6).fill(""));
+      setResendMessage("A new OTP and link have been sent");
+      setTimeout(() => setResendMessage(""), 3000);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to resend");
+    }
   };
 
   return (
@@ -75,9 +96,9 @@ export default function VerifyOtp() {
         <div className="card p-7 space-y-5">
           <h2 className="text-xl font-bold text-slate-800 dark:text-slate-100">Verify OTP</h2>
           <p className="text-sm text-slate-500">
-            Enter the 6-digit code sent to{" "}
-            <strong>{email || "your email"}</strong>
+            Enter the 6-digit OTP sent to <strong>{email || "your email"}</strong> — same email as the reset link (valid 10 min).
           </p>
+          <p className="text-xs text-slate-400 flex items-center gap-1"><Mail className="w-3 h-3" /> Or click the reset link in the email to skip OTP.</p>
 
           {error && (
             <div className="p-3 bg-danger-50 dark:bg-danger-900/20 border border-danger-200 dark:border-danger-700 rounded-xl text-sm text-danger-600 dark:text-danger-400 flex items-center gap-2">
@@ -88,7 +109,13 @@ export default function VerifyOtp() {
 
           {resendMessage && (
             <div className="p-3 bg-primary-50 dark:bg-primary-900/20 border border-primary-200 rounded-xl text-sm text-primary-600">
-              A new OTP has been sent
+              {resendMessage}
+            </div>
+          )}
+
+          {!email && (
+            <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-700">
+              No email found. Please start from <Link to="/forgot-password" className="underline font-semibold">Forgot Password</Link>.
             </div>
           )}
 
@@ -110,17 +137,18 @@ export default function VerifyOtp() {
               ))}
             </div>
 
-            <button type="submit" className="btn-primary btn-md w-full">
-              <ShieldCheck className="w-4 h-4" /> Verify OTP
+            <button type="submit" disabled={isLoading} className="btn-primary btn-md w-full disabled:opacity-60">
+              {isLoading ? <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" /> : <><ShieldCheck className="w-4 h-4" /> Verify OTP</>}
             </button>
           </form>
 
           <p className="text-center text-sm text-slate-500">
-            Didn't receive the code?{" "}
+            Didn’t receive the code?{" "}
             <button
               type="button"
               onClick={handleResend}
-              className="text-primary-600 font-semibold hover:underline"
+              disabled={isLoading}
+              className="text-primary-600 font-semibold hover:underline disabled:opacity-50"
             >
               Resend OTP
             </button>

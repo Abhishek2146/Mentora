@@ -21,6 +21,7 @@ from app.models.subscription import (
     UsageType,
 )
 from app.models.payment import Payment, PaymentStatus
+from app.models.otp import PasswordResetOTP
 
 __all__ = [
     "User", "UserRole",
@@ -37,4 +38,5 @@ __all__ = [
     "Subscription", "Usage",
     "PlanType", "BillingCycle", "SubscriptionStatus", "UsageType",
     "Payment", "PaymentStatus",
+    "PasswordResetOTP",
 ]

@@ -91,7 +91,8 @@ class EmailService:
         self,
         to_email: str,
         reset_token: str,
-        frontend_url: str
+        frontend_url: str,
+        otp: str | None = None,
     ) -> bool:
         """
         Send password reset email.
@@ -100,6 +101,7 @@ class EmailService:
             to_email: Recipient email address
             reset_token: Password reset token
             frontend_url: Frontend URL for reset link
+            otp: 6-digit OTP (optional, shown alongside link)
 
         Returns:
             True if email sent successfully, False otherwise
@@ -107,6 +109,21 @@ class EmailService:
         reset_link = f"{frontend_url}/reset-password?token={reset_token}"
 
         subject = f"Reset your {self.app_name} password"
+
+        otp_block_html = ""
+        otp_block_text = ""
+        if otp:
+            otp_block_html = f"""
+                <div style="margin: 24px 0; padding: 16px; background: #fff; border: 2px dashed #6366f1; border-radius: 8px; text-align: center;">
+                    <p style="color: #475569; font-size: 14px; margin: 0 0 8px;">Or use this 6-digit OTP (valid for 10 minutes):</p>
+                    <p style="font-size: 32px; font-weight: 800; letter-spacing: 8px; color: #6366f1; margin: 0;">{otp}</p>
+                    <p style="color: #64748b; font-size: 12px; margin: 8px 0 0;">Enter it on the “Verify OTP” page to reset your password.</p>
+                </div>
+            """
+            otp_block_text = f"""
+Your OTP (valid 10 min): {otp}
+Go to {frontend_url}/verify-otp?email={to_email} to enter it.
+"""
 
         html_content = f"""
         <!DOCTYPE html>
@@ -122,15 +139,17 @@ class EmailService:
             </div>
             <div style="background: #f8fafc; padding: 30px; border-radius: 0 0 12px 12px; border: 1px solid #e2e8f0; border-top: none;">
                 <h2 style="color: #1e293b; margin-top: 0;">Reset Your Password</h2>
-                <p style="color: #475569; font-size: 16px;">You requested to reset your password. Click the button below to create a new password:</p>
-                <div style="text-align: center; margin: 30px 0;">
+                <p style="color: #475569; font-size: 16px;">You requested to reset your password. Choose one of the options below:</p>
+                <p style="color: #475569; font-size: 14px; font-weight: 600; margin-top: 16px;">Option 1 — Reset link (1 hour):</p>
+                <div style="text-align: center; margin: 16px 0;">
                     <a href="{reset_link}" style="background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%); color: white; padding: 14px 28px; border-radius: 8px; text-decoration: none; font-weight: 600; display: inline-block; box-shadow: 0 4px 14px rgba(99, 102, 241, 0.4);">Reset Password</a>
                 </div>
                 <p style="color: #64748b; font-size: 14px;">Or copy and paste this link into your browser:</p>
                 <p style="color: #6366f1; font-size: 14px; word-break: break-all; background: #f1f5f9; padding: 12px; border-radius: 6px;">{reset_link}</p>
+                {otp_block_html}
                 <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 24px 0;">
                 <p style="color: #94a3b8; font-size: 12px; margin: 0;">
-                    This link will expire in 1 hour. If you didn't request this, please ignore this email.
+                    Both the link (1 hour) and OTP (10 minutes) expire soon. If you didn't request this, please ignore this email.
                 </p>
             </div>
         </body>
@@ -140,11 +159,10 @@ class EmailService:
         text_content = f"""
         Reset your {self.app_name} password
 
-        You requested to reset your password. Click the link below to create a new password:
-
+        Option 1 — Reset link (1 hour):
         {reset_link}
-
-        This link will expire in 1 hour. If you didn't request this, please ignore this email.
+        {otp_block_text}
+        If you didn't request this, please ignore this email.
         """
 
         return await self.send_email(to_email, subject, html_content, text_content)
