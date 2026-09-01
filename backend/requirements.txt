@@ -28,6 +28,7 @@ python-docx>=1.1.0
 
 # Speech / Audio
 openai-whisper>=20231117
+imageio-ffmpeg>=0.4.8
 gTTS>=2.5.0
 
 

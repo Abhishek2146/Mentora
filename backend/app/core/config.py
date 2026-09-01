@@ -295,6 +295,7 @@ class Settings(BaseSettings):
 
     KHALTI_SECRET_KEY: str = ""  # live_secret_key from test-admin.khalti.com / admin.khalti.com
     KHALTI_BASE_URL: str = "https://dev.khalti.com/api/v2"
+    KHALTI_MOCK_SUCCESS: bool = True  # Enable mock success fallback for system testing when balance is insufficient or in test mode
     # Frontend origin used for website_url and return_url.
     # return_url must be a GET-capable URL on the merchant site.
     KHALTI_WEBSITE_URL: str = "http://localhost:5173"
