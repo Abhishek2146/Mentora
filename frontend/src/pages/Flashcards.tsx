@@ -20,9 +20,9 @@ export default function Flashcards() {
   const [generating, setGenerating] = useState(false);
   const [showGenerate, setShowGenerate] = useState(false);
 
-  async function loadCards() {
+  async function loadCards(sId?: number | "") {
     try {
-      const data = await flashcardService.getFlashcards();
+      const data = await flashcardService.getFlashcards(undefined, (sId as number) || undefined);
       setCards(data || []);
     } catch {
       setCards([]);
@@ -32,12 +32,17 @@ export default function Flashcards() {
   }
 
   useEffect(() => {
-    loadCards();
+    loadCards(syllabusId);
     syllabusService
       .getAllSyllabi()
       .then(setSyllabi)
       .catch(() => {});
   }, []);
+
+  useEffect(() => {
+    setLoading(true);
+    loadCards(syllabusId);
+  }, [syllabusId]);
 
   async function handleGenerate() {
     setGenerating(true);
@@ -52,7 +57,7 @@ export default function Flashcards() {
       setIndex(0);
       setFlipped(false);
       setSessionStats({ correct: 0, incorrect: 0 });
-      await loadCards();
+      await loadCards(syllabusId);
     } catch (e: any) {
       const detail = e?.response?.data?.detail;
       setError(
