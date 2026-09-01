@@ -16,6 +16,7 @@ import VoiceLearningPage from "@/pages/VoiceLearning";
 import ProfilePage from "@/pages/Profile";
 import SettingsPage from "@/pages/Settings";
 import ProgressPage from "@/pages/Progress";
+import SubscriptionPage from "@/pages/Subscription";
 import RegisterPage from "@/pages/Register";
 import LoginPage from "@/pages/Login";
 import ForgotPasswordPage from "@/pages/ForgotPassword";
@@ -58,6 +59,7 @@ export default function App() {
         <Route path="/profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
         <Route path="/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
         <Route path="/progress" element={<ProtectedRoute><ProgressPage /></ProtectedRoute>} />
+        <Route path="/subscription" element={<ProtectedRoute><SubscriptionPage /></ProtectedRoute>} />
         <Route path="/register" element={<PublicRoute><RegisterPage /></PublicRoute>} />
         <Route path="/login" element={<PublicRoute><LoginPage /></PublicRoute>} />
         <Route path="/forgot-password" element={<PublicRoute><ForgotPasswordPage /></PublicRoute>} />

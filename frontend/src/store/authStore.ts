@@ -184,18 +184,11 @@ export const useAuthStore = create<AuthState>()(
       updateUser: async (data: Partial<User>) => {
         const tokens = get().tokens;
         if (!tokens) throw new Error("Not authenticated");
-        const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:8000";
-        const response = await fetch(`${apiUrl}/api/v1/users/me`, {
-          method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${tokens.access_token}`,
-          },
-          body: JSON.stringify(data),
-        });
-        if (response.ok) {
-          const updatedUser: User = await response.json();
-          set({ user: updatedUser });
+        try {
+          const res = await apiClient.put("/api/v1/users/me", data);
+          set({ user: res.data });
+        } catch (error) {
+          throw getApiError(error);
         }
       },
 
