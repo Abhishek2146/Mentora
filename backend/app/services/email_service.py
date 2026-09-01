@@ -18,8 +18,12 @@ class EmailService:
     def __init__(self):
         self.host = settings.SMTP_HOST
         self.port = settings.SMTP_PORT
-        self.username = settings.SMTP_EMAIL or settings.SMTP_USER
-        self.password = settings.SMTP_PASSWORD
+        # Gmail app passwords are shown as "xxxx xxxx xxxx xxxx" — spaces must be stripped.
+        # Also strip surrounding whitespace from env-loaded values.
+        raw_user = (settings.SMTP_EMAIL or settings.SMTP_USER or "").strip()
+        raw_pass = (settings.SMTP_PASSWORD or "").strip().replace(" ", "")
+        self.username = raw_user
+        self.password = raw_pass
         self.from_email = self.username
         self.app_name = settings.APP_NAME
 
@@ -58,7 +62,7 @@ class EmailService:
             message.set_content(html_content, subtype="html")
 
         try:
-            logger.info(f"Sending email to {to_email} via {self.host}:{self.port}")
+            logger.info(f"Sending email to {to_email} via {self.host}:{self.port} as {self.username}")
             await aiosmtplib.send(
                 message,
                 hostname=self.host,
@@ -70,7 +74,17 @@ class EmailService:
             logger.info(f"Email sent successfully to {to_email}")
             return True
         except Exception as e:
-            logger.error(f"Failed to send email to {to_email}: {e}")
+            # Specific hint for Gmail 535
+            err_str = str(e)
+            if "535" in err_str or "BadCredentials" in err_str or "Username and Password not accepted" in err_str:
+                logger.error(
+                    f"Failed to send email to {to_email}: {e} — "
+                    "Gmail 535: verify 2-Step Verification is ON, App Password is 16 chars "
+                    "(no spaces), and SMTP_USER/EMAIL matches the Google account that generated it. "
+                    "Regenerate at https://myaccount.google.com/apppasswords"
+                )
+            else:
+                logger.error(f"Failed to send email to {to_email}: {e}")
             return False
 
     async def send_password_reset_email(

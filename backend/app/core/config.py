@@ -192,6 +192,10 @@ class Settings(BaseSettings):
     SMTP_EMAIL: str = ""
     SMTP_PASSWORD: str = ""
 
+    # Frontend URL used for password-reset and other email links.
+    # Must match your Vite dev server; fallback to first ALLOWED_ORIGINS.
+    FRONTEND_URL: str = "http://localhost:5173"
+
     # ============================================================
     # Voice
     # ============================================================

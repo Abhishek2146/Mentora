@@ -250,12 +250,26 @@ async def forgot_password(
 
     if user:
         reset_token = create_password_reset_token(data={"sub": str(user.id)})
-        frontend_url = settings.ALLOWED_ORIGINS[0] if settings.ALLOWED_ORIGINS else "http://localhost:3000"
-        await email_service.send_password_reset_email(
+        # Prefer explicit FRONTEND_URL; fallback to first allowed origin.
+        frontend_url = (settings.FRONTEND_URL or "").strip() or (
+            settings.ALLOWED_ORIGINS[0] if settings.ALLOWED_ORIGINS else "http://localhost:5173"
+        )
+        # Normalize: remove trailing slash
+        frontend_url = frontend_url.rstrip("/")
+        sent = await email_service.send_password_reset_email(
             to_email=user.email,
             reset_token=reset_token,
             frontend_url=frontend_url
         )
+        # Dev fallback: if SMTP not configured or send failed, log the link so
+        # the developer can still test the flow without a working Gmail App Password.
+        if not sent:
+            import logging as _logging
+            _logging.getLogger(__name__).warning(
+                "Password reset email not sent (check SMTP config). "
+                "DEV RESET LINK for %s: %s/reset-password?token=%s",
+                user.email, frontend_url, reset_token,
+            )
 
     return {"message": "If the email exists, a password reset link has been sent."}
 
