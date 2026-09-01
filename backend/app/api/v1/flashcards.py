@@ -148,6 +148,7 @@ async def list_decks(
 @router.get("/review/all", response_model=List[FlashcardOut])
 async def review_all_flashcards(
     topic: Optional[str] = None,
+    syllabus_id: Optional[int] = None,
     db: AsyncSession = Depends(get_db),
     user_id: int = Depends(get_current_user_id),
 ):
@@ -164,6 +165,8 @@ async def review_all_flashcards(
         )
         .order_by(Flashcard.next_review.isnot(None), Flashcard.id)
     )
+    if syllabus_id:
+        query = query.where(FlashcardDeck.syllabus_id == syllabus_id)
     result = await db.execute(query)
     cards = list(result.scalars().all())
 
