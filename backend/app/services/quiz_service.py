@@ -208,48 +208,55 @@ class QuizService:
         count: int = 5,
         db: AsyncSession = None,
         title: Optional[str] = None,
+        syllabus_id: Optional[int] = None,
     ) -> Quiz:
         """Generate an MCQ quiz for a specific topic from the student's
         syllabus/RAG content and persist it with its questions."""
-        syllabus_id, previous_questions = None, []
+        previous_questions = []
 
         candidates = await db.execute(
             select(Syllabus).where(Syllabus.user_id == user_id).order_by(Syllabus.id.desc())
         )
         syllabus_rows = candidates.scalars().all()
+        if not syllabus_rows:
+            raise ValueError("Upload a syllabus first to generate quizzes.")
+
+        syllabus = None
+        if syllabus_id:
+            syllabus = next((r for r in syllabus_rows if r.id == syllabus_id), None)
 
         resolved_topic = topic.strip() if topic else ""
-        for row in syllabus_rows:
-            if not resolved_topic or syllabus_contains_topic(row.parsed_data, resolved_topic):
-                syllabus_id = row.id
-                break
-        else:
-            if not syllabus_rows:
-                raise ValueError("Upload a syllabus first to generate quizzes.")
-            syllabus_id = syllabus_rows[0].id
+        if not syllabus:
+            if resolved_topic:
+                for row in syllabus_rows:
+                    if syllabus_contains_topic(row.parsed_data, resolved_topic):
+                        syllabus = row
+                        break
+            if not syllabus:
+                # Pick the latest valid syllabus with content
+                syllabus = next(
+                    (
+                        r for r in syllabus_rows
+                        if r.status in ("rag_ready", "parsed", "uploaded", "embedding_failed", "processed")
+                        and (r.extracted_text or r.parsed_data)
+                    ),
+                    syllabus_rows[0],
+                )
 
-        syllabus = next((r for r in syllabus_rows if r.id == syllabus_id), None)
+        target_syllabus_id = syllabus.id
 
         logger.info(
             "MCQ generation: resolved_topic=%r syllabus_id=%d status=%s",
-            resolved_topic, syllabus_id, syllabus.status if syllabus else None,
+            resolved_topic, target_syllabus_id, syllabus.status if syllabus else None,
         )
 
         # RAG-retrieved content scoped to this syllabus.
         content = ""
-        # Build a more specific RAG query: prefer the resolved topic, then
-        # chapter/unit names from parsed_data, then the syllabus title.
         query_text = resolved_topic
         if not query_text and syllabus:
-            # Try to build a meaningful query from parsed_data chapter names
             all_chapter_names = extract_syllabus_topics(syllabus.parsed_data, limit=10)
             if all_chapter_names:
-                # Use the day-of-year rotation to pick a chapter as query
                 query_text = all_chapter_names[date.today().timetuple().tm_yday % len(all_chapter_names)]
-                logger.info(
-                    "RAG query from chapter rotation: %r (from %d chapters)",
-                    query_text, len(all_chapter_names),
-                )
             else:
                 query_text = syllabus.title or "course topics"
         if not query_text:
@@ -258,24 +265,53 @@ class QuizService:
         try:
             content = await asyncio.to_thread(
                 self.vector_service.retrieve_scoped_content,
-                syllabus_id, user_id, query_text,
+                target_syllabus_id, user_id, query_text,
             )
         except Exception as e:
             logger.warning("RAG retrieval failed for quiz generation: %s", e)
-        if not content and syllabus and syllabus.extracted_text:
-            content = syllabus.extracted_text[: settings.LLM_MAX_INPUT_CHARS]
+
+        # Fallback/augmentation: build structured outline from parsed_data or extracted_text
+        if (not content or len(content.strip()) < 50) and syllabus:
+            if syllabus.parsed_data and isinstance(syllabus.parsed_data, dict):
+                lines = [f"Course / Syllabus: {syllabus.title or 'Syllabus'}"]
+                if syllabus.description:
+                    lines.append(f"Description: {syllabus.description}")
+                for subj in (syllabus.parsed_data.get("subjects") or []):
+                    if not isinstance(subj, dict):
+                        continue
+                    subj_name = subj.get("name", "")
+                    lines.append(f"\nSubject: {subj_name}")
+                    for ch in (subj.get("chapters") or []):
+                        if not isinstance(ch, dict):
+                            continue
+                        ch_name = ch.get("name", "")
+                        lines.append(f"- Chapter: {ch_name}")
+                        if ch.get("description"):
+                            lines.append(f"  Description: {ch.get('description')}")
+                        for t in (ch.get("topics") or []):
+                            if t:
+                                lines.append(f"    * {t}")
+                parsed_outline = "\n".join(lines).strip()
+                if parsed_outline:
+                    content = (content + "\n\n" + parsed_outline).strip() if content else parsed_outline
+
+            if (not content or len(content.strip()) < 50) and syllabus.extracted_text:
+                content = syllabus.extracted_text[: settings.LLM_MAX_INPUT_CHARS]
+
+        # Also fallback to subjects from database rows if parsed_data was not saved in JSON
+        if (not content or len(content.strip()) < 50) and syllabus:
+            db_topics = await _fallback_topics_from_db(syllabus.id, db)
+            if db_topics:
+                content = f"Course: {syllabus.title}\nSyllabus Topics:\n" + "\n".join(f"- {t}" for t in db_topics)
+
+        # Ultimate fallback so quiz generation never crashes if a syllabus row exists
+        if not content and syllabus:
+            content = f"Course: {syllabus.title}\nDescription: {syllabus.description or 'Academic course syllabus'}\nFocus: {resolved_topic or 'Core curriculum topics'}"
 
         logger.info(
-            "Quiz content: topic=%r query=%r rag_chars=%d fallback_chars=%d",
+            "Quiz content: topic=%r query=%r content_len=%d",
             resolved_topic, query_text, len(content) if content else 0,
-            len(syllabus.extracted_text) if (syllabus and syllabus.extracted_text) else 0,
         )
-
-        if not content:
-            raise ValueError(
-                "No syllabus content available for quiz generation. "
-                "Please re-upload your syllabus."
-            )
 
         # Don't repeat questions the student has already seen.
         try:
@@ -296,6 +332,7 @@ class QuizService:
             difficulty=difficulty,
             topics=[resolved_topic] if resolved_topic else [],
             previous_questions=previous_questions,
+            subject=syllabus.title if syllabus else None,
         )
         if not questions_data:
             raise ValueError("Could not generate quiz questions. Please try again.")
@@ -308,9 +345,9 @@ class QuizService:
             user_id=user_id,
             title=quiz_title[:255],
             description=f"AI generated MCQs ({difficulty})" + (
-                f" on {resolved_topic}" if resolved_topic else ""
+                f" on {resolved_topic}" if resolved_topic else (f" from {syllabus.title}" if syllabus else "")
             ),
-            syllabus_id=syllabus_id,
+            syllabus_id=target_syllabus_id,
             num_questions=len(questions_data),
             difficulty=difficulty,
             is_ai_generated=True,
@@ -343,65 +380,113 @@ class QuizService:
         user_id: int,
         count: int = 5,
         db: AsyncSession = None,
+        syllabus_id: Optional[int] = None,
     ) -> Quiz:
         """Return today's quiz, creating it on first request of the day.
 
-        The topic rotates through the syllabus (weak topics first) so each
-        day covers different material.
+        The topic rotates through the student's syllabus chapters/topics
+        (with weak topics on the syllabus prioritized) so each day covers
+        different material from their curriculum.
         """
         today_str = date.today().isoformat()
-        existing = await db.execute(
-            select(Quiz).where(
-                Quiz.user_id == user_id,
-                Quiz.title == f"Daily Quiz - {today_str}",
-            )
-        )
-        quiz = existing.scalars().first()
-        if quiz:
-            return quiz
 
-        # Pick the day's topic: weak topics first, then rotate through
-        # syllabus topics by day-of-year.
-        topic = ""
-        try:
-            wt = await self.progress_service.get_top_weak_topics(
-                user_id=user_id, db=db, limit=5
+        # 1. Resolve the target syllabus
+        syllabus = None
+        if syllabus_id:
+            s_res = await db.execute(
+                select(Syllabus).where(Syllabus.id == syllabus_id, Syllabus.user_id == user_id)
             )
-            weak_names = [w.topic_name for w in wt]
-            if weak_names:
-                topic = weak_names[date.today().timetuple().tm_yday % len(weak_names)]
-                logger.info("Daily quiz using weak topic: %r (from %d weak topics)", topic, len(weak_names))
-        except Exception as e:
-            logger.warning("Weak-topic lookup failed for daily quiz: %s", e)
+            syllabus = s_res.scalars().first()
+            if not syllabus:
+                raise ValueError("Selected syllabus not found.")
 
-        if not topic:
-            latest = await db.execute(
+        if not syllabus:
+            # Pick latest valid syllabus with content
+            latest_res = await db.execute(
+                select(Syllabus)
+                .where(
+                    Syllabus.user_id == user_id,
+                    Syllabus.status.in_(["rag_ready", "parsed", "uploaded", "embedding_failed", "processed"]),
+                )
+                .order_by(Syllabus.id.desc())
+            )
+            syllabus = latest_res.scalars().first()
+
+        if not syllabus:
+            # Fallback to any user syllabus
+            latest_res = await db.execute(
                 select(Syllabus)
                 .where(Syllabus.user_id == user_id)
                 .order_by(Syllabus.id.desc())
-                .limit(1)
             )
-            syllabus = latest.scalars().first()
-            if syllabus:
-                all_topics = extract_syllabus_topics(syllabus.parsed_data)
-                if not all_topics:
-                    all_topics = await _fallback_topics_from_db(syllabus.id, db)
-                if not all_topics and syllabus.extracted_text:
-                    # Last resort: extract topic-like phrases from raw text
-                    all_topics = _extract_topics_from_text(syllabus.extracted_text)
-                if all_topics:
-                    topic = all_topics[date.today().timetuple().tm_yday % len(all_topics)]
-                    logger.info(
-                        "Daily quiz using syllabus topic: %r (from %d topics, syllabus_id=%d)",
-                        topic, len(all_topics), syllabus.id,
-                    )
-                else:
-                    logger.warning(
-                        "No topics found for syllabus %d (parsed_data keys=%s, status=%s)",
-                        syllabus.id,
-                        list((syllabus.parsed_data or {}).keys()),
-                        syllabus.status,
-                    )
+            syllabus = latest_res.scalars().first()
+
+        if not syllabus:
+            raise ValueError("Upload a syllabus first to generate your daily quiz.")
+
+        # 2. Check for existing daily quiz today for this user and syllabus
+        existing_query = select(Quiz).where(
+            Quiz.user_id == user_id,
+            Quiz.syllabus_id == syllabus.id,
+            Quiz.title.like(f"Daily Quiz%{today_str}%"),
+        )
+        existing = (await db.execute(existing_query)).scalars().first()
+        if not existing:
+            # Check for legacy title without syllabus scoping
+            legacy_query = select(Quiz).where(
+                Quiz.user_id == user_id,
+                Quiz.title == f"Daily Quiz - {today_str}",
+            )
+            existing = (await db.execute(legacy_query)).scalars().first()
+
+        if existing:
+            # Verify quiz has questions
+            q_check = await db.execute(
+                select(Question.id).where(Question.quiz_id == existing.id).limit(1)
+            )
+            if q_check.first():
+                return existing
+            else:
+                # Corrupted quiz without questions - delete it to regenerate cleanly
+                await db.delete(existing)
+                await db.commit()
+
+        # 3. Extract syllabus topics
+        all_topics = extract_syllabus_topics(syllabus.parsed_data)
+        if not all_topics:
+            all_topics = await _fallback_topics_from_db(syllabus.id, db)
+        if not all_topics and syllabus.extracted_text:
+            all_topics = _extract_topics_from_text(syllabus.extracted_text)
+
+        # 4. Pick topic: weak topics on this syllabus first, then rotate through syllabus topics
+        topic = ""
+        try:
+            wt = await self.progress_service.get_top_weak_topics(
+                user_id=user_id, db=db, syllabus_id=syllabus.id, limit=5
+            )
+            valid_weak = []
+            for w in wt:
+                w_name = (w.topic_name or "").strip()
+                if w_name and w_name.lower() != "general":
+                    if not all_topics or any(w_name.lower() in t.lower() or t.lower() in w_name.lower() for t in all_topics):
+                        valid_weak.append(w_name)
+            if valid_weak:
+                topic = valid_weak[date.today().timetuple().tm_yday % len(valid_weak)]
+                logger.info("Daily quiz using weak topic: %r (from %d weak topics)", topic, len(valid_weak))
+        except Exception as e:
+            logger.warning("Weak-topic lookup failed for daily quiz: %s", e)
+
+        if not topic and all_topics:
+            topic = all_topics[date.today().timetuple().tm_yday % len(all_topics)]
+            logger.info(
+                "Daily quiz using syllabus topic: %r (from %d topics, syllabus_id=%d)",
+                topic, len(all_topics), syllabus.id,
+            )
+
+        if not topic:
+            topic = syllabus.title or "Core Curriculum"
+
+        quiz_title = f"Daily Quiz - {syllabus.title} - {today_str}" if syllabus.title else f"Daily Quiz - {today_str}"
 
         try:
             return await self.generate_mcq_for_topic(
@@ -410,13 +495,14 @@ class QuizService:
                 difficulty="medium",
                 count=count,
                 db=db,
-                title=f"Daily Quiz - {today_str}",
+                title=quiz_title,
+                syllabus_id=syllabus.id,
             )
         except ValueError:
             raise
         except Exception as e:
             logger.error("Daily quiz generation failed: %s", e)
-            raise ValueError("Failed to generate today's quiz. Please try again.")
+            raise ValueError("Failed to generate today's quiz from your syllabus. Please try again.")
 
     # --------------------------------------------------------------
     # Grading

@@ -4,7 +4,7 @@ Quizzes API endpoints
 from datetime import datetime
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -15,6 +15,7 @@ from app.core.logger import get_logger
 from app.core.quotas import QuotaContext, record_usage, require_ai_quota
 from app.database.database import get_db
 from app.models.quiz import Quiz, Question, QuizAttempt
+from app.models.syllabus import Syllabus
 from app.models.subscription import UsageType
 from app.schemas.quiz import (
     QuizCreate,
@@ -73,12 +74,15 @@ async def _get_accessible_quiz(
 @router.get("/daily")
 async def get_daily_quiz(
     count: int = 5,
+    syllabus_id: Optional[int] = Query(None),
     db: AsyncSession = Depends(get_db),
     user_id: int = Depends(get_current_user_id),
 ):
     """Today's quiz (created on first request of the day) with its questions."""
     try:
-        quiz = await quiz_service.get_or_create_daily_quiz(user_id=user_id, count=count, db=db)
+        quiz = await quiz_service.get_or_create_daily_quiz(
+            user_id=user_id, count=count, db=db, syllabus_id=syllabus_id
+        )
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     result = await db.execute(
@@ -87,9 +91,20 @@ async def get_daily_quiz(
         .order_by(Question.question_order)
     )
     questions = result.scalars().all()
+
+    syllabus_title = None
+    if quiz.syllabus_id:
+        s_res = await db.execute(
+            select(Syllabus.title).where(Syllabus.id == quiz.syllabus_id)
+        )
+        syllabus_title = s_res.scalar()
+
     return {
         "quiz_id": quiz.id,
         "title": quiz.title,
+        "description": quiz.description,
+        "syllabus_id": quiz.syllabus_id,
+        "syllabus_title": syllabus_title,
         "questions": [
             {
                 "id": q.id,
@@ -107,24 +122,32 @@ async def get_daily_quiz(
 @router.post("/daily/regenerate")
 async def regenerate_daily_quiz(
     count: int = 5,
+    syllabus_id: Optional[int] = Query(None),
     db: AsyncSession = Depends(get_db),
     user_id: int = Depends(get_current_user_id),
 ):
     """Delete today's cached quiz and generate a fresh one from syllabus."""
     from datetime import date as date_cls
     today_str = date_cls.today().isoformat()
-    result = await db.execute(
-        select(Quiz).where(
-            Quiz.user_id == user_id,
-            Quiz.title == f"Daily Quiz - {today_str}",
-        )
+
+    query = select(Quiz).where(
+        Quiz.user_id == user_id,
+        Quiz.title.like(f"Daily Quiz%{today_str}%"),
     )
-    old_quiz = result.scalars().first()
-    if old_quiz:
+    if syllabus_id:
+        query = query.where(Quiz.syllabus_id == syllabus_id)
+
+    result = await db.execute(query)
+    old_quizzes = result.scalars().all()
+    for old_quiz in old_quizzes:
         await db.delete(old_quiz)
+    if old_quizzes:
         await db.commit()
+
     try:
-        quiz = await quiz_service.get_or_create_daily_quiz(user_id=user_id, count=count, db=db)
+        quiz = await quiz_service.get_or_create_daily_quiz(
+            user_id=user_id, count=count, db=db, syllabus_id=syllabus_id
+        )
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     q_result = await db.execute(
@@ -133,9 +156,20 @@ async def regenerate_daily_quiz(
         .order_by(Question.question_order)
     )
     questions = q_result.scalars().all()
+
+    syllabus_title = None
+    if quiz.syllabus_id:
+        s_res = await db.execute(
+            select(Syllabus.title).where(Syllabus.id == quiz.syllabus_id)
+        )
+        syllabus_title = s_res.scalar()
+
     return {
         "quiz_id": quiz.id,
         "title": quiz.title,
+        "description": quiz.description,
+        "syllabus_id": quiz.syllabus_id,
+        "syllabus_title": syllabus_title,
         "questions": [
             {
                 "id": q.id,
