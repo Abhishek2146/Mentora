@@ -41,7 +41,7 @@ export default function MCQ() {
             }
           }
         }
-        setTopics([...new Set(names)].slice(0, 24));
+        setTopics([...new Set(names)]);
       })
       .catch(() => {});
   }, []);

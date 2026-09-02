@@ -1374,6 +1374,10 @@ syllabus/retrieved content.
 
 RULES:
 - Questions must be based ONLY on the provided content. Do not invent facts.
+- Questions must be about topics explicitly mentioned in the provided syllabus content.
+- Do NOT generate questions about topics that are NOT in the provided content
+  (e.g. if the content is about databases, do not generate questions about
+  logic gates, hardware, networking, or other unrelated topics).
 - Each question must have exactly four options.
 - Exactly ONE option must be correct.
 - "correct_answer" MUST be the verbatim text of the correct option - never a
@@ -1383,6 +1387,8 @@ RULES:
 - Preserve important technical terminology.
 - Mix conceptual understanding, application and recall - avoid trivially
   obvious distractors.
+- If the provided content is insufficient to generate quality questions,
+  return an empty array [].
 
 Return ONLY a valid JSON array:
 
@@ -1411,10 +1417,21 @@ Return ONLY a valid JSON array:
             f"Generate {num_questions} multiple-choice questions "
             f"(overall difficulty: {difficulty})."
         )
-        human_parts.append(
-            "Retrieved Content (primary source of truth):\n"
-            + (content or "(no content retrieved)")
-        )
+        if content and content.strip() != "(no content retrieved)":
+            human_parts.append(
+                "CRITICAL: Generate questions ONLY from the syllabus content below. "
+                "Do NOT use any knowledge outside this content. "
+                "If the content is about a specific topic (e.g. databases), "
+                "all questions must be about that topic - do NOT mix in "
+                "unrelated topics (e.g. logic gates, networking, hardware).\n\n"
+                "Retrieved Content (primary source of truth):\n"
+                + content
+            )
+        else:
+            human_parts.append(
+                "WARNING: No syllabus content could be retrieved. "
+                "You MUST return an empty array []. Do NOT generate any questions."
+            )
 
         messages = [
             SystemMessage(content=system_prompt),
@@ -1826,13 +1843,14 @@ End date: {end_date}
         syllabus_data: dict,
         start_date: str,
         end_date: Optional[str] = None,
+        llm_text: Optional[str] = None,
     ) -> dict:
         system_prompt = """
 You are an expert educational revision planner.
 
 Create a spaced repetition revision schedule based ONLY on the supplied syllabus.
 
-Do not invent topics.
+Do not invent topics. Use the actual topics/chapters from the syllabus content provided.
 
 Return ONLY valid JSON:
 
@@ -1863,8 +1881,10 @@ End date: {end_date}
 
         model = self._get_model(temperature=0.3, json_mode=False)
         chain = prompt | model | self.parser
+
+        text_to_send = llm_text or json.dumps(syllabus_data, ensure_ascii=False, indent=2)
         result = await chain.ainvoke({
-            "text": json.dumps(syllabus_data, ensure_ascii=False, indent=2),
+            "text": text_to_send,
             "start_date": start_date,
             "end_date": end_date,
         })

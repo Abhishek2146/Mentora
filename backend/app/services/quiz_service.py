@@ -2,6 +2,7 @@
 Quiz Service - generates and manages quizzes
 """
 import asyncio
+import re
 from datetime import datetime, date
 from typing import List, Optional
 
@@ -11,7 +12,7 @@ from sqlalchemy import select, func
 from app.core.config import settings
 from app.core.logger import get_logger
 from app.models.quiz import Quiz, Question, QuizAttempt
-from app.models.syllabus import Syllabus
+from app.models.syllabus import Syllabus, Subject, Chapter
 from app.services.llm_service import LLMService
 from app.services.progress_service import ProgressService
 
@@ -51,6 +52,10 @@ def extract_syllabus_topics(parsed_data: Optional[dict], limit: int = 100) -> Li
     for subject in (parsed_data.get("subjects") or []):
         if not isinstance(subject, dict):
             continue
+        # Include subject name as a topic if it's meaningful
+        subj_name = subject.get("name")
+        if subj_name and subj_name.strip().lower() not in ("course", "syllabus", "subjects"):
+            topics.append(str(subj_name))
         for chapter in (subject.get("chapters") or []):
             if not isinstance(chapter, dict):
                 continue
@@ -61,6 +66,83 @@ def extract_syllabus_topics(parsed_data: Optional[dict], limit: int = 100) -> Li
                 if t:
                     topics.append(str(t))
     return topics[:limit]
+
+
+def _extract_topics_from_text(text: str, limit: int = 20) -> List[str]:
+    """Extract topic-like phrases from raw syllabus text as a last resort.
+
+    Looks for common syllabus heading patterns like 'Unit N:', 'Topic:',
+    numbered items, or bullet points to extract meaningful topic names.
+    """
+    topics: List[str] = []
+    if not text:
+        return topics
+
+    # Pattern 1: "Unit N: Title" or "Module N: Title"
+    unit_pattern = re.compile(
+        r"(?:Unit|Module|Chapter|Part|Week|Section)\s*\d+\s*[:.\-]\s*(.+)",
+        re.IGNORECASE,
+    )
+    for match in unit_pattern.finditer(text):
+        title = match.group(1).strip()
+        if title and len(title) > 3:
+            topics.append(title)
+
+    # Pattern 2: Numbered items like "1. Topic Name" or "1) Topic Name"
+    if not topics:
+        numbered_pattern = re.compile(
+            r"^\s*\d+\s*[.)]\s*(.+)", re.MULTILINE
+        )
+        for match in numbered_pattern.finditer(text):
+            title = match.group(1).strip()
+            if title and len(title) > 5 and len(title) < 100:
+                topics.append(title)
+
+    # Pattern 3: Lines ending with colon (likely headings)
+    if not topics:
+        heading_pattern = re.compile(
+            r"^(.+?)\s*:$", re.MULTILINE
+        )
+        for match in heading_pattern.finditer(text):
+            title = match.group(1).strip()
+            if title and len(title) > 3 and len(title) < 80:
+                topics.append(title)
+
+    # Deduplicate while preserving order
+    seen = set()
+    unique_topics = []
+    for t in topics:
+        key = t.lower().strip()
+        if key not in seen:
+            seen.add(key)
+            unique_topics.append(t)
+
+    return unique_topics[:limit]
+
+
+async def _fallback_topics_from_db(syllabus_id: int, db: AsyncSession) -> List[str]:
+    """Extract topics from Subject/Chapter DB rows when parsed_data is empty."""
+    topics: List[str] = []
+    try:
+        subjects = await db.execute(
+            select(Subject).where(Subject.syllabus_id == syllabus_id)
+        )
+        for subj in subjects.scalars().all():
+            if subj.name:
+                topics.append(subj.name)
+            chapters = await db.execute(
+                select(Chapter).where(Chapter.subject_id == subj.id)
+            )
+            for ch in chapters.scalars().all():
+                if ch.name:
+                    topics.append(ch.name)
+                if ch.topics and isinstance(ch.topics, list):
+                    for t in ch.topics[:20]:
+                        if t:
+                            topics.append(str(t))
+    except Exception as exc:
+        logger.warning("Fallback topic extraction from DB failed: %s", exc)
+    return topics[:100]
 
 
 class QuizService:
@@ -148,9 +230,31 @@ class QuizService:
 
         syllabus = next((r for r in syllabus_rows if r.id == syllabus_id), None)
 
+        logger.info(
+            "MCQ generation: resolved_topic=%r syllabus_id=%d status=%s",
+            resolved_topic, syllabus_id, syllabus.status if syllabus else None,
+        )
+
         # RAG-retrieved content scoped to this syllabus.
         content = ""
-        query_text = resolved_topic or (syllabus.title if syllabus else "syllabus topics")
+        # Build a more specific RAG query: prefer the resolved topic, then
+        # chapter/unit names from parsed_data, then the syllabus title.
+        query_text = resolved_topic
+        if not query_text and syllabus:
+            # Try to build a meaningful query from parsed_data chapter names
+            all_chapter_names = extract_syllabus_topics(syllabus.parsed_data, limit=10)
+            if all_chapter_names:
+                # Use the day-of-year rotation to pick a chapter as query
+                query_text = all_chapter_names[date.today().timetuple().tm_yday % len(all_chapter_names)]
+                logger.info(
+                    "RAG query from chapter rotation: %r (from %d chapters)",
+                    query_text, len(all_chapter_names),
+                )
+            else:
+                query_text = syllabus.title or "course topics"
+        if not query_text:
+            query_text = "course topics"
+
         try:
             content = await asyncio.to_thread(
                 self.vector_service.retrieve_scoped_content,
@@ -160,6 +264,18 @@ class QuizService:
             logger.warning("RAG retrieval failed for quiz generation: %s", e)
         if not content and syllabus and syllabus.extracted_text:
             content = syllabus.extracted_text[: settings.LLM_MAX_INPUT_CHARS]
+
+        logger.info(
+            "Quiz content: topic=%r query=%r rag_chars=%d fallback_chars=%d",
+            resolved_topic, query_text, len(content) if content else 0,
+            len(syllabus.extracted_text) if (syllabus and syllabus.extracted_text) else 0,
+        )
+
+        if not content:
+            raise ValueError(
+                "No syllabus content available for quiz generation. "
+                "Please re-upload your syllabus."
+            )
 
         # Don't repeat questions the student has already seen.
         try:
@@ -254,6 +370,7 @@ class QuizService:
             weak_names = [w.topic_name for w in wt]
             if weak_names:
                 topic = weak_names[date.today().timetuple().tm_yday % len(weak_names)]
+                logger.info("Daily quiz using weak topic: %r (from %d weak topics)", topic, len(weak_names))
         except Exception as e:
             logger.warning("Weak-topic lookup failed for daily quiz: %s", e)
 
@@ -267,8 +384,24 @@ class QuizService:
             syllabus = latest.scalars().first()
             if syllabus:
                 all_topics = extract_syllabus_topics(syllabus.parsed_data)
+                if not all_topics:
+                    all_topics = await _fallback_topics_from_db(syllabus.id, db)
+                if not all_topics and syllabus.extracted_text:
+                    # Last resort: extract topic-like phrases from raw text
+                    all_topics = _extract_topics_from_text(syllabus.extracted_text)
                 if all_topics:
                     topic = all_topics[date.today().timetuple().tm_yday % len(all_topics)]
+                    logger.info(
+                        "Daily quiz using syllabus topic: %r (from %d topics, syllabus_id=%d)",
+                        topic, len(all_topics), syllabus.id,
+                    )
+                else:
+                    logger.warning(
+                        "No topics found for syllabus %d (parsed_data keys=%s, status=%s)",
+                        syllabus.id,
+                        list((syllabus.parsed_data or {}).keys()),
+                        syllabus.status,
+                    )
 
         try:
             return await self.generate_mcq_for_topic(

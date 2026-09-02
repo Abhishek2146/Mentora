@@ -15,6 +15,7 @@ export default function DailyQuiz() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [startedAt, setStartedAt] = useState<number>(Date.now());
+  const [regenerating, setRegenerating] = useState(false);
 
   async function loadQuiz() {
     setLoading(true);
@@ -33,6 +34,26 @@ export default function DailyQuiz() {
       setError(e?.response?.data?.detail || "Could not load today's quiz. Upload a syllabus first.");
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function regenerateQuiz() {
+    setRegenerating(true);
+    setError(null);
+    try {
+      const d = await quizService.regenerateDailyQuiz();
+      setQuizId(d.quiz_id ?? null);
+      setQuestions(d.questions || []);
+      setCurrent(0);
+      setSelected(null);
+      setAnswers([]);
+      setDone(false);
+      setResult(null);
+      setStartedAt(Date.now());
+    } catch (e: any) {
+      setError(e?.response?.data?.detail || "Failed to regenerate quiz.");
+    } finally {
+      setRegenerating(false);
     }
   }
 
@@ -123,6 +144,16 @@ export default function DailyQuiz() {
             <div className="progress-fill bg-gradient-to-r from-primary-500 to-secondary-500" style={{ width: `${((current) / questions.length) * 100}%` }} />
           </div>
           <span className="text-sm text-slate-500 font-medium">{current + 1}/{questions.length}</span>
+          {!done && !submitting && (
+            <button
+              onClick={regenerateQuiz}
+              disabled={regenerating}
+              className="text-xs text-slate-400 hover:text-primary-500 transition-colors disabled:opacity-40"
+              title="Generate new questions from syllabus"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 inline ${regenerating ? "animate-spin" : ""}`} />
+            </button>
+          )}
         </div>
 
         {q && (
