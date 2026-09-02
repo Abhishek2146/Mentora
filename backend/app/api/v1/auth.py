@@ -25,12 +25,7 @@ from app.core.config import settings
 from app.database.database import get_db
 from app.models.otp import PasswordResetOTP
 from app.models.user import User, UserRole
-from app.models.subscription import (
-    BillingCycle,
-    PlanType,
-    Subscription,
-    SubscriptionStatus,
-)
+from app.models.subscription import Subscription
 from app.schemas.user import (
     UserCreate, UserLogin, UserOut, Token, AdminCreate,
     ForgotPasswordRequest, ResetPasswordRequest, ChangePasswordRequest,
@@ -78,15 +73,8 @@ async def register(
     db.add(new_user)
     await db.flush()
 
-    # Every new student starts on the FREE plan.
-    db.add(
-        Subscription(
-            user_id=new_user.id,
-            plan_type=PlanType.FREE.value,
-            billing_cycle=BillingCycle.NONE.value,
-            status=SubscriptionStatus.ACTIVE.value,
-        )
-    )
+    # Every new student starts on Mentora Pro.
+    db.add(Subscription.create_default(new_user.id))
     await db.commit()
     await db.refresh(new_user)
     return new_user
@@ -136,15 +124,8 @@ async def register_admin(
     db.add(new_user)
     await db.flush()
 
-    # Admins also start on the FREE plan.
-    db.add(
-        Subscription(
-            user_id=new_user.id,
-            plan_type=PlanType.FREE.value,
-            billing_cycle=BillingCycle.NONE.value,
-            status=SubscriptionStatus.ACTIVE.value,
-        )
-    )
+    # Admins also start on Mentora Pro.
+    db.add(Subscription.create_default(new_user.id))
     await db.commit()
     await db.refresh(new_user)
     return new_user

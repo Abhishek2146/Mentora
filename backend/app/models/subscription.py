@@ -121,13 +121,13 @@ class Subscription(BaseModel):
 
     plan_type = Column(
         String(20),
-        default=PlanType.FREE.value,
+        default=PlanType.SUBSCRIPTION.value,
         nullable=False,
     )
 
     billing_cycle = Column(
         String(20),
-        default=BillingCycle.NONE.value,
+        default=BillingCycle.MONTHLY.value,
         nullable=False,
     )
 
@@ -180,6 +180,16 @@ class Subscription(BaseModel):
             name="ck_subscriptions_status",
         ),
     )
+
+    @classmethod
+    def create_default(cls, user_id: int) -> "Subscription":
+        """Default Mentora Pro subscription for new users."""
+        return cls(
+            user_id=user_id,
+            plan_type=PlanType.SUBSCRIPTION.value,
+            billing_cycle=BillingCycle.MONTHLY.value,
+            status=SubscriptionStatus.ACTIVE.value,
+        )
 
     def __repr__(self) -> str:
         return (

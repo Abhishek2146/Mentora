@@ -165,16 +165,16 @@ class SubscriptionService:
         user_id: int,
     ) -> Subscription:
         """
-        Fetch the user's subscription, creating a default FREE one on
-        first access. Safe against concurrent creation thanks to the
-        unique user_id constraint.
+        Fetch the user's subscription, creating a default Mentora Pro
+        one on first access. Safe against concurrent creation thanks to
+        the unique user_id constraint.
         """
 
         subscription = await self.get_subscription(db, user_id)
         if subscription is not None:
             return subscription
 
-        subscription = Subscription(user_id=user_id)
+        subscription = Subscription.create_default(user_id)
         db.add(subscription)
         try:
             await db.commit()
@@ -187,7 +187,7 @@ class SubscriptionService:
             return subscription
 
         await db.refresh(subscription)
-        logger.info("Created default FREE subscription for user %s", user_id)
+        logger.info("Created default Mentora Pro subscription for user %s", user_id)
         return subscription
 
     # --------------------------------------------------
