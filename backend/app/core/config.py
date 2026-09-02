@@ -251,7 +251,7 @@ class Settings(BaseSettings):
     # ============================================================
 
     RATE_LIMIT_ENABLED: bool = True
-    RATE_LIMIT_PER_MINUTE: int = 60
+    RATE_LIMIT_PER_MINUTE: int = 120
 
     # ============================================================
     # Subscriptions & Usage Quotas

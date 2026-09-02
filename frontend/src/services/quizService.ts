@@ -8,6 +8,13 @@ export const quizService = {
     return res.data;
   },
 
+  async regenerateDailyQuiz(count = 5) {
+    const res = await apiClient.post(`/api/v1/quizzes/daily/regenerate?count=${count}`, {}, {
+      timeout: 300000,
+    });
+    return res.data;
+  },
+
   async generateMCQ(topic: string, difficulty: string, count = 5) {
     const res = await apiClient.post(
       "/api/v1/quizzes/generate-mcq",

@@ -113,14 +113,22 @@ export default function AiTutor() {
           time: new Date(),
         },
       ]);
-    } catch (e) {
+    } catch (e: any) {
+      let content =
+        "I couldn't connect to the AI tutor. Please make sure the backend server is running and try again.";
+      if (e?.response?.status === 429) {
+        content =
+          e?.response?.data?.detail ||
+          "You're sending messages too quickly. Please wait a moment and try again.";
+      } else if (e?.response?.data?.detail) {
+        content = e.response.data.detail;
+      }
       setMessages((p) => [
         ...p,
         {
           id: (Date.now() + 1).toString(),
           role: "assistant",
-          content:
-            "I couldn't connect to the AI tutor. Please make sure the backend server is running and try again.",
+          content,
           time: new Date(),
         },
       ]);

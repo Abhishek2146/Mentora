@@ -104,6 +104,52 @@ async def get_daily_quiz(
     }
 
 
+@router.post("/daily/regenerate")
+async def regenerate_daily_quiz(
+    count: int = 5,
+    db: AsyncSession = Depends(get_db),
+    user_id: int = Depends(get_current_user_id),
+):
+    """Delete today's cached quiz and generate a fresh one from syllabus."""
+    from datetime import date as date_cls
+    today_str = date_cls.today().isoformat()
+    result = await db.execute(
+        select(Quiz).where(
+            Quiz.user_id == user_id,
+            Quiz.title == f"Daily Quiz - {today_str}",
+        )
+    )
+    old_quiz = result.scalars().first()
+    if old_quiz:
+        await db.delete(old_quiz)
+        await db.commit()
+    try:
+        quiz = await quiz_service.get_or_create_daily_quiz(user_id=user_id, count=count, db=db)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    q_result = await db.execute(
+        select(Question)
+        .where(Question.quiz_id == quiz.id)
+        .order_by(Question.question_order)
+    )
+    questions = q_result.scalars().all()
+    return {
+        "quiz_id": quiz.id,
+        "title": quiz.title,
+        "questions": [
+            {
+                "id": q.id,
+                "question_text": q.question_text,
+                "options": q.options or [],
+                "correct_answer": q.correct_answer,
+                "explanation": q.explanation,
+                "difficulty": str(q.difficulty).capitalize(),
+            }
+            for q in questions
+        ],
+    }
+
+
 @router.post("/generate-mcq", response_model=QuizOut, status_code=status.HTTP_201_CREATED)
 async def generate_mcq(
     req: GenerateMCQRequest,

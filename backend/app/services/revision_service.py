@@ -1,12 +1,14 @@
 """
 Revision Service
 """
+import json
 from datetime import datetime, timedelta
 from typing import Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
+from app.core.config import settings
 from app.core.logger import get_logger
 from app.models.revision import RevisionSchedule, RevisionItem
 from app.models.syllabus import Syllabus
@@ -37,8 +39,71 @@ class RevisionService:
 
         syllabus_data = syllabus.parsed_data or {"subjects": []}
 
+        # If parsed_data is empty, try to extract topics from DB subjects/chapters,
+        # then fall back to extracted_text.
+        has_chapters = False
+        for s in syllabus_data.get("subjects", []):
+            if s.get("chapters"):
+                has_chapters = True
+                break
+
+        if not has_chapters:
+            logger.warning(
+                "Revision plan: parsed_data empty for syllabus %d, "
+                "trying DB fallback and extracted_text",
+                syllabus.id,
+            )
+            from app.services.quiz_service import _fallback_topics_from_db
+            fallback_topics = await _fallback_topics_from_db(syllabus.id, db)
+            if fallback_topics:
+                syllabus_data = {
+                    "subjects": [{
+                        "name": syllabus.title or "Course",
+                        "description": "",
+                        "chapters": [
+                            {"name": t, "description": "", "topics": [], "estimated_hours": 0}
+                            for t in fallback_topics
+                        ],
+                    }]
+                }
+            elif syllabus.extracted_text:
+                # Use a summary of extracted_text as the syllabus content
+                syllabus_data = {
+                    "subjects": [{
+                        "name": syllabus.title or "Course",
+                        "description": "",
+                        "chapters": [{
+                            "name": "Course Content",
+                            "description": "",
+                            "topics": [],
+                            "estimated_hours": 0,
+                        }],
+                    }]
+                }
+
+        # Build the text to send to the LLM
+        if has_chapters:
+            llm_text = (
+                f"Syllabus: {syllabus.title}\n\n"
+                f"{json.dumps(syllabus_data, ensure_ascii=False, indent=2)}"
+            )
+        elif syllabus.extracted_text:
+            llm_text = (
+                f"Syllabus: {syllabus.title}\n\n"
+                f"Extracted syllabus content:\n"
+                f"{syllabus.extracted_text[:settings.LLM_MAX_INPUT_CHARS]}"
+            )
+        else:
+            llm_text = f"Syllabus: {syllabus.title}"
+
+        logger.info(
+            "Revision plan: syllabus_id=%d has_chapters=%s using_extracted_text=%s",
+            syllabus.id, has_chapters, not has_chapters and bool(syllabus.extracted_text),
+        )
+
         schedule_data = await self.llm_service.generate_revision_schedule(
             syllabus_data=syllabus_data,
+            llm_text=llm_text,
             start_date=start_date.isoformat(),
             end_date=end_date.isoformat() if end_date else None,
         )

@@ -182,9 +182,12 @@ export default function VoiceLearning() {
             playAudio(`${baseUrl}${result.audio_url}`);
           }
         } catch (e: any) {
-          const errorMsg =
+          let errorMsg =
             e?.response?.data?.detail ||
             "Failed to process voice input. Please make sure the backend server is running and try again.";
+          if (e?.response?.status === 429) {
+            errorMsg = "You're sending requests too quickly. Please wait a moment and try again.";
+          }
           setError(errorMsg);
           setMessages((prev) => [
             ...prev,
