@@ -151,12 +151,18 @@ export interface CodingProblem {
   description: string;
   difficulty: "easy" | "medium" | "hard";
   category: string | null;
+  language: string;
   tags: string[] | null;
   starter_code: string | null;
-  test_cases: any[] | null;
+  input_format: string | null;
+  output_format: string | null;
+  examples: Array<{ input?: string; output?: string; explanation?: string }> | null;
+  test_cases: Array<{ input?: string; expected?: string }> | null;
+  hints: string[] | null;
   constraints: string | null;
   user_id: number | null;
-  created_at: string;
+  is_ai_generated?: boolean;
+  created_at?: string;
   updated_at: string | null;
 }
 
@@ -168,9 +174,11 @@ export interface CodingSubmission {
   language: string;
   status: string;
   output: string | null;
-  passed: boolean;
+  score: number;
+  passed_test_cases: number;
+  total_test_cases: number;
   execution_time: number | null;
-  memory_used: number | null;
+  error_message: string | null;
 }
 
 export interface Progress {
