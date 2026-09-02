@@ -1,15 +1,21 @@
 import apiClient from "@/lib/api";
 
 export const quizService = {
-  async getDailyQuiz(count = 5) {
-    const res = await apiClient.get(`/api/v1/quizzes/daily?count=${count}`, {
+  async getDailyQuiz(count = 5, syllabusId?: number) {
+    const params: Record<string, any> = { count };
+    if (syllabusId) params.syllabus_id = syllabusId;
+    const res = await apiClient.get("/api/v1/quizzes/daily", {
+      params,
       timeout: 300000,
     });
     return res.data;
   },
 
-  async regenerateDailyQuiz(count = 5) {
-    const res = await apiClient.post(`/api/v1/quizzes/daily/regenerate?count=${count}`, {}, {
+  async regenerateDailyQuiz(count = 5, syllabusId?: number) {
+    const params: Record<string, any> = { count };
+    if (syllabusId) params.syllabus_id = syllabusId;
+    const res = await apiClient.post("/api/v1/quizzes/daily/regenerate", {}, {
+      params,
       timeout: 300000,
     });
     return res.data;

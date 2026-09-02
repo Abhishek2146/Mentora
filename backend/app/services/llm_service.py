@@ -1359,36 +1359,30 @@ class LLMService:
         difficulty: str = "medium",
         topics: Optional[List[str]] = None,
         previous_questions: Optional[List[str]] = None,
+        subject: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
-        """Generate MCQs grounded strictly in the provided (RAG-retrieved)
-        content. Returns validated questions whose ``correct_answer`` is the
-        verbatim text of the correct option."""
+        """Generate MCQs grounded in the provided syllabus topics and
+        curriculum content. Returns validated questions whose ``correct_answer``
+        is the verbatim text of the correct option."""
         topics = topics or []
         previous_questions = previous_questions or []
 
         system_prompt = """
-You are an expert educational quiz generator for Mentora - AI Learning Companion.
+You are an expert educational exam and quiz generator for Mentora - AI Learning Companion.
 
-Generate high-quality multiple-choice questions strictly from the provided
-syllabus/retrieved content.
+Your task is to generate high-quality, academically sound multiple-choice questions (MCQs) that evaluate a student's understanding of the subjects, chapters, and topics defined in their syllabus.
 
 RULES:
-- Questions must be based ONLY on the provided content. Do not invent facts.
-- Questions must be about topics explicitly mentioned in the provided syllabus content.
-- Do NOT generate questions about topics that are NOT in the provided content
-  (e.g. if the content is about databases, do not generate questions about
-  logic gates, hardware, networking, or other unrelated topics).
-- Each question must have exactly four options.
+- Questions must strictly pertain to the curriculum topics and academic domain specified in the syllabus.
+- Do NOT generate questions on unrelated subjects or domains outside the syllabus scope.
+- Generate questions testing conceptual understanding, application of principles, technical terminology, and problem solving based on the syllabus.
+- Each question must have exactly four distinct options.
 - Exactly ONE option must be correct.
-- "correct_answer" MUST be the verbatim text of the correct option - never a
-  letter like "A" or "B".
-- Every question must include a short explanation of why the answer is right.
-- Do not repeat questions. Keep each question focused on ONE concept.
-- Preserve important technical terminology.
-- Mix conceptual understanding, application and recall - avoid trivially
-  obvious distractors.
-- If the provided content is insufficient to generate quality questions,
-  return an empty array [].
+- "correct_answer" MUST be the verbatim text of the correct option - never a letter like "A" or "B".
+- Every question must include a clear, educational "explanation" explaining why the correct answer is right and clarifying key concepts.
+- Provide plausible distractors that test common student misconceptions (avoid trivially obvious wrong answers).
+- Keep each question focused on ONE clear concept.
+- Do NOT repeat any previously asked questions.
 
 Return ONLY a valid JSON array:
 
@@ -1404,9 +1398,11 @@ Return ONLY a valid JSON array:
 """
 
         human_parts = []
+        if subject:
+            human_parts.append(f"Subject / Course: {subject}")
         if topics:
             human_parts.append(
-                "Focus topics:\n" + "\n".join(f"- {t}" for t in topics)
+                "Focus topics from syllabus:\n" + "\n".join(f"- {t}" for t in topics)
             )
         if previous_questions:
             shown = "\n".join(f"- {q}" for q in previous_questions[:50])
@@ -1415,22 +1411,16 @@ Return ONLY a valid JSON array:
             )
         human_parts.append(
             f"Generate {num_questions} multiple-choice questions "
-            f"(overall difficulty: {difficulty})."
+            f"(target difficulty: {difficulty})."
         )
-        if content and content.strip() != "(no content retrieved)":
+        if content and content.strip() and content.strip() != "(no content retrieved)":
             human_parts.append(
-                "CRITICAL: Generate questions ONLY from the syllabus content below. "
-                "Do NOT use any knowledge outside this content. "
-                "If the content is about a specific topic (e.g. databases), "
-                "all questions must be about that topic - do NOT mix in "
-                "unrelated topics (e.g. logic gates, networking, hardware).\n\n"
-                "Retrieved Content (primary source of truth):\n"
+                "Syllabus Curriculum Context:\n"
                 + content
             )
-        else:
+        elif not topics and not subject:
             human_parts.append(
-                "WARNING: No syllabus content could be retrieved. "
-                "You MUST return an empty array []. Do NOT generate any questions."
+                "Generate academic quiz questions for the curriculum."
             )
 
         messages = [
@@ -1440,7 +1430,7 @@ Return ONLY a valid JSON array:
 
         last_result: str = ""
         for attempt in range(2):
-            result = await self._ainvoke_text(messages, temperature=0.3, json_mode=True)
+            result = await self._ainvoke_text(messages, temperature=0.4, json_mode=True)
             last_result = result or ""
 
             try:
