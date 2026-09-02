@@ -10,12 +10,6 @@ import MCQPage from "@/pages/MCQ";
 import ExamSimulatorPage from "@/pages/ExamSimulator";
 import WeakTopicsPage from "@/pages/WeakTopics";
 import RevisionPlanPage from "@/pages/RevisionPlan";
-import UploadSyllabusPage from "@/pages/UploadSyllabus";
-import CodingPracticePage from "@/pages/CodingPractice";
-import VoiceLearningPage from "@/pages/VoiceLearning";
-import ProfilePage from "@/pages/Profile";
-import SettingsPage from "@/pages/Settings";
-import ProgressPage from "@/pages/Progress";
 import RegisterPage from "@/pages/Register";
 import LoginPage from "@/pages/Login";
 import ForgotPasswordPage from "@/pages/ForgotPassword";
@@ -26,8 +20,15 @@ import SearchPage from "@/pages/Search";
 import SyllabusDetailPage from "@/pages/SyllabusDetail";
 import { ProtectedRoute, PublicRoute, AdminRoute } from "@/components/ProtectedRoute";
 import { useAuthStore } from "@/store/authStore";
+import HomePage from "@/pages/HomePage";
 import AdminRegisterPage from "@/pages/AdminRegister";
 import AdminDashboardPage from "@/pages/AdminDashboard";
+import UploadSyllabus from "./pages/UploadSyllabus";
+import CodingPractice from "./pages/CodingPractice";
+import VoiceLearning from "./pages/VoiceLearning";
+import Profile from "./pages/Profile";
+import Settings from "./pages/Settings";
+import Progress from "./pages/Progress";
 
 export default function App() {
   useEffect(() => {
@@ -37,7 +38,7 @@ export default function App() {
   return (
     <BrowserRouter>
 <Routes>
-        <Route path="/" element={<Navigate to="/dashboard" replace />} />
+        <Route path="/" element={<HomePage />} />
         <Route path="/dashboard" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
         <Route path="/search" element={<ProtectedRoute><SearchPage /></ProtectedRoute>} />
         <Route path="/syllabus/:id" element={<ProtectedRoute><SyllabusDetailPage /></ProtectedRoute>} />
@@ -50,12 +51,12 @@ export default function App() {
         <Route path="/exam-simulator" element={<ProtectedRoute><ExamSimulatorPage /></ProtectedRoute>} />
         <Route path="/weak-topics" element={<ProtectedRoute><WeakTopicsPage /></ProtectedRoute>} />
         <Route path="/revision-plan" element={<ProtectedRoute><RevisionPlanPage /></ProtectedRoute>} />
-        <Route path="/upload-syllabus" element={<ProtectedRoute><UploadSyllabusPage /></ProtectedRoute>} />
-        <Route path="/coding-practice" element={<ProtectedRoute><CodingPracticePage /></ProtectedRoute>} />
-        <Route path="/voice-learning" element={<ProtectedRoute><VoiceLearningPage /></ProtectedRoute>} />
-        <Route path="/profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
-        <Route path="/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
-        <Route path="/progress" element={<ProtectedRoute><ProgressPage /></ProtectedRoute>} />
+        <Route path="/upload-syllabus" element={<ProtectedRoute><UploadSyllabus /></ProtectedRoute>} />
+        <Route path="/coding-practice" element={<ProtectedRoute><CodingPractice /></ProtectedRoute>} />
+        <Route path="/voice-learning" element={<ProtectedRoute><VoiceLearning /></ProtectedRoute>} />
+        <Route path="/profile" element={<ProtectedRoute><Profile/></ProtectedRoute>} />
+        <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
+        <Route path="/progress" element={<ProtectedRoute><Progress/></ProtectedRoute>} />
         <Route path="/register" element={<PublicRoute><RegisterPage /></PublicRoute>} />
         <Route path="/login" element={<PublicRoute><LoginPage /></PublicRoute>} />
         <Route path="/forgot-password" element={<PublicRoute><ForgotPasswordPage /></PublicRoute>} />

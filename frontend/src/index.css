@@ -6,19 +6,19 @@
 
 @layer base {
   :root {
-    --color-bg: #ffffff;
+    --color-bg: #f8fafc;
     --color-surface: #ffffff;
-    --color-border: #e5e7eb;
-    --color-text: #111111;
-    --color-text-muted: #6b7280;
+    --color-border: #e2e8f0;
+    --color-text: #0f172a;
+    --color-text-muted: #64748b;
     --sidebar-width: 260px;
   }
 
   .dark {
-    --color-bg: #0f172a;
-    --color-surface: #1e293b;
-    --color-border: #334155;
-    --color-text: #f1f5f9;
+    --color-bg: #0b0f19;
+    --color-surface: #111827;
+    --color-border: #1f293d;
+    --color-text: #f8fafc;
     --color-text-muted: #94a3b8;
   }
 
@@ -45,11 +45,12 @@
   h1, h2, h3, h4, h5, h6 {
     font-family: "Plus Jakarta Sans", "Inter", sans-serif;
     font-weight: 700;
-    line-height: 1.2;
+    line-height: 1.25;
+    letter-spacing: -0.02em;
   }
 
   ::selection {
-    background: rgba(79, 70, 229, 0.2);
+    background: rgba(99, 102, 241, 0.25);
     color: inherit;
   }
 
@@ -63,28 +64,28 @@
   }
 
   ::-webkit-scrollbar-thumb {
-    background: #d1d5db;
+    background: #cbd5e1;
     border-radius: 100px;
   }
 
   ::-webkit-scrollbar-thumb:hover {
-    background: #9ca3af;
+    background: #94a3b8;
   }
 
   .dark ::-webkit-scrollbar-thumb {
-    background: #475569;
+    background: #334155;
   }
 }
 
 @layer components {
   /* Card */
   .card {
-    @apply bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-card;
+    @apply bg-white dark:bg-slate-800/90 rounded-2xl border border-slate-200/80 dark:border-slate-700/60 shadow-card hover:border-slate-300 dark:hover:border-slate-600 transition-all duration-200;
   }
 
   /* Gradient text */
   .gradient-text {
-    @apply bg-gradient-to-r from-primary-600 to-secondary-600 bg-clip-text text-transparent;
+    @apply bg-gradient-to-r from-primary-600 via-secondary-500 to-primary-600 bg-clip-text text-transparent;
   }
 
   /* Glass morphism */
@@ -100,8 +101,8 @@
   }
 
   .sidebar-item.active {
-    @apply bg-primary-50 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300
-      border border-primary-200 dark:border-primary-700/50;
+    @apply bg-primary-50 dark:bg-primary-950/60 text-primary-600 dark:text-primary-400
+      border border-primary-200 dark:border-primary-800/60 font-semibold shadow-sm;
   }
 
   /* Button variants */
@@ -112,35 +113,35 @@
   }
 
   .btn-primary {
-    @apply btn bg-gradient-to-r from-primary-500 to-primary-600 text-white
-      hover:from-primary-600 hover:to-primary-700 focus:ring-primary-500
-      shadow-md hover:shadow-lg hover:scale-[1.02] active:scale-[0.98];
+    @apply btn bg-gradient-to-r from-primary-500 via-primary-600 to-secondary-600 text-white
+      hover:from-primary-600 hover:to-secondary-700 focus:ring-primary-500
+      shadow-md hover:shadow-glow-primary hover:scale-[1.02] active:scale-[0.98];
   }
 
   .btn-secondary {
     @apply btn bg-gradient-to-r from-secondary-500 to-secondary-600 text-white
       hover:from-secondary-600 hover:to-secondary-700 focus:ring-secondary-500
-      shadow-md hover:shadow-lg hover:scale-[1.02] active:scale-[0.98];
+      shadow-md hover:shadow-glow-secondary hover:scale-[1.02] active:scale-[0.98];
   }
 
   .btn-outline {
-    @apply btn border-2 border-slate-200 dark:border-slate-600 text-slate-700 dark:text-slate-300
-      hover:border-primary-400 hover:text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-900/20;
+    @apply btn border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200
+      hover:border-primary-400 hover:text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-950/40;
   }
 
   .btn-ghost {
-    @apply btn text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700;
+    @apply btn text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-slate-100;
   }
 
   .btn-sm { @apply px-3 py-1.5 text-xs; }
   .btn-md { @apply px-5 py-2.5 text-sm; }
-  .btn-lg { @apply px-7 py-3 text-base; }
+  .btn-lg { @apply px-7 py-3.5 text-base; }
 
   /* Input */
   .input {
-    @apply w-full rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800
+    @apply w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/80
       px-4 py-3 text-sm text-slate-900 dark:text-slate-100 placeholder-slate-400
-      focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent
+      focus:outline-none focus:ring-2 focus:ring-primary-500/50 focus:border-primary-500
       transition-all duration-200;
   }
 
@@ -151,18 +152,18 @@
 
   .badge-blue   { @apply badge bg-primary-100 text-primary-700 dark:bg-primary-900/40 dark:text-primary-300; }
   .badge-purple { @apply badge bg-secondary-100 text-secondary-700 dark:bg-secondary-900/40 dark:text-secondary-300; }
-  .badge-green  { @apply badge bg-success-50 text-success-600 dark:bg-green-900/40 dark:text-green-400; }
-  .badge-yellow { @apply badge bg-warning-50 text-warning-600 dark:bg-yellow-900/40 dark:text-yellow-400; }
-  .badge-red    { @apply badge bg-danger-50 text-danger-600 dark:bg-red-900/40 dark:text-red-400; }
+  .badge-green  { @apply badge bg-success-100 text-success-700 dark:bg-success-900/40 dark:text-success-300; }
+  .badge-yellow { @apply badge bg-warning-100 text-warning-700 dark:bg-warning-900/40 dark:text-warning-300; }
+  .badge-red    { @apply badge bg-danger-100 text-danger-700 dark:bg-danger-900/40 dark:text-danger-300; }
 
   /* Stat card */
   .stat-card {
-    @apply card p-5 flex flex-col gap-3 hover:shadow-soft transition-all duration-300 hover:-translate-y-0.5;
+    @apply card p-5 flex flex-col gap-3 hover:shadow-card-hover transition-all duration-300 hover:-translate-y-0.5;
   }
 
   /* Progress bar */
   .progress-bar {
-    @apply h-2 rounded-full bg-slate-100 dark:bg-slate-700 overflow-hidden;
+    @apply h-2 rounded-full bg-slate-100 dark:bg-slate-700/60 overflow-hidden;
   }
 
   .progress-fill {
