@@ -36,6 +36,37 @@ class ExamService:
             self._vector_service = VectorService()
         return self._vector_service
 
+    @staticmethod
+    def _build_content_from_parsed_data(parsed_data: dict) -> str:
+        """Build a text representation of the syllabus from parsed_data.
+
+        Used as a last-resort fallback when both RAG vectors and
+        extracted_text are unavailable, so the LLM still receives
+        enough detail to generate grounded questions instead of only
+        seeing bare unit/topic names.
+        """
+        lines: List[str] = []
+        for subject in (parsed_data.get("subjects") or []):
+            if not isinstance(subject, dict):
+                continue
+            subj_name = (subject.get("name") or "").strip()
+            if subj_name:
+                lines.append(f"Subject: {subj_name}")
+            for chapter in (subject.get("chapters") or []):
+                if not isinstance(chapter, dict):
+                    continue
+                ch_name = (chapter.get("name") or "").strip()
+                if ch_name:
+                    lines.append(f"\n{ch_name}")
+                desc = (chapter.get("description") or "").strip()
+                if desc:
+                    lines.append(desc)
+                for topic in (chapter.get("topics") or []):
+                    topic_str = str(topic).strip()
+                    if topic_str:
+                        lines.append(f"- {topic_str}")
+        return "\n".join(lines)
+
     async def generate_exam(
         self,
         user_id: int,
@@ -115,6 +146,17 @@ class ExamService:
             logger.warning("RAG retrieval failed for exam generation: %s", e)
         if not content and syllabus.extracted_text:
             content = syllabus.extracted_text[: settings.LLM_MAX_INPUT_CHARS]
+
+        # Fallback: build content from parsed_data when RAG and
+        # extracted_text are both unavailable (e.g. running on a
+        # different PC where ChromaDB vectors don't exist).
+        if not content and syllabus.parsed_data:
+            content = self._build_content_from_parsed_data(syllabus.parsed_data)
+            if content:
+                logger.info(
+                    "Exam content built from parsed_data fallback for syllabus %s",
+                    syllabus_id,
+                )
 
         # Previously asked questions to avoid repeats.
         previous_questions: List[str] = []

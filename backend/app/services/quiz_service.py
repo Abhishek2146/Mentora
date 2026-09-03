@@ -625,6 +625,9 @@ class QuizService:
                 logger.warning("RAG retrieval failed for quiz: %s", e)
             if not content and syllabus.extracted_text:
                 content = syllabus.extracted_text[: settings.LLM_MAX_INPUT_CHARS]
+            if not content and syllabus.parsed_data:
+                from app.services.exam_service import ExamService
+                content = ExamService._build_content_from_parsed_data(syllabus.parsed_data)
 
         return content
 
