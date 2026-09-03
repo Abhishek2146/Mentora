@@ -51,6 +51,43 @@ def _coerce_int(value: Any) -> int:
     return 0
 
 
+def _extract_credit_hours(text: str) -> Optional[int]:
+    """Extract credit hour information from syllabus text.
+
+    Looks for patterns like:
+    - "Credit Hours: 3"
+    - "credits: 3"
+    - "3 Credit Hours"
+    - "Total Credits: 120"
+    - "Credit: 3"
+    Returns the integer value or None if not found.
+    """
+    if not text or not text.strip():
+        return None
+
+    # Pattern: "Credit Hours: N" or "credits: N" (case-insensitive)
+    patterns = [
+        r"credit[s]?\s*[:\-]?\s*(\d+)",
+        r"[\w\s]*credit[s]?[\w\s]*[:\-]?\s*(\d+)",
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, text, re.IGNORECASE)
+        if match:
+            return _coerce_int(match.group(1))
+
+    # Pattern: "N Credits" at end of line or sentence
+    match = re.search(r"^(\d+)\s+credits?$", text, re.IGNORECASE | re.MULTILINE)
+    if match:
+        return _coerce_int(match.group(1))
+
+    # Pattern: "N Hrs." or "N Hours" that might be credit hours
+    match = re.search(r"\((\d+)\s+[Hh]rs?\)", text)
+    if match:
+        return _coerce_int(match.group(1))
+
+    return None
+
+
 class SyllabusService:
     """
     Service class for syllabus-related operations.
@@ -342,6 +379,13 @@ class SyllabusService:
 
             raw_parsed_output = parsed_data
 
+            # Extract credit hours from the original extracted text
+            credit_hours = _extract_credit_hours(extracted_text or "")
+            if credit_hours is not None:
+                logger.info(
+                    f"SYLLABUS {syllabus.id}: extracted credit hours = {credit_hours}"
+                )
+
             subjects_data = parsed_data.get("subjects") or []
             if subjects_data:
                 # Validate/clean BEFORE anything is persisted: reject
@@ -360,6 +404,8 @@ class SyllabusService:
             if subjects_data:
                 # Keep the raw LLM output for traceability, but store the
                 # cleaned structure as the authoritative parsed data.
+                # Attach extracted credit hours to the parsed data so they
+                # are available when subjects are persisted.
                 syllabus.raw_content = raw_parsed_output
                 syllabus.parsed_data = {
                     "subjects": [
@@ -379,6 +425,9 @@ class SyllabusService:
                         for s in subjects_data
                     ]
                 }
+                # Store credit hours at the syllabus level for access
+                if credit_hours is not None:
+                    syllabus.credits = credit_hours
                 syllabus.status = "parsed"
 
                 await self._create_subjects_chapters(db, syllabus, parsed_data)
@@ -523,6 +572,7 @@ class SyllabusService:
                 name=subject_name[:255],
                 description=subj_data.get("description") or None,
                 subject_order=order,
+                credits=syllabus.credits,
             )
             db.add(subject)
             await db.flush()
@@ -591,6 +641,7 @@ class SyllabusService:
         documents: List[Document] = []
         subjects = (parsed_data or {}).get("subjects") or []
 
+        unit_number = 0
         for subject in subjects:
             subject_name = (subject.get("name") or "").strip() or "Unknown"
             chapters = subject.get("chapters") or []
@@ -614,12 +665,14 @@ class SyllabusService:
                             "chapter": "",
                             "topic": "",
                             "doc_type": "chapter_list",
+                            "unit_number": unit_number,
                         },
                     )
                 )
 
             for chapter in chapters:
                 chapter_name = (chapter.get("name") or "").strip() or "Unknown"
+                unit_number += 1
                 parts: List[str] = []
                 description = (chapter.get("description") or "").strip()
                 if description:
@@ -640,6 +693,7 @@ class SyllabusService:
                     "chapter": chapter_name,
                     "topic": "",
                     "doc_type": "chapter",
+                    "unit_number": unit_number,
                 }
                 docs = self.embedding_service.chunk_text_with_metadata(
                     content, metadata
