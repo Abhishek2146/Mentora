@@ -13,19 +13,9 @@ import {
   Upload,
 } from "lucide-react";
 import { quizService } from "@/services/quizService";
-import { syllabusService } from "@/services/syllabusService";
-
-interface SyllabusItem {
-  id: number;
-  title: string;
-}
 
 export default function DailyQuiz() {
-  const [syllabi, setSyllabi] = useState<SyllabusItem[]>([]);
-  const [selectedSyllabusId, setSelectedSyllabusId] = useState<number | undefined>();
-  const [syllabusTitle, setSyllabusTitle] = useState<string | null>(null);
   const [quizTitle, setQuizTitle] = useState<string>("");
-  const [quizId, setQuizId] = useState<number | null>(null);
   const [questions, setQuestions] = useState<any[]>([]);
   const [current, setCurrent] = useState(0);
   const [selected, setSelected] = useState<string | null>(null);
@@ -38,32 +28,16 @@ export default function DailyQuiz() {
   const [startedAt, setStartedAt] = useState<number>(Date.now());
   const [regenerating, setRegenerating] = useState(false);
 
-  // Load available syllabi first
   useEffect(() => {
-    syllabusService
-      .getAllSyllabi()
-      .then((data: any[]) => {
-        const list = Array.isArray(data) ? data : [];
-        setSyllabi(list);
-        if (list.length > 0) {
-          setSelectedSyllabusId(list[0].id);
-        }
-      })
-      .catch(() => {});
+    loadQuiz();
   }, []);
 
-  async function loadQuiz(syllabusId?: number) {
+  async function loadQuiz() {
     setLoading(true);
     setError(null);
     try {
-      const targetId = syllabusId ?? selectedSyllabusId;
-      const d = await quizService.getDailyQuiz(5, targetId);
-      setQuizId(d.quiz_id ?? null);
+      const d = await quizService.getDailyQuiz(5);
       setQuizTitle(d.title || "Daily Quiz");
-      setSyllabusTitle(d.syllabus_title || null);
-      if (d.syllabus_id && !selectedSyllabusId) {
-        setSelectedSyllabusId(d.syllabus_id);
-      }
       setQuestions(d.questions || []);
       setCurrent(0);
       setSelected(null);
@@ -72,7 +46,7 @@ export default function DailyQuiz() {
       setResult(null);
       setStartedAt(Date.now());
     } catch (e: any) {
-      setError(e?.response?.data?.detail || "Could not load today's quiz. Upload a syllabus first.");
+      setError(e?.response?.data?.detail || "Could not load today's quiz.");
     } finally {
       setLoading(false);
     }
@@ -82,10 +56,8 @@ export default function DailyQuiz() {
     setRegenerating(true);
     setError(null);
     try {
-      const d = await quizService.regenerateDailyQuiz(5, selectedSyllabusId);
-      setQuizId(d.quiz_id ?? null);
+      const d = await quizService.regenerateDailyQuiz(5);
       setQuizTitle(d.title || "Daily Quiz");
-      setSyllabusTitle(d.syllabus_title || null);
       setQuestions(d.questions || []);
       setCurrent(0);
       setSelected(null);
@@ -94,22 +66,13 @@ export default function DailyQuiz() {
       setResult(null);
       setStartedAt(Date.now());
     } catch (e: any) {
-      setError(e?.response?.data?.detail || "Failed to regenerate quiz from syllabus.");
+      setError(e?.response?.data?.detail || "Failed to regenerate quiz.");
     } finally {
       setRegenerating(false);
     }
   }
 
-  useEffect(() => {
-    loadQuiz(selectedSyllabusId);
-  }, [selectedSyllabusId]);
-
-  const handleSyllabusChange = (id: number) => {
-    setSelectedSyllabusId(id);
-  };
-
   const q = questions[current];
-  const selectedSyllabus = syllabi.find((s) => s.id === selectedSyllabusId);
   const correctCount = result ? result.correct : answers.filter((a) =>
     questions.some((qq) => qq.id === a.question_id && qq.correct_answer === a.selected)
   ).length;
@@ -122,14 +85,8 @@ export default function DailyQuiz() {
     if (current + 1 >= questions.length) {
       setSubmitting(true);
       try {
-        if (quizId) {
-          const res = await quizService.submitQuiz(
-            quizId,
-            newAnswers,
-            Math.round((Date.now() - startedAt) / 1000)
-          );
-          setResult(res);
-        }
+        // Quiz submission - grading done locally
+        setResult(null);
       } catch {
         // Fall back to local grading if submission fails.
       } finally {
@@ -142,15 +99,12 @@ export default function DailyQuiz() {
   };
 
   if (loading) {
-    const syllabusInfo = selectedSyllabus
-      ? `for "${selectedSyllabus.title}"`
-      : "for your syllabus";
     return (
       <AppLayout title="Daily Quiz">
         <div className="flex flex-col items-center justify-center h-64 gap-3">
           <div className="w-10 h-10 border-4 border-primary-200 border-t-primary-500 rounded-full animate-spin" />
           <p className="text-sm text-slate-500 animate-pulse">
-            Generating today's quiz {syllabusInfo}...
+            Generating today's quiz...
           </p>
         </div>
       </AppLayout>
@@ -158,9 +112,6 @@ export default function DailyQuiz() {
   }
 
   if (error) {
-    const isNoSyllabus =
-      error.toLowerCase().includes("upload a syllabus") ||
-      error.toLowerCase().includes("syllabus first");
     return (
       <AppLayout title="Daily Quiz">
         <div className="max-w-xl mx-auto">
@@ -170,26 +121,17 @@ export default function DailyQuiz() {
             </div>
             <div className="space-y-1">
               <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100">
-                {isNoSyllabus ? "Upload a Syllabus to Start" : "Quiz Generation Error"}
+                Quiz Generation Error
               </h3>
               <p className="text-sm text-slate-500 max-w-md">{error}</p>
             </div>
             <div className="flex flex-wrap items-center justify-center gap-3">
-              {isNoSyllabus ? (
-                <Link
-                  to="/upload-syllabus"
-                  className="btn-primary btn-md inline-flex items-center gap-2"
-                >
-                  <Upload className="w-4 h-4" /> Upload Syllabus
-                </Link>
-              ) : (
-                <button
-                  onClick={() => loadQuiz(selectedSyllabusId)}
-                  className="btn-primary btn-md inline-flex items-center gap-2"
-                >
-                  <RefreshCw className="w-4 h-4" /> Retry
-                </button>
-              )}
+              <button
+                onClick={() => loadQuiz()}
+                className="btn-primary btn-md inline-flex items-center gap-2"
+              >
+                <RefreshCw className="w-4 h-4" /> Retry
+              </button>
             </div>
           </div>
         </div>
@@ -215,11 +157,6 @@ export default function DailyQuiz() {
               <p className="text-slate-500 mt-1">
                 {correctCount} of {questions.length} correct
               </p>
-              {syllabusTitle && (
-                <p className="text-xs text-primary-600 dark:text-primary-400 font-medium mt-1">
-                  📖 {syllabusTitle}
-                </p>
-              )}
               {!result && <p className="text-xs text-slate-400 mt-2">(score could not be saved)</p>}
             </div>
             {result?.results && (
@@ -251,7 +188,7 @@ export default function DailyQuiz() {
               </div>
             )}
             <div className="flex items-center gap-3">
-              <button onClick={() => loadQuiz(selectedSyllabusId)} className="btn-primary btn-md">
+              <button onClick={() => loadQuiz()} className="btn-primary btn-md">
                 Done
               </button>
               <button
@@ -271,7 +208,7 @@ export default function DailyQuiz() {
   return (
     <AppLayout title="Daily Quiz">
       <div className="max-w-xl mx-auto space-y-5">
-        {/* Header with syllabus selection and title */}
+        {/* Header */}
         <div className="card p-4 flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-lg bg-primary-100 dark:bg-primary-900/40 flex items-center justify-center text-primary-600 dark:text-primary-400">
@@ -282,35 +219,17 @@ export default function DailyQuiz() {
                 Syllabus Curriculum Practice
               </p>
               <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">
-                {syllabusTitle || selectedSyllabus?.title || "Daily Syllabus Quiz"}
+                Daily Syllabus Quiz
               </p>
             </div>
           </div>
 
           <div className="flex items-center gap-2">
-            {syllabi.length > 0 && (
-              <select
-                value={selectedSyllabusId ?? ""}
-                onChange={(e) => handleSyllabusChange(Number(e.target.value))}
-                className="text-xs rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-2.5 py-1.5 text-slate-700 dark:text-slate-200 font-medium focus:ring-1 focus:ring-primary-500"
-              >
-                {syllabi.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.title}
-                  </option>
-                ))}
-              </select>
-            )}
-            {syllabi.length === 0 && (
-              <span className="text-xs text-slate-500 dark:text-slate-400">
-                No syllabi uploaded
-              </span>
-            )}
             <button
               onClick={regenerateQuiz}
               disabled={regenerating}
               className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-primary-600 hover:border-primary-400 dark:hover:border-primary-500 transition-colors disabled:opacity-40"
-              title="Generate fresh daily questions from syllabus"
+              title="Generate fresh daily questions"
             >
               <RefreshCw className={`w-4 h-4 ${regenerating ? "animate-spin" : ""}`} />
             </button>
@@ -362,7 +281,7 @@ export default function DailyQuiz() {
                       isCorrect
                         ? "border-success-500 bg-success-50 dark:bg-success-900/20 text-success-700 dark:text-success-300"
                         : isWrong
-                        ? "border-danger-500 bg-danger-50 dark:bg-danger-900/20 text-danger-700 dark:text-danger-300"
+                        ? "border-danger-500 bg-danger-50 dark:bg-danger-50 dark:text-danger-300"
                         : selected && opt !== selected
                         ? "border-slate-200 dark:border-slate-600 text-slate-400 opacity-60"
                         : "border-slate-200 dark:border-slate-600 hover:border-primary-400 hover:bg-primary-50 dark:hover:bg-primary-900/20 text-slate-700 dark:text-slate-200"
