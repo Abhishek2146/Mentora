@@ -221,6 +221,9 @@ export default function AiTutor() {
           time: new Date(),
         },
       ]);
+      if (voiceAutoSpeak && voiceModalOpen) {
+        speak(res.response);
+      }
     } catch (e: any) {
       let content =
         "I couldn't connect to the AI tutor. Please make sure the backend server is running and try again.";
@@ -241,7 +244,7 @@ export default function AiTutor() {
         },
       ]);
       if (fromVoice || voiceModalOpen) {
-        speak(errorMsg);
+        speak(content);
       }
     } finally {
       setLoading(false);
