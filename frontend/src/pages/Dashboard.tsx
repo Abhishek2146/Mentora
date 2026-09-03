@@ -74,27 +74,11 @@ export default function Dashboard() {
   return (
     <AppLayout title="Dashboard">
       <div className="max-w-7xl mx-auto space-y-6">
-        {/* Upload Banner */}
-        <div className="card p-4 bg-gradient-to-r from-slate-900 to-slate-800 text-white flex flex-wrap items-center justify-between gap-3 border-slate-700 shadow-md">
-          <div className="flex items-center gap-3 min-w-0">
-            <div className="w-10 h-10 rounded-xl bg-primary-500/20 text-primary-400 flex items-center justify-center border border-primary-500/30">
-              <FileText className="w-5 h-5" />
-            </div>
-            <div>
-              <p className="font-bold text-sm">Upload New Course Syllabus</p>
-              <p className="text-xs text-slate-400">PDF, DOCX, or Image - Mentora AI auto-generates your study plan & quiz</p>
-            </div>
-          </div>
-          <Link to="/upload-syllabus" className="btn-primary btn-sm rounded-xl">
-            <Upload className="w-3.5 h-3.5" /> Upload Now <ArrowRight className="w-3.5 h-3.5" />
-          </Link>
-        </div>
-
         {/* Welcome Banner */}
         <div className="card p-5 sm:p-6 bg-gradient-to-r from-primary-600 via-primary-500 to-secondary-500 text-white border-0 shadow-glow-primary">
           <div className="flex items-start justify-between">
             <div>
-              <p className="text-primary-100 text-sm font-medium">Good morning</p>
+              <p className="text-primary-100 text-sm font-medium">Good afternoon</p>
               <h2 className="text-xl sm:text-2xl font-bold mt-1">Welcome back, {firstName}!</h2>
               <p className="text-primary-100 mt-1 text-sm">
                 {cards?.tasks_due_today ?? 0} tasks due today. Keep up the streak!
