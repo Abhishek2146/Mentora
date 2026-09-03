@@ -78,6 +78,12 @@ class FlashcardService:
             if not content and syllabus.extracted_text:
                 content = syllabus.extracted_text[: settings.LLM_MAX_INPUT_CHARS]
 
+            # Fallback: build content from parsed_data when RAG and
+            # extracted_text are both unavailable.
+            if not content and syllabus.parsed_data:
+                from app.services.exam_service import ExamService
+                content = ExamService._build_content_from_parsed_data(syllabus.parsed_data)
+
             try:
                 wt = await self.progress_service.get_top_weak_topics(
                     user_id=user_id, db=db, syllabus_id=syllabus_id, limit=3
