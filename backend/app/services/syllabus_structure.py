@@ -604,6 +604,104 @@ def format_unit_heading(unit_number: Any, title: Any) -> str:
     return f"Unit: {text}"
 
 
+def build_course_overview_document(
+    syllabus_id: int,
+    user_id: int,
+    subjects: List[Dict[str, Any]],
+    course_name: Optional[str] = None,
+    source_name: str = "syllabus",
+    credit_hours: Optional[int] = None,
+) -> Optional[Dict[str, Any]]:
+    """Build a single course-level overview document for the RAG index.
+
+    This document aggregates every unit name, topic list, and credit/hour
+    information into one chunk so that broad queries like:
+      - "what are the main topics covered?"
+      - "how many credit hours does this course have?"
+      - "list all units"
+    can be answered from a single retrieved document without needing to
+    assemble many per-unit chunks.
+
+    Returns a {"content": str, "metadata": dict} dict, or None when there
+    are no usable subjects/chapters.
+    """
+    all_chapters: List[Dict[str, Any]] = []
+    for subj in subjects:
+        if not isinstance(subj, dict):
+            continue
+        all_chapters.extend(subj.get("chapters") or [])
+
+    if not all_chapters:
+        return None
+
+    first_subj = subjects[0] if subjects else {}
+    display_course = course_name or (first_subj.get("name") or "").strip() or "Course"
+
+    total_hours = sum(
+        coerce_hour_value(ch.get("estimated_hours")) for ch in all_chapters
+    )
+    # Use extracted credit_hours if available, otherwise fall back to total_hours
+    # from parsed unit durations.
+    effective_credits = credit_hours if credit_hours is not None else (
+        total_hours if total_hours > 0 else None
+    )
+
+    lines: List[str] = [
+        f"Course: {display_course}",
+        f"Total Units: {len(all_chapters)}",
+    ]
+    if effective_credits is not None:
+        lines.append(f"Credit Hours: {effective_credits}")
+    if total_hours > 0:
+        lines.append(f"Total Teaching Hours: {total_hours}")
+
+    lines.append("")
+    lines.append("Course Overview - All Units and Topics:")
+    lines.append("")
+
+    unit_number = 0
+    for chap in all_chapters:
+        if not isinstance(chap, dict):
+            continue
+        chap_name = str(chap.get("name") or "").strip()
+        if not chap_name:
+            continue
+        unit_number += 1
+        hours = coerce_hour_value(chap.get("estimated_hours"))
+        topics: List[str] = [
+            str(t).strip()
+            for t in (chap.get("topics") or [])
+            if str(t).strip()
+        ]
+
+        heading = format_unit_heading(unit_number, chap_name)
+        if hours:
+            heading += f" ({hours} hrs)"
+        lines.append(heading)
+        for t in topics:
+            lines.append(f"  - {t}")
+        lines.append("")
+
+    content = "\n".join(lines).strip()
+    if not content:
+        return None
+
+    metadata = {
+        "user_id": user_id,
+        "syllabus_id": syllabus_id,
+        "source": source_name,
+        "doc_type": "course_overview",
+        "unit_number": 0,
+        "unit_title": "Course Overview",
+    }
+    logger.info(
+        "[VECTOR] Built course overview document for syllabus_id=%s "
+        "(%d units, credit_hours=%s, total_hours=%d)",
+        syllabus_id, len(all_chapters), effective_credits, total_hours,
+    )
+    return {"content": content, "metadata": metadata}
+
+
 def build_unit_rag_documents(
     syllabus_id: int,
     user_id: int,

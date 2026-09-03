@@ -148,13 +148,14 @@ class Settings(BaseSettings):
 
     RAG_CHUNK_SIZE: int = 800
     RAG_CHUNK_OVERLAP: int = 150
-    RAG_TOP_K: int = 3
+    RAG_TOP_K: int = 8
     # Minimum relevance score (0-1, higher = more similar) required
     # for a retrieved chunk to be used as context.
     RAG_SIMILARITY_THRESHOLD: float = 0.2
-    # v3: structured unit/topic documents with course/unit/topic/source
-    # metadata (replaces raw-text chunk indexes from v2 and earlier).
-    RAG_INDEX_VERSION: str = "v3"
+    # v4: adds course-level overview document (all units + topics + credit
+    # hours in one chunk) so broad queries like "main topics" and
+    # "credit hours" are answered without requiring many per-unit chunks.
+    RAG_INDEX_VERSION: str = "v4"
 
     # ============================================================
     # Tutor context budget (prevents 413 Request Too Large)
@@ -163,7 +164,9 @@ class Settings(BaseSettings):
     # Maximum number of recent conversation messages to include.
     TUTOR_MAX_HISTORY_MESSAGES: int = 6
     # Maximum total characters for RAG context injected into system prompt.
-    TUTOR_MAX_CONTEXT_CHARS: int = 2000
+    # 6000 chars is enough to hold a full course overview (all units +
+    # topics) without hitting Groq's 8k input limit.
+    TUTOR_MAX_CONTEXT_CHARS: int = 6000
     # Approximate characters-per-token ratio used for budget estimation.
     TUTOR_CHARS_PER_TOKEN: int = 4
     # ============================================================
