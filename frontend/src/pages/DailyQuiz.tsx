@@ -109,6 +109,7 @@ export default function DailyQuiz() {
   };
 
   const q = questions[current];
+  const selectedSyllabus = syllabi.find((s) => s.id === selectedSyllabusId);
   const correctCount = result ? result.correct : answers.filter((a) =>
     questions.some((qq) => qq.id === a.question_id && qq.correct_answer === a.selected)
   ).length;
@@ -141,12 +142,15 @@ export default function DailyQuiz() {
   };
 
   if (loading) {
+    const syllabusInfo = selectedSyllabus
+      ? `for "${selectedSyllabus.title}"`
+      : "for your syllabus";
     return (
       <AppLayout title="Daily Quiz">
         <div className="flex flex-col items-center justify-center h-64 gap-3">
           <div className="w-10 h-10 border-4 border-primary-200 border-t-primary-500 rounded-full animate-spin" />
           <p className="text-sm text-slate-500 animate-pulse">
-            Generating today's quiz according to your syllabus...
+            Generating today's quiz {syllabusInfo}...
           </p>
         </div>
       </AppLayout>
@@ -278,13 +282,13 @@ export default function DailyQuiz() {
                 Syllabus Curriculum Practice
               </p>
               <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">
-                {syllabusTitle || quizTitle || "Daily Syllabus Quiz"}
+                {syllabusTitle || selectedSyllabus?.title || "Daily Syllabus Quiz"}
               </p>
             </div>
           </div>
 
           <div className="flex items-center gap-2">
-            {syllabi.length > 1 && (
+            {syllabi.length > 0 && (
               <select
                 value={selectedSyllabusId ?? ""}
                 onChange={(e) => handleSyllabusChange(Number(e.target.value))}
@@ -296,6 +300,11 @@ export default function DailyQuiz() {
                   </option>
                 ))}
               </select>
+            )}
+            {syllabi.length === 0 && (
+              <span className="text-xs text-slate-500 dark:text-slate-400">
+                No syllabi uploaded
+              </span>
             )}
             <button
               onClick={regenerateQuiz}
