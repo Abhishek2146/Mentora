@@ -2,30 +2,30 @@ import apiClient from "@/lib/api";
 import { mockFlashcards } from "@/data/mockData";
 
 export const flashcardService = {
-  async getFlashcards(topic?: string) {
+  async getFlashcards(topic?: string, syllabusId?: number) {
     try {
-      const res = await apiClient.get(`/api/v1/flashcards${topic ? `?topic=${topic}` : ""}`);
+      const params = new URLSearchParams();
+      if (topic) params.append("topic", topic);
+      if (syllabusId) params.append("syllabus_id", syllabusId.toString());
+      const query = params.toString();
+      const res = await apiClient.get(`/api/v1/flashcards/review/all${query ? `?${query}` : ""}`);
       return res.data;
     } catch {
       return mockFlashcards;
     }
   },
 
-  async generateFlashcards(topic: string, count = 10) {
-    try {
-      const res = await apiClient.post("/api/v1/flashcards/generate", { topic, count });
-      return res.data;
-    } catch {
-      return mockFlashcards.slice(0, count);
-    }
+  async generateFlashcards(topic: string, count = 10, syllabusId?: number) {
+    const res = await apiClient.post("/api/v1/flashcards/generate", {
+      topic: topic || null,
+      count,
+      syllabus_id: syllabusId || null,
+    });
+    return res.data;
   },
 
   async submitRating(cardId: number, rating: "Again" | "Hard" | "Good" | "Easy") {
-    try {
-      const res = await apiClient.post(`/api/v1/flashcards/${cardId}/rating`, { rating });
-      return res.data;
-    } catch {
-      return { next_review: new Date().toISOString(), interval: 1 };
-    }
+    const res = await apiClient.post(`/api/v1/flashcards/${cardId}/rating`, { rating });
+    return res.data;
   },
 };

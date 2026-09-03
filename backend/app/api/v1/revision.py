@@ -17,7 +17,7 @@ router = APIRouter()
 revision_service = RevisionService()
 
 
-@router.post("/schedule", response_model=dict, status_code=status.HTTP_201_CREATED)
+@router.post("/schedule", status_code=status.HTTP_201_CREATED)
 async def create_revision_schedule(
     syllabus_id: int,
     start_date: date,
@@ -25,17 +25,19 @@ async def create_revision_schedule(
     db: AsyncSession = Depends(get_db),
     user_id: int = Depends(get_current_user_id),
 ):
-    schedule = await revision_service.generate_revision_schedule(
-        user_id=user_id,
-        syllabus_id=syllabus_id,
-        start_date=start_date,
-        end_date=end_date,
-        db=db,
-    )
+    try:
+        schedule = await revision_service.generate_revision_schedule(
+            user_id=user_id,
+            syllabus_id=syllabus_id,
+            start_date=start_date,
+            end_date=end_date,
+            db=db,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
     return schedule
 
-
-@router.get("/schedules", response_model=List)
+@router.get("/schedules")
 async def list_revision_schedules(
     is_active: Optional[bool] = None,
     db: AsyncSession = Depends(get_db),
@@ -48,7 +50,7 @@ async def list_revision_schedules(
     return result.scalars().all()
 
 
-@router.get("/schedules/{schedule_id}", response_model=dict)
+@router.get("/schedules/{schedule_id}")
 async def get_revision_schedule(
     schedule_id: int,
     db: AsyncSession = Depends(get_db),
@@ -69,7 +71,7 @@ async def get_revision_schedule(
     return {"schedule": schedule, "items": items}
 
 
-@router.put("/items/{item_id}", response_model=dict)
+@router.put("/items/{item_id}")
 async def complete_revision_item(
     item_id: int,
     completed: bool = True,

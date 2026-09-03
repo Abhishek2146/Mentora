@@ -1,17 +1,23 @@
 """
 Tutor (AI Chatbot) Service
 """
+import re
 from typing import Optional, List, Dict, Any
-
+from sqlalchemy import func as sql_func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
+from app.core.config import settings
 from app.core.logger import get_logger
 from app.models.chat_history import ChatSession, ChatMessage
 from app.models.syllabus import Syllabus
 from app.services.llm_service import LLMService
 from app.services.vector_service import VectorService
 from app.services.progress_service import ProgressService
+from app.services.syllabus_structure import (
+    TUTOR_NOT_FOUND_MESSAGE,
+    build_tutor_system_prompt,
+)
 
 logger = get_logger(__name__)
 
@@ -24,15 +30,16 @@ class TutorService:
 
     async def _verify_syllabus_ownership(
         self, db: AsyncSession, syllabus_id: int, user_id: int
-    ) -> bool:
-        """Confirm the syllabus belongs to the authenticated user before any
-        RAG retrieval touches its vector collection."""
+    ) -> Optional[Syllabus]:
+        """Return the syllabus row when it belongs to the authenticated
+        user, else None. Guards RAG retrieval so a tutor session can only
+        ever pull vectors from an owner-scoped collection."""
         result = await db.execute(
             select(Syllabus).where(
                 Syllabus.id == syllabus_id, Syllabus.user_id == user_id
             )
         )
-        return result.scalars().first() is not None
+        return result.scalars().first()
 
     async def _build_personalization_note(
         self, user_id: int, syllabus_id: Optional[int], db: AsyncSession
@@ -62,6 +69,56 @@ class TutorService:
             "explanations, more examples, and gentle connections back to "
             "these areas - but don't force it if the question is unrelated."
         )
+
+    @staticmethod
+    def _truncate_context(context: str, max_chars: int) -> str:
+        """Truncate RAG context to fit within the character budget while
+        preserving whole source blocks.  Sources are separated by double
+        newlines and start with ``SOURCE N``.  We drop trailing partial
+        blocks rather than cutting mid-sentence."""
+        if len(context) <= max_chars:
+            return context
+
+        truncated = context[:max_chars]
+        # Try to cut at the last complete source block boundary.
+        last_boundary = truncated.rfind("\n\nSOURCE ")
+        if last_boundary == -1:
+            last_boundary = truncated.rfind("\n\n")
+        if last_boundary > 0:
+            truncated = truncated[:last_boundary]
+
+        logger.info(
+            "[Tutor] RAG context truncated from %d to %d chars "
+            "(%d source blocks kept)",
+            len(context),
+            len(truncated),
+            truncated.count("SOURCE "),
+        )
+        return truncated
+
+    @staticmethod
+    def _estimate_tokens(text: str) -> int:
+        """Rough token estimate using the configured chars-per-token ratio."""
+        return len(text) // settings.TUTOR_CHARS_PER_TOKEN
+
+    @staticmethod
+    def _ensure_newlines(text: str) -> str:
+        """Ensure numbered points each start on their own line.
+
+        If the LLM returns points like:
+            1. First. 2. Second. 3. Third.
+        This converts them to:
+            1. First.
+            2. Second.
+            3. Third.
+        """
+        # Insert newline before numbered items that follow text on the same line.
+        # Matches patterns like ". 2." or ") 2." where a number follows without a newline.
+        text = re.sub(r'(?<=\S)\s+(\d+)\.\s', r'\n\1. ', text)
+        # Also handle cases where label lines run into next numbered item
+        # e.g. "Key Points: 1. First" -> "Key Points:\n1. First"
+        text = re.sub(r'(Key Points:|Important Points:|Advantages:|Limitations:|Differences:)\s+(\d+)\.\s', r'\1\n\2. ', text)
+        return text
 
     async def process_message(
         self,
@@ -105,34 +162,75 @@ class TutorService:
                 ChatMessage.session_id == session.id
             ).order_by(ChatMessage.sequence)
         )
-        existing_messages: List[ChatMessage] = history_result.scalars().all()
-        next_sequence = len(existing_messages) + 1
+        all_messages: List[ChatMessage] = history_result.scalars().all()
+          
+
+        max_seq_result = await db.execute(
+            select(sql_func.max(ChatMessage.sequence)).where(
+                ChatMessage.session_id == session.id
+            )
+        )
+
+        max_seq = max_seq_result.scalar_one_or_none()
+        next_sequence = (max_seq or 0) + 1
+
+        # ── Budget: keep only the most recent messages ──────────────
+        max_history = settings.TUTOR_MAX_HISTORY_MESSAGES
+        if len(all_messages) > max_history:
+            all_messages = all_messages[-max_history:]
+            logger.info(
+                "[Tutor] Conversation history truncated to last %d messages "
+                "(total was %d)",
+                max_history,
+                next_sequence - 1,
+            )
 
         history: List[Dict[str, str]] = []
-        for msg in existing_messages:
+        for msg in all_messages:
             history.append({"role": msg.role, "content": msg.content})
+               # Use the previous user question together with the current question
+        # for retrieval. This helps follow-up questions such as
+        # "Explain its types." retrieve the topic from the previous turn.
+        retrieval_query = message
 
-        messages: List[Dict[str, str]] = []
+        prior_user_messages = [
+            h["content"]
+            for h in history
+            if h["role"] == "user"
+        ]
+
+        if prior_user_messages:
+            retrieval_query = (
+                f"{prior_user_messages[-1]} {message}"
+            )
+
+        logger.info(
+            f"TUTOR QUERY: {message!r} "
+            f"syllabus_id={syllabus_id} "
+            f"user_id={user_id} "
+            f"history_messages={len(history)}"
+        )
 
         context = ""
+        context_docs = []
+        syllabus: Optional[Syllabus] = None
         if syllabus_id:
-            logger.debug(
-                "[Tutor] syllabus_id=%s, user_id=%s, query=%r",
-                syllabus_id,
-                user_id,
-                message[:100],
-            )
-            owned = await self._verify_syllabus_ownership(db, syllabus_id, user_id)
-            if not owned:
+            syllabus = await self._verify_syllabus_ownership(db, syllabus_id, user_id)
+            if syllabus is None:
                 logger.warning(
                     f"User {user_id} requested syllabus {syllabus_id} they do not "
                     "own; ignoring syllabus_id for retrieval"
                 )
             else:
                 collection_name = self.vector_service.collection_name_for_syllabus(syllabus_id)
+                logger.info(
+                    "[RETRIEVAL] tutor query for syllabus_id=%s: %r",
+                    syllabus_id,
+                    retrieval_query[:200],
+                )
                 context_docs = self.vector_service.retrieve_context(
                     collection_name,
-                    message,
+                    retrieval_query,
                     filter={
                         "$and": [
                             {"user_id": user_id},
@@ -140,54 +238,114 @@ class TutorService:
                         ]
                     },
                 )
-                context = self.vector_service.format_context(context_docs)
+            context = self.vector_service.format_context(context_docs)
 
-                logger.debug(
-                    "[Tutor] Retrieved %d documents from collection '%s'; "
-                    "context length=%d chars; context preview=%s",
-                    len(context_docs),
-                    collection_name,
-                    len(context),
-                    context[:500] if context else "(empty)",
-                )
-                for i, doc in enumerate(context_docs):
-                    logger.debug(
-                        "[Tutor] Doc %d: metadata=%s, content_len=%d, "
-                        "preview=%s",
-                        i,
-                        doc.metadata,
-                        len(doc.page_content),
-                        doc.page_content[:200],
-                    )
+        context = self._truncate_context(context, settings.TUTOR_MAX_CONTEXT_CHARS)
+
+        logger.info(f"TUTOR CONTEXT: retrieved_docs={len(context_docs)} context_length={len(context)}")
 
         personalization = await self._build_personalization_note(user_id, syllabus_id, db)
 
-        system_parts = [
-            "You are a helpful AI tutor.",
-            (
-                "Format your reply as clean plain text for a chat interface. "
-                "Use short paragraphs and simple bullet lists starting with a "
-                "dash (-). Do NOT use Markdown formatting (no **, *, |, ---, "
-                "#, >), do NOT use HTML tags (no <br> or similar), and do not "
-                "use tables."
-            ),
-        ]
-        if context:
-            system_parts.append(
-                "Answer primarily using the retrieved material below. If the "
-                "retrieved material does not contain the answer, say so before "
-                f"using general knowledge.\n\n{context}"
+        # ── Grounded fallback: never let the model improvise course
+        # content.  When a syllabus is selected but retrieval found
+        # nothing relevant, answer with the canned not-found message
+        # instead of calling the LLM (STEP: no hallucinated units).
+        if syllabus is not None and not context_docs:
+            logger.info(
+                "[Tutor] No relevant syllabus content retrieved; returning "
+                "grounded not-found response without LLM call"
             )
-        if personalization:
-            system_parts.append(personalization)
+            ai_response = TUTOR_NOT_FOUND_MESSAGE
+        else:
+            system_prompt = build_tutor_system_prompt(
+                context=context,
+                syllabus_selected=syllabus is not None,
+                personalization=personalization,
+                syllabus_title=(syllabus.title if syllabus else ""),
+            )
 
-        if len(system_parts) > 1:
-            messages.append({"role": "system", "content": "\n\n".join(system_parts)})
+            # Build the final LLM message sequence:
+            #
+            # SYSTEM → previous conversation → current user question
+            #
+            # Do not put the current question into messages before this point,
+            # otherwise it would be duplicated.
+            messages: List[Dict[str, str]] = [
+                {"role": "system", "content": system_prompt},
+            ]
 
-        messages.extend(history)
-        messages.append({"role": "user", "content": message})
+            messages.extend(history)
 
-        ai_response = await self.llm_service.chat_completion(messages, temperature=0.7)
+            messages.append(
+                {
+                    "role": "user",
+                    "content": message,
+                }
+            )
+
+            # ── Diagnostics: log per-message request size ───────────────
+            logger.info(
+                "[Tutor] Request breakdown (%d messages):",
+                len(messages),
+            )
+            est_tokens_total = 0
+            for i, msg in enumerate(messages):
+                chars = len(msg["content"])
+                toks = self._estimate_tokens(msg["content"])
+                est_tokens_total += toks
+                logger.info(
+                    "  [%d] role=%s chars=%d ~tokens=%d preview=%r",
+                    i,
+                    msg["role"],
+                    chars,
+                    toks,
+                    msg["content"][:80],
+                )
+            logger.info(
+                "[Tutor] Total: ~%d chars, ~%d tokens",
+                sum(len(m["content"]) for m in messages),
+                est_tokens_total,
+            )
+
+            try:
+                ai_response = await self.llm_service.chat_completion(
+                    messages, temperature=0.7
+                )
+            except Exception as exc:
+                error_str = str(exc).lower()
+                if "413" in error_str or "request entity too large" in error_str:
+                    logger.error(
+                        "[Tutor] Groq rejected request as too large "
+                        "(~%d tokens). Retrying with minimal context.",
+                        est_tokens_total,
+                    )
+                    # Keep the grounding rules but drop the bulky context.
+                    minimal_system = build_tutor_system_prompt(
+                        context="",
+                        syllabus_selected=syllabus is not None,
+                        personalization="",
+                        syllabus_title=(syllabus.title if syllabus else ""),
+                    )
+                    reduced_messages = [
+                        {"role": "system", "content": minimal_system},
+                        messages[-1],  # user's latest question only
+                    ]
+                    logger.info(
+                        "[Tutor] Retrying with minimal context: "
+                        "~%d chars, ~%d tokens",
+                        sum(len(m["content"]) for m in reduced_messages),
+                        sum(
+                            self._estimate_tokens(m["content"])
+                            for m in reduced_messages
+                        ),
+                    )
+                    ai_response = await self.llm_service.chat_completion(
+                        reduced_messages, temperature=0.7
+                    )
+                else:
+                    raise
+
+        ai_response = self._ensure_newlines(ai_response)
 
         user_msg = ChatMessage(
             session_id=session.id,
@@ -205,6 +363,10 @@ class TutorService:
         )
         db.add(ai_msg)
 
-        await db.commit()
+        try:
+            await db.commit()
+        except Exception:
+            await db.rollback()
+            raise
 
         return {"response": ai_response, "session_id": session.id}

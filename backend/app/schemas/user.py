@@ -317,3 +317,17 @@ class ChangePasswordRequest(BaseModel):
     current_password: str = Field(..., min_length=1)
     new_password: str = Field(..., min_length=8, max_length=128)
 
+
+class VerifyOtpRequest(BaseModel):
+    """Schema for OTP verification (password reset)."""
+
+    email: EmailStr
+    otp: str = Field(..., min_length=6, max_length=6, pattern=r"^\d{6}$")
+
+
+class VerifyOtpResponse(BaseModel):
+    """Response after successful OTP verification."""
+
+    reset_token: str
+    message: str = "OTP verified successfully"
+

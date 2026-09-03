@@ -1,3 +1,10 @@
+export interface UserUpdate {
+  email?: string;
+  username?: string;
+  full_name?: string | null;
+  avatar_url?: string | null;
+}
+
 export interface User {
   id: number;
   email: string;
@@ -144,12 +151,18 @@ export interface CodingProblem {
   description: string;
   difficulty: "easy" | "medium" | "hard";
   category: string | null;
+  language: string;
   tags: string[] | null;
   starter_code: string | null;
-  test_cases: any[] | null;
+  input_format: string | null;
+  output_format: string | null;
+  examples: Array<{ input?: string; output?: string; explanation?: string }> | null;
+  test_cases: Array<{ input?: string; expected?: string }> | null;
+  hints: string[] | null;
   constraints: string | null;
   user_id: number | null;
-  created_at: string;
+  is_ai_generated?: boolean;
+  created_at?: string;
   updated_at: string | null;
 }
 
@@ -161,9 +174,11 @@ export interface CodingSubmission {
   language: string;
   status: string;
   output: string | null;
-  passed: boolean;
+  score: number;
+  passed_test_cases: number;
+  total_test_cases: number;
   execution_time: number | null;
-  memory_used: number | null;
+  error_message: string | null;
 }
 
 export interface Progress {
@@ -296,6 +311,130 @@ export interface AdminDashboardStats {
     is_active: boolean;
     created_at: string | null;
   }[];
+}
+
+export type PlanType = "FREE" | "SUBSCRIPTION";
+export type BillingCycle = "NONE" | "MONTHLY" | "YEARLY";
+export type SubscriptionStatus = "ACTIVE" | "EXPIRED" | "CANCELLED";
+
+export type UsageTypeKey =
+  | "AI_CHAT"
+  | "NOTE_GENERATION"
+  | "QUIZ_GENERATION"
+  | "FLASHCARD_GENERATION"
+  | "STUDY_PLAN_GENERATION"
+  | "CODING_PROBLEM_GENERATION"
+  | "SYLLABUS_ANALYSIS";
+
+export const USAGE_TYPE_LABELS: Record<UsageTypeKey, string> = {
+  AI_CHAT: "AI Tutor Chat",
+  NOTE_GENERATION: "Note Generation",
+  QUIZ_GENERATION: "Quiz Generation",
+  FLASHCARD_GENERATION: "Flashcard Generation",
+  STUDY_PLAN_GENERATION: "Study Plan Generation",
+  CODING_PROBLEM_GENERATION: "Coding Problem Generation",
+  SYLLABUS_ANALYSIS: "Syllabus Analysis",
+};
+
+export interface Subscription {
+  id: number;
+  user_id: number;
+  plan_type: PlanType;
+  billing_cycle: BillingCycle;
+  status: SubscriptionStatus;
+  started_at: string | null;
+  expires_at: string | null;
+  auto_renew: boolean;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export interface FeatureUsage {
+  usage_type: UsageTypeKey;
+  daily_limit: number;
+  used: number;
+  remaining: number;
+  usage_date: string;
+}
+
+export interface UsageReport {
+  user_id: number;
+  plan_type: PlanType;
+  billing_cycle: BillingCycle;
+  status: SubscriptionStatus;
+  expires_at: string | null;
+  effective_plan: PlanType;
+  rate_limit_per_minute: number;
+  features: FeatureUsage[];
+  usage_date: string;
+}
+
+export interface PlanInfo {
+  plan_type: PlanType;
+  billing_cycles: string[];
+  rate_limit_per_minute: number;
+  daily_limits: Record<UsageTypeKey, number>;
+  price_monthly_paisa?: number | null;
+  price_yearly_paisa?: number | null;
+  price_monthly_npr?: number | null;
+  price_yearly_npr?: number | null;
+}
+
+export interface PlansResponse {
+  plans: PlanInfo[];
+}
+
+export interface KhaltiInitiateResponse {
+  pidx: string;
+  payment_url: string;
+  expires_at: string | null;
+  expires_in: number | null;
+  purchase_order_id: string;
+  purchase_order_name: string;
+  amount: number;
+  billing_cycle: BillingCycle;
+}
+
+export interface KhaltiVerifyResponse {
+  pidx: string;
+  status: string;
+  transaction_id: string | null;
+  total_amount: number | null;
+  fee: number | null;
+  refunded: boolean | null;
+  purchase_order_id: string;
+  billing_cycle: string;
+  subscription: Subscription | null;
+  message: string;
+}
+
+export interface KhaltiConfig {
+  enabled: boolean;
+  base_url: string;
+  website_url: string;
+  return_url: string;
+  prices: {
+    monthly_paisa: number;
+    yearly_paisa: number;
+    monthly_npr: number;
+    yearly_npr: number;
+    currency: string;
+  };
+  billing_cycles: BillingCycle[];
+}
+
+export interface PaymentOut {
+  id: number;
+  purchase_order_id: string;
+  pidx: string;
+  billing_cycle: string;
+  amount: number;
+  total_amount: number | null;
+  status: string;
+  payment_url: string | null;
+  transaction_id: string | null;
+  expires_at: string | null;
+  created_at: string | null;
 }
 
 export * from "./api";

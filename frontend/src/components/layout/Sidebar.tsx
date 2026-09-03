@@ -2,8 +2,8 @@ import { Link, useLocation } from "react-router-dom";
 import {
   LayoutDashboard, Brain, CreditCard, CalendarDays, BarChart3,
   ClipboardList, BookOpen, Trophy, AlertTriangle, RotateCcw,
-  Upload, Code2, User, Settings, ChevronLeft, ChevronRight, X,
-  GraduationCap, TrendingUp, ShieldCheck, Users,
+  Upload, Code2, Mic, User, Settings, ChevronLeft, ChevronRight, X,
+  GraduationCap, TrendingUp, ShieldCheck, Users, Crown,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useUIStore } from "@/store/uiStore";
@@ -38,14 +38,15 @@ const navGroups = [
       { label: "Progress",        icon: TrendingUp,      path: "/progress" },
     ],
   },
-  {
-    label: "Setup",
-    items: [
-      { label: "Upload Syllabus", icon: Upload,          path: "/upload-syllabus" },
-      { label: "Profile",         icon: User,            path: "/profile" },
-      { label: "Settings",        icon: Settings,        path: "/settings" },
-    ],
-  },
+    {
+      label: "Setup",
+      items: [
+        { label: "Upload Syllabus", icon: Upload,          path: "/upload-syllabus" },
+        { label: "Subscription",    icon: Crown,           path: "/subscription" },
+        { label: "Profile",         icon: User,            path: "/profile" },
+        { label: "Settings",        icon: Settings,        path: "/settings" },
+      ],
+    },
 ];
 
 export default function Sidebar() {

@@ -221,17 +221,22 @@ export default function AiTutor() {
           time: new Date(),
         },
       ]);
-      if (fromVoice || voiceModalOpen) {
-        speak(res.response);
+    } catch (e: any) {
+      let content =
+        "I couldn't connect to the AI tutor. Please make sure the backend server is running and try again.";
+      if (e?.response?.status === 429) {
+        content =
+          e?.response?.data?.detail ||
+          "You're sending messages too quickly. Please wait a moment and try again.";
+      } else if (e?.response?.data?.detail) {
+        content = e.response.data.detail;
       }
-    } catch (e) {
-      const errorMsg = "I couldn't connect to the AI tutor. Please make sure the backend server is running and try again.";
       setMessages((p) => [
         ...p,
         {
           id: (Date.now() + 1).toString(),
           role: "assistant",
-          content: errorMsg,
+          content,
           time: new Date(),
         },
       ]);
@@ -308,7 +313,7 @@ export default function AiTutor() {
                 )}
               </div>
               <div
-                className={`max-w-[75%] rounded-2xl px-4 py-3 text-sm leading-relaxed break-words ${
+                className={`max-w-[75%] rounded-2xl px-4 py-3 text-sm leading-relaxed break-words whitespace-pre-line ${
                   m.role === "user"
                     ? "bg-gradient-to-br from-primary-500 to-primary-600 text-white rounded-tr-sm"
                     : "bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 rounded-tl-sm"

@@ -45,6 +45,77 @@ AsyncSessionLocal = sessionmaker(
 # Schema Migration
 # --------------------------------------------------
 
+async def _provision_pro_for_existing_users(conn) -> None:
+    """Upgrade legacy Free subscriptions and backfill Pro for users without a row."""
+    from app.models.subscription import (
+        BillingCycle,
+        PlanType,
+        SubscriptionStatus,
+    )
+
+    upgraded = await conn.execute(
+        text(
+            """
+            UPDATE subscriptions
+            SET plan_type = :plan_type,
+                billing_cycle = :billing_cycle,
+                status = :status,
+                expires_at = NULL
+            WHERE plan_type = :free_plan
+               OR status IN (:expired_status, :cancelled_status)
+            """
+        ).bindparams(
+            plan_type=PlanType.SUBSCRIPTION.value,
+            billing_cycle=BillingCycle.MONTHLY.value,
+            status=SubscriptionStatus.ACTIVE.value,
+            free_plan=PlanType.FREE.value,
+            expired_status=SubscriptionStatus.EXPIRED.value,
+            cancelled_status=SubscriptionStatus.CANCELLED.value,
+        )
+    )
+
+    inserted = await conn.execute(
+        text(
+            """
+            INSERT INTO subscriptions (
+                user_id,
+                plan_type,
+                billing_cycle,
+                status,
+                started_at,
+                auto_renew,
+                created_at
+            )
+            SELECT
+                u.id,
+                :plan_type,
+                :billing_cycle,
+                :status,
+                NOW(),
+                FALSE,
+                NOW()
+            FROM users u
+            LEFT JOIN subscriptions s ON s.user_id = u.id
+            WHERE s.id IS NULL
+            """
+        ).bindparams(
+            plan_type=PlanType.SUBSCRIPTION.value,
+            billing_cycle=BillingCycle.MONTHLY.value,
+            status=SubscriptionStatus.ACTIVE.value,
+        )
+    )
+
+    upgraded_count = upgraded.rowcount or 0
+    inserted_count = inserted.rowcount or 0
+    if upgraded_count or inserted_count:
+        logger.info(
+            "Provisioned Mentora Pro for existing users "
+            "(upgraded=%s, created=%s)",
+            upgraded_count,
+            inserted_count,
+        )
+
+
 async def _run_migrations(conn) -> None:
     """Idempotently add columns to existing tables that are defined in
     the SQLAlchemy models but missing from the live database.
@@ -117,6 +188,7 @@ async def init_db() -> None:
             await conn.execute(text("SELECT 1"))
             await conn.run_sync(Base.metadata.create_all)
             await _run_migrations(conn)
+            await _provision_pro_for_existing_users(conn)
         logger.info("Database initialized successfully")
     except Exception as exc:
         logger.exception("Database initialization failed: %s", exc)

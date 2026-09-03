@@ -16,6 +16,8 @@ backend/venv/
 
 # Python cache
 __pycache__/
+.mypy_cache/
+backend/.mypy_cache/
 *.py[cod]
 *$py.class
 *.so
@@ -44,3 +46,10 @@ backend/uploads/
 .DS_Store
 Thumbs.db
 *.pem
+
+# Chroma DB
+backend/chromadb/
+
+# Test scripts
+test_*.py
+check_db.py

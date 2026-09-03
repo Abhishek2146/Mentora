@@ -19,6 +19,7 @@ from app.api.v1 import (
     users,
     syllabus,
     study_plan,
+    flashcards,
     quizzes,
     coding,
     tutor,
@@ -30,7 +31,9 @@ from app.api.v1 import (
     reports,
     dashboard,
     admin,
+    exams,
     notifications,
+    subscriptions,
 )
 
 from app.middleware.rate_limit import RateLimitMiddleware
@@ -105,6 +108,14 @@ if os.path.isdir(static_dir):
         name="static",
     )
 
+uploads_dir = settings.UPLOAD_DIR
+os.makedirs(os.path.join(uploads_dir, "audio"), exist_ok=True)
+app.mount(
+    "/uploads",
+    StaticFiles(directory=uploads_dir),
+    name="uploads",
+)
+
 
 # --------------------------------------------------
 # Rate Limit Middleware
@@ -142,6 +153,12 @@ app.include_router(
     study_plan.router,
     prefix=f"{settings.API_PREFIX}/study-plan",
     tags=["study-plan"],
+)
+
+app.include_router(
+    flashcards.router,
+    prefix=f"{settings.API_PREFIX}/flashcards",
+    tags=["flashcards"],
 )
 
 app.include_router(
@@ -211,9 +228,33 @@ app.include_router(
 )
 
 app.include_router(
+    exams.router,
+    prefix=f"{settings.API_PREFIX}/exams",
+    tags=["exams"],
+)
+
+app.include_router(
     notifications.router,
     prefix=f"{settings.API_PREFIX}/notifications",
     tags=["notifications"],
+)
+
+app.include_router(
+    subscriptions.router,
+    prefix=f"{settings.API_PREFIX}/subscriptions",
+    tags=["subscriptions"],
+)
+
+app.include_router(
+    subscriptions.khalti_router,
+    prefix=f"{settings.API_PREFIX}/subscriptions",
+    tags=["khalti"],
+)
+
+app.include_router(
+    subscriptions.usage_router,
+    prefix=f"{settings.API_PREFIX}/usage",
+    tags=["usage"],
 )
 
 

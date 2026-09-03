@@ -13,11 +13,13 @@ from app.models.study_plan import StudyPlan, StudyTask
 from app.models.quiz import Quiz, QuizAttempt
 from app.models.coding_problem import CodingSubmission
 from app.models.progress import Progress
+from app.services.analytics_service import AnalyticsService
 
 router = APIRouter()
+analytics_service = AnalyticsService()
 
 
-@router.get("/", response_model=dict)
+@router.get("/")
 async def get_dashboard(
     db: AsyncSession = Depends(get_db),
     user_id: int = Depends(get_current_user_id),
@@ -58,7 +60,9 @@ async def get_dashboard(
 
     coding_result = await db.execute(
         select(func.count()).select_from(CodingSubmission).where(
-            CodingSubmission.user_id == user_id, CodingSubmission.passed == True
+            CodingSubmission.user_id == user_id,
+            CodingSubmission.total_test_cases > 0,
+            CodingSubmission.passed_test_cases == CodingSubmission.total_test_cases,
         )
     )
     coding_solved = coding_result.scalar()
@@ -79,8 +83,10 @@ async def get_dashboard(
     )
     upcoming_tasks = upcoming_tasks_result.scalars().all()
 
+    card_stats = await analytics_service.get_dashboard_stats(user_id, db)
+
     return {
-        "user": {"username": user.username, "full_name": user.full_name, "role": user.role},
+        "user": {"username": user.username, "full_name": user.full_name, "role": user.role.value if hasattr(user.role, "value") else user.role},
         "stats": {
             "syllabi_count": syllabi_count,
             "active_plans": active_plans_count,
@@ -89,6 +95,7 @@ async def get_dashboard(
             "avg_score": float(avg_score),
             "coding_solved": coding_solved,
         },
+        "cards": card_stats,
         "overall_progress": progress.value if progress else 0.0,
         "upcoming_tasks": [
             {

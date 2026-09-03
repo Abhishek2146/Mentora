@@ -9,8 +9,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from app.core.auth import get_current_user_id
+from app.core.quotas import QuotaContext, record_usage, require_ai_quota
 from app.database.database import get_db
 from app.models.chat_history import ChatSession, ChatMessage
+from app.models.subscription import UsageType
 from app.services.tutor_service import TutorService
 
 router = APIRouter()
@@ -34,6 +36,7 @@ async def chat_with_tutor(
     request: ChatRequest,
     db: AsyncSession = Depends(get_db),
     user_id: int = Depends(get_current_user_id),
+    quota: QuotaContext = Depends(require_ai_quota(UsageType.AI_CHAT)),
 ):
     result = await tutor_service.process_message(
         user_id=user_id,
@@ -42,10 +45,11 @@ async def chat_with_tutor(
         session_id=request.session_id or request.conversation_id,
         db=db,
     )
+    await record_usage(db, user_id, UsageType.AI_CHAT)
     return result
 
 
-@router.get("/sessions", response_model=List)
+@router.get("/sessions")
 async def get_sessions(
     db: AsyncSession = Depends(get_db),
     user_id: int = Depends(get_current_user_id),
@@ -56,7 +60,7 @@ async def get_sessions(
     return result.scalars().all()
 
 
-@router.get("/sessions/{session_id}/messages", response_model=List)
+@router.get("/sessions/{session_id}/messages")
 async def get_session_messages(
     session_id: int,
     db: AsyncSession = Depends(get_db),

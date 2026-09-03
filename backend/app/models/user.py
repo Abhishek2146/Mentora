@@ -128,3 +128,11 @@ class User(BaseModel):
     # Notifications
     notifications = relationship("Notification", back_populates="user", cascade="all, delete-orphan")
 
+    # Subscription (one-to-one; a Mentora Pro row is created at registration)
+    subscription = relationship(
+        "Subscription",
+        back_populates="user",
+        uselist=False,
+        cascade="all, delete-orphan",
+    )
+

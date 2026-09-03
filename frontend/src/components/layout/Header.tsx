@@ -1,11 +1,12 @@
 import { Link, useNavigate } from "react-router-dom";
-import { Bell, Search, Sun, Moon, Menu, Upload, LogOut, User, ChevronDown, Loader2, FileText, ArrowRight } from "lucide-react";
+import { Bell, Search, Sun, Moon, Menu, Upload, LogOut, User, ChevronDown, Loader2, FileText, ArrowRight, Check, Archive, X, AlertTriangle, Trophy, Info, Cpu } from "lucide-react";
 import { useUIStore } from "@/store/uiStore";
 import { useAuthStore } from "@/store/authStore";
-import { cn, getInitials } from "@/lib/utils";
+import { cn, getInitials, formatDate } from "@/lib/utils";
 import { useState, useEffect, useRef, useCallback } from "react";
 import { syllabusService } from "@/services/syllabusService";
-import type { SyllabusSearchResult } from "@/types/api";
+import { notificationService } from "@/services/notificationService";
+import type { SyllabusSearchResult, Notification } from "@/types/api";
 
 export default function Header({ title }: { title?: string }) {
   const { setMobileNavOpen } = useUIStore();
@@ -14,13 +15,49 @@ export default function Header({ title }: { title?: string }) {
   const [dark, setDark] = useState(document.documentElement.classList.contains("dark"));
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
+  const [notificationOpen, setNotificationOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<SyllabusSearchResult[]>([]);
   const [searchLoading, setSearchLoading] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [notificationLoading, setNotificationLoading] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const searchContainerRef = useRef<HTMLDivElement>(null);
+  const notificationContainerRef = useRef<HTMLDivElement>(null);
   const debounceTimerRef = useRef<NodeJS.Timeout>();
+
+  const fetchNotifications = useCallback(async () => {
+    if (!user) return;
+    setNotificationLoading(true);
+    try {
+      const response = await notificationService.getNotifications({ page: 1, per_page: 10 });
+      setNotifications(response.items);
+      setUnreadCount(response.unread_count);
+    } catch (e) {
+      console.error("Failed to fetch notifications:", e);
+    } finally {
+      setNotificationLoading(false);
+    }
+  }, [user]);
+
+  const fetchUnreadCount = useCallback(async () => {
+    if (!user) return;
+    try {
+      const response = await notificationService.getUnreadCount();
+      setUnreadCount(response.unread_count);
+    } catch (e) {
+      console.error("Failed to fetch unread count:", e);
+    }
+  }, [user]);
+
+  useEffect(() => {
+    fetchNotifications();
+    fetchUnreadCount();
+    const interval = setInterval(fetchUnreadCount, 30000);
+    return () => clearInterval(interval);
+  }, [fetchNotifications, fetchUnreadCount]);
 
   const toggleDark = () => {
     document.documentElement.classList.toggle("dark");
@@ -105,6 +142,16 @@ export default function Header({ title }: { title?: string }) {
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [searchOpen]);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (notificationContainerRef.current && !notificationContainerRef.current.contains(event.target as Node)) {
+        setNotificationOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [notificationOpen]);
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -273,14 +320,132 @@ export default function Header({ title }: { title?: string }) {
           </button>
 
           {/* Notifications */}
-          <button
-            id="notifications-btn"
-            className="relative p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
-            aria-label="Notifications"
-          >
-            <Bell className="w-5 h-5 text-slate-500 dark:text-slate-400" />
-            <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-danger-500 rounded-full ring-2 ring-white dark:ring-slate-900" />
-          </button>
+          <div className="relative" ref={notificationContainerRef}>
+            <button
+              onClick={() => setNotificationOpen(!notificationOpen)}
+              id="notifications-btn"
+              className="relative p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+              aria-label="Notifications"
+              aria-expanded={notificationOpen}
+            >
+              <Bell className="w-5 h-5 text-slate-500 dark:text-slate-400" />
+              {unreadCount > 0 && (
+                <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-danger-500 rounded-full ring-2 ring-white dark:ring-slate-900" />
+              )}
+              {unreadCount > 0 && (
+                <span className="absolute -top-1 -right-1 w-5 h-5 bg-danger-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
+                  {unreadCount > 9 ? "9+" : unreadCount}
+                </span>
+              )}
+            </button>
+
+            {notificationOpen && (
+              <div className="absolute right-0 top-full mt-2 w-96 z-50 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-xl overflow-hidden animate-in slide-in-from-top-2 duration-150">
+                {/* Header */}
+                <div className="p-3 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
+                  <h3 className="font-semibold text-slate-800 dark:text-slate-100">Notifications</h3>
+                  <div className="flex items-center gap-2">
+                    {unreadCount > 0 && (
+                      <button
+                        onClick={async () => {
+                          await notificationService.markAllAsRead();
+                          fetchNotifications();
+                          fetchUnreadCount();
+                        }}
+                        className="text-xs text-primary-600 dark:text-primary-400 hover:underline"
+                      >
+                        Mark all read
+                      </button>
+                    )}
+                    <Link
+                      to="/notifications"
+                      onClick={() => setNotificationOpen(false)}
+                      className="text-xs text-primary-600 dark:text-primary-400 hover:underline"
+                    >
+                      View all
+                    </Link>
+                  </div>
+                </div>
+
+                {/* List */}
+                <div className="max-h-96 overflow-y-auto">
+                  {notificationLoading ? (
+                    <div className="flex items-center justify-center py-8">
+                      <Loader2 className="w-6 h-6 animate-spin text-primary-500" />
+                      <span className="ml-2 text-sm text-slate-500 dark:text-slate-400">Loading…</span>
+                    </div>
+                  ) : notifications.length === 0 ? (
+                    <div className="p-8 text-center">
+                      <Bell className="w-12 h-12 text-slate-300 dark:text-slate-600 mx-auto mb-3" />
+                      <p className="text-sm text-slate-500 dark:text-slate-400">No notifications yet</p>
+                    </div>
+                  ) : (
+                    <div className="divide-y divide-slate-200 dark:divide-slate-700">
+                      {notifications.map((notification) => (
+                        <button
+                          key={notification.id}
+                          onClick={async () => {
+                            if (!notification.is_read) {
+                              await notificationService.markAsRead(notification.id);
+                              fetchNotifications();
+                              fetchUnreadCount();
+                            }
+                            // Navigate based on related entity
+                            if (notification.related_entity_type && notification.related_entity_id) {
+                              if (notification.related_entity_type === "syllabus") {
+                                navigate(`/syllabus/${notification.related_entity_id}`);
+                              }
+                            }
+                            setNotificationOpen(false);
+                          }}
+                          className={`w-full p-3 text-left transition-colors ${
+                            notification.is_read
+                              ? "hover:bg-slate-50 dark:hover:bg-slate-700/50"
+                              : "bg-primary-50/50 dark:bg-primary-900/20 hover:bg-primary-50 dark:hover:bg-primary-900/30"
+                          }`}
+                        >
+                          <div className="flex items-start gap-3">
+                            <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${
+                              notification.type === "success" ? "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400" :
+                              notification.type === "warning" ? "bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400" :
+                              notification.type === "error" ? "bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400" :
+                              notification.type === "achievement" ? "bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400" :
+                              notification.type === "reminder" ? "bg-sky-100 dark:bg-sky-900/30 text-sky-600 dark:text-sky-400" :
+                              "bg-primary-100 dark:bg-primary-900/30 text-primary-600 dark:text-primary-400"
+                            }`}>
+                              {notification.type === "success" && <Check className="w-4 h-4" />}
+                              {notification.type === "warning" && <AlertTriangle className="w-4 h-4" />}
+                              {notification.type === "error" && <X className="w-4 h-4" />}
+                              {notification.type === "achievement" && <Trophy className="w-4 h-4" />}
+                              {notification.type === "reminder" && <Bell className="w-4 h-4" />}
+                              {notification.type === "info" && <Info className="w-4 h-4" />}
+                              {notification.type === "system" && <Cpu className="w-4 h-4" />}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <h4 className="font-medium text-slate-800 dark:text-slate-100 truncate text-sm">
+                                  {notification.title}
+                                </h4>
+                                {!notification.is_read && (
+                                  <span className="w-1.5 h-1.5 bg-primary-500 rounded-full flex-shrink-0" />
+                                )}
+                              </div>
+                              <p className="text-sm text-slate-600 dark:text-slate-300 mt-0.5 line-clamp-2">
+                                {notification.message}
+                              </p>
+                              <p className="text-xs text-slate-400 mt-1">
+                                {formatDate(notification.created_at)}
+                              </p>
+                            </div>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
 
           {/* User dropdown */}
           <div className="relative">

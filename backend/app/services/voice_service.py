@@ -16,6 +16,24 @@ from app.services.llm_service import LLMService
 logger = get_logger(__name__)
 
 
+def _setup_ffmpeg():
+    """Ensure ffmpeg is in PATH for Whisper subprocess calls."""
+    try:
+        import imageio_ffmpeg
+        ffmpeg_exe = imageio_ffmpeg.get_ffmpeg_exe()
+        ffmpeg_dir = os.path.dirname(ffmpeg_exe)
+        target_exe = os.path.join(ffmpeg_dir, "ffmpeg.exe")
+        if not os.path.exists(target_exe):
+            import shutil
+            shutil.copy(ffmpeg_exe, target_exe)
+        if ffmpeg_dir not in os.environ.get("PATH", ""):
+            os.environ["PATH"] = ffmpeg_dir + os.pathsep + os.environ.get("PATH", "")
+    except Exception as e:
+        logger.warning(f"Could not setup imageio-ffmpeg: {e}")
+
+_setup_ffmpeg()
+
+
 class VoiceService:
     def __init__(self):
         self.llm_service = LLMService()
@@ -24,8 +42,10 @@ class VoiceService:
     async def _load_whisper(self):
         """Load whisper model lazily."""
         if not self.whisper_model:
+            _setup_ffmpeg()
             import whisper
-            self.whisper_model = whisper.load_model(settings.WHISPER_MODEL_SIZE)
+            import asyncio
+            self.whisper_model = await asyncio.to_thread(whisper.load_model, settings.WHISPER_MODEL_SIZE)
         return self.whisper_model
 
     async def transcribe_audio(self, audio_content: bytes) -> str:
@@ -36,10 +56,14 @@ class VoiceService:
 
         try:
             model = await self._load_whisper()
-            result = model.transcribe(temp_path)
+            import asyncio
+            import torch
+            use_fp16 = torch.cuda.is_available()
+            result = await asyncio.to_thread(model.transcribe, temp_path, fp16=use_fp16)
             return result["text"]
         finally:
-            os.unlink(temp_path)
+            if os.path.exists(temp_path):
+                os.unlink(temp_path)
 
     async def text_to_speech(self, text: str, voice: str = "default") -> str:
         """Convert text to speech."""
@@ -55,7 +79,7 @@ class VoiceService:
         tts = gTTS(text=text, lang="en")
         tts.save(file_path)
 
-        return f"/static/audio/{os.path.basename(file_path)}"
+        return f"/uploads/audio/{os.path.basename(file_path)}"
 
     async def process_voice_input(
         self,

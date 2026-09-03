@@ -16,7 +16,7 @@ class StudyPlanBase(BaseModel):
 
 
 class StudyPlanCreate(StudyPlanBase):
-    pass
+    is_ai_generated: bool = False
 
 
 class StudyPlanUpdate(BaseModel):

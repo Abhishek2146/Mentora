@@ -49,6 +49,8 @@ interface AuthState {
   register: (userData: { email: string; username: string; password: string; full_name?: string }) => Promise<void>;
   registerAdmin: (userData: { email: string; username: string; password: string; full_name?: string; admin_secret: string }) => Promise<void>;
   forgotPassword: (email: string) => Promise<void>;
+  verifyOtp: (email: string, otp: string) => Promise<string>; // returns reset_token
+  resendOtp: (email: string) => Promise<void>;
   resetPassword: (token: string, password: string) => Promise<void>;
   changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
   logout: () => void;
@@ -184,18 +186,11 @@ export const useAuthStore = create<AuthState>()(
       updateUser: async (data: Partial<User>) => {
         const tokens = get().tokens;
         if (!tokens) throw new Error("Not authenticated");
-        const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:8000";
-        const response = await fetch(`${apiUrl}/api/v1/users/me`, {
-          method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${tokens.access_token}`,
-          },
-          body: JSON.stringify(data),
-        });
-        if (response.ok) {
-          const updatedUser: User = await response.json();
-          set({ user: updatedUser });
+        try {
+          const res = await apiClient.put("/api/v1/users/me", data);
+          set({ user: res.data });
+        } catch (error) {
+          throw getApiError(error);
         }
       },
 
@@ -203,6 +198,29 @@ export const useAuthStore = create<AuthState>()(
         set({ isLoading: true });
         try {
           await apiClient.post("/api/v1/auth/forgot-password", { email });
+        } catch (error) {
+          set({ isLoading: false });
+          throw getApiError(error);
+        }
+        set({ isLoading: false });
+      },
+
+      verifyOtp: async (email: string, otp: string) => {
+        set({ isLoading: true });
+        try {
+          const res = await apiClient.post("/api/v1/auth/verify-otp", { email, otp });
+          set({ isLoading: false });
+          return res.data.reset_token as string;
+        } catch (error) {
+          set({ isLoading: false });
+          throw getApiError(error);
+        }
+      },
+
+      resendOtp: async (email: string) => {
+        set({ isLoading: true });
+        try {
+          await apiClient.post("/api/v1/auth/resend-otp", { email });
         } catch (error) {
           set({ isLoading: false });
           throw getApiError(error);

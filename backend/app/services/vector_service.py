@@ -6,7 +6,7 @@ import os
 import re
 from typing import List, Optional, Dict, Any
 
-from langchain_community.vectorstores import Chroma
+from langchain_chroma import Chroma
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_core.documents import Document
 
@@ -17,9 +17,12 @@ logger = get_logger(__name__)
 
 
 from app.services.embedding_service import EmbeddingService
+from app.services.syllabus_structure import format_retrieval_context
 
 
 class VectorService:
+    COLLECTION_METADATA = {"hnsw:space": "cosine"}
+
     def __init__(self):
         self.embedding_service = EmbeddingService()
         self.persist_directory = settings.CHROMA_PERSIST_DIR
@@ -39,40 +42,26 @@ class VectorService:
         syllabus is what populates the new one.
         """
         tag = re.sub(r"[^a-zA-Z0-9]+", "-", settings.EMBEDDING_MODEL).strip("-").lower()
-        return f"syllabus_{syllabus_id}_{tag}"
+        return f"syllabus_{syllabus_id}_{tag}_{settings.RAG_INDEX_VERSION}"
 
     def _ensure_directory(self):
-        import os
         os.makedirs(self.persist_directory, exist_ok=True)
-
-    def create_collection(self, collection_name: str, documents: List[Document]) -> Chroma:
-        """Create a ChromaDB collection with documents."""
-        vector_db = Chroma.from_documents(
-            documents=documents,
-            embedding=self.embedding_service.embeddings,
-            persist_directory=self.persist_directory,
-            collection_name=collection_name,
-            collection_metadata={"hnsw:space": "cosine"},
-        )
-        vector_db.persist()
-        logger.info(f"Created collection: {collection_name}")
-        return vector_db
-
+    
     def get_collection(self, collection_name: str) -> Chroma:
-        """Get an existing ChromaDB collection."""
+        """Get an existing ChromaDB collection (or create it with the
+        correct distance metric if it doesn't exist yet)."""
         vector_db = Chroma(
             embedding_function=self.embedding_service.embeddings,
             persist_directory=self.persist_directory,
             collection_name=collection_name,
-            collection_metadata={"hnsw:space": "cosine"},
+            collection_metadata=self.COLLECTION_METADATA,
         )
-        return vector_db
+        return vector_db  
 
     def add_documents(self, collection_name: str, documents: List[Document]) -> Chroma:
         """Add documents to an existing collection."""
         vector_db = self.get_collection(collection_name)
         vector_db.add_documents(documents)
-        vector_db.persist()
         return vector_db
 
     def similarity_search(
@@ -102,35 +91,23 @@ class VectorService:
         threshold = (
             score_threshold if score_threshold is not None else settings.RAG_SIMILARITY_THRESHOLD
         )
-
         vector_db = self.get_collection(collection_name)
-
-        logger.debug(
-            "[VectorService] retrieve_context: collection=%s, query=%r, "
-            "k=%d, filter=%s, threshold=%s",
-            collection_name,
-            query[:100],
-            top_k,
-            filter,
-            threshold,
-        )
 
         try:
             scored = vector_db.similarity_search_with_relevance_scores(
                 query, k=top_k, filter=filter
             )
         except Exception as e:
-            logger.warning(
-                "[VectorService] Retrieval failed for collection '%s': %s",
-                collection_name,
-                e,
+            logger.error(
+                f"RAG retrieval failed for collection '{collection_name}' "
+                f"(query={query!r}): {e}"
             )
             return []
 
-        logger.debug(
-            "[VectorService] Retrieved %d candidate documents from '%s'",
-            len(scored),
-            collection_name,
+        top_score = scored[0][1] if scored else None
+        logger.info(
+            f"RAG retrieval: collection={collection_name} query={query!r} "
+            f"raw_results={len(scored)} top_score={top_score}"
         )
 
         seen_content = set()
@@ -173,6 +150,10 @@ class VectorService:
             "[VectorService] Returning %d documents after filtering",
             len(results),
         )
+        logger.info(
+            f"RAG retrieval: collection={collection_name} "
+            f"after_threshold_and_dedup={len(results)} threshold={threshold}"
+        )
 
         return results
 
@@ -182,6 +163,7 @@ class VectorService:
         user_id: int,
         query_text: str,
         k: Optional[int] = None,
+        course_id: Optional[int] = None,
     ) -> str:
         """Retrieve relevant chunks for a given syllabus (scoped to its
         owner) and join them into a plain content string.
@@ -191,18 +173,35 @@ class VectorService:
         N characters of the whole syllabus. Returns "" if nothing relevant
         is found (caller should fall back to extracted_text in that case).
         """
+        conditions: List[dict] = [
+            {"user_id": user_id},
+            {"syllabus_id": syllabus_id},
+        ]
+        if course_id is not None:
+            # Kept for API compatibility; structured documents carry the
+            # owning syllabus_id, which already scopes per course.
+            pass
+        metadata_filter = {"$and": conditions}
+
         collection_name = self.collection_name_for_syllabus(syllabus_id)
+        logger.info(
+            "[RETRIEVAL] syllabus_id=%s user_id=%s k=%s query=%r",
+            syllabus_id, user_id, k, query_text[:120],
+        )
         docs = self.retrieve_context(
             collection_name,
             query_text,
             k=k,
-            filter={
-                "$and": [
-                    {"user_id": user_id},
-                    {"syllabus_id": syllabus_id},
-                ]
-            },
+            filter=metadata_filter,
         )
+        for doc in docs:
+            meta = doc.metadata or {}
+            logger.info(
+                "[RETRIEVAL] hit: unit=%r topic=%r source=%s",
+                meta.get("unit_title"),
+                meta.get("topic_title"),
+                meta.get("source"),
+            )
         if not docs:
             return ""
         return "\n\n".join(doc.page_content for doc in docs)
@@ -212,23 +211,7 @@ class VectorService:
         """Format retrieved chunks into a clear, source-labeled context
         block for the LLM, instead of naively concatenating page_content.
         """
-        if not documents:
-            return ""
-
-        blocks = []
-        for i, doc in enumerate(documents, start=1):
-            meta = doc.metadata or {}
-            subject = meta.get("subject") or "Unknown"
-            chapter = meta.get("chapter") or "Unknown"
-            topic = meta.get("topic") or "Unknown"
-            blocks.append(
-                f"SOURCE {i}\n"
-                f"Subject: {subject}\n"
-                f"Chapter: {chapter}\n"
-                f"Topic: {topic}\n"
-                f"Content:\n{doc.page_content.strip()}"
-            )
-        return "\n\n".join(blocks)
+        return format_retrieval_context(documents)
 
     def delete_collection(self, collection_name: str):
         """Delete a ChromaDB collection.

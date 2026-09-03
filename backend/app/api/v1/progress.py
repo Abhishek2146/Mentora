@@ -12,8 +12,20 @@ from app.core.auth import get_current_user_id
 from app.database.database import get_db
 from app.models.progress import Progress, WeakTopic
 from app.schemas.progress import ProgressCreate, ProgressOut, WeakTopicOut
+from app.services.progress_service import ProgressService
 
 router = APIRouter()
+progress_service = ProgressService()
+
+
+@router.get("/overview")
+async def get_progress_overview(
+    db: AsyncSession = Depends(get_db),
+    user_id: int = Depends(get_current_user_id),
+):
+    """Overall mastery across quizzes, MCQs, mock exams and flashcards,
+    including improvement over time."""
+    return await progress_service.get_progress_overview(user_id, db)
 
 
 @router.post("/", response_model=ProgressOut, status_code=status.HTTP_201_CREATED)
