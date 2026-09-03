@@ -36,7 +36,6 @@ const navGroups = [
       { label: "Weak Topics",     icon: AlertTriangle,   path: "/weak-topics" },
       { label: "Revision Plan",   icon: RotateCcw,       path: "/revision-plan" },
       { label: "Progress",        icon: TrendingUp,      path: "/progress" },
-      { label: "Voice Learning",  icon: Mic,             path: "/voice-learning" },
     ],
   },
     {
@@ -86,7 +85,7 @@ export default function Sidebar() {
 
       <aside
         className={cn(
-          "fixed top-0 left-0 h-full z-50 flex flex-col transition-all duration-300 ease-in-out w-64",
+          "fixed top-0 left-0 h-full z-50 flex flex-col transition-all duration-300 ease-in-out w-64 overflow-hidden",
           "bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-700/50",
           // Mobile: off-canvas drawer that slides in.
           mobileNavOpen ? "translate-x-0 shadow-2xl" : "-translate-x-full",
@@ -97,11 +96,14 @@ export default function Sidebar() {
       >
         {/* Logo */}
         <div className="flex items-center justify-between px-4 py-5 border-b border-slate-100 dark:border-slate-700/50">
-          <Link to="/dashboard" onClick={handleNavClick} className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-primary-500 to-secondary-500 flex items-center justify-center shadow-glow-primary">
+          <Link to="/dashboard" onClick={handleNavClick} className="flex items-center gap-2.5 min-w-0">
+            <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-primary-500 to-secondary-500 flex items-center justify-center shadow-glow-primary flex-shrink-0">
               <GraduationCap className="w-5 h-5 text-white" />
             </div>
-            <span className="font-bold text-lg bg-gradient-to-r from-primary-600 to-secondary-600 bg-clip-text text-transparent">
+            <span className={cn(
+              "font-bold text-lg bg-gradient-to-r from-primary-600 to-secondary-600 bg-clip-text text-transparent whitespace-nowrap",
+              !sidebarOpen && "lg:hidden"
+            )}>
               Mentora
             </span>
           </Link>
@@ -128,7 +130,10 @@ export default function Sidebar() {
         <nav className="flex-1 overflow-y-auto py-4 px-2 no-scrollbar">
           {groups.map((group) => (
             <div key={group.label} className="mb-4">
-              <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400 dark:text-slate-500 px-3 mb-1.5">
+              <p className={cn(
+                "text-[10px] font-semibold uppercase tracking-widest text-slate-400 dark:text-slate-500 px-3 mb-1.5 truncate whitespace-nowrap",
+                !sidebarOpen && "lg:opacity-0 lg:pointer-events-none"
+              )}>
                 {group.label}
               </p>
               {group.items.map((item) => {
@@ -156,11 +161,14 @@ export default function Sidebar() {
 
         {/* User */}
         <div className="border-t border-slate-100 dark:border-slate-700/50 p-3">
-          <Link to="/profile" onClick={handleNavClick} className="flex items-center gap-3 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-700/50 transition-colors px-3 py-2 lg:px-3 lg:py-2">
+          <Link to="/profile" onClick={handleNavClick} className={cn(
+            "flex items-center gap-3 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-700/50 transition-colors px-3 py-2",
+            !sidebarOpen && "lg:justify-center lg:px-2"
+          )}>
             <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-primary-500 to-secondary-500 flex items-center justify-center text-white text-sm font-bold shadow-md flex-shrink-0">
               {user?.full_name ? getInitials(user.full_name) : user?.username?.[0]?.toUpperCase() ?? "U"}
             </div>
-            <div className="leading-tight min-w-0">
+            <div className={cn("leading-tight min-w-0", !sidebarOpen && "lg:hidden")}>
               <p className="text-sm font-bold text-slate-800 dark:text-slate-100 truncate">{userName}</p>
               <p className="text-[11px] text-slate-400 capitalize">{user?.role || "student"}</p>
             </div>
@@ -168,7 +176,7 @@ export default function Sidebar() {
         </div>
 
         {/* Footer */}
-        <div className="hidden lg:block p-4 border-t border-slate-100 dark:border-slate-700/50">
+        <div className={cn("hidden lg:block p-4 border-t border-slate-100 dark:border-slate-700/50", !sidebarOpen && "lg:hidden")}>
           <div className="text-[10px] text-slate-400 text-center">Mentora v1.0</div>
         </div>
       </aside>

@@ -28,8 +28,15 @@ import SyllabusDetailPage from "@/pages/SyllabusDetail";
 import NotificationsPage from "@/pages/Notifications";
 import { ProtectedRoute, PublicRoute, AdminRoute } from "@/components/ProtectedRoute";
 import { useAuthStore } from "@/store/authStore";
+import HomePage from "@/pages/HomePage";
 import AdminRegisterPage from "@/pages/AdminRegister";
 import AdminDashboardPage from "@/pages/AdminDashboard";
+import UploadSyllabus from "./pages/UploadSyllabus";
+import CodingPractice from "./pages/CodingPractice";
+import VoiceLearning from "./pages/VoiceLearning";
+import Profile from "./pages/Profile";
+import Settings from "./pages/Settings";
+import Progress from "./pages/Progress";
 
 export default function App() {
   useEffect(() => {
@@ -39,7 +46,7 @@ export default function App() {
   return (
     <BrowserRouter>
 <Routes>
-        <Route path="/" element={<Navigate to="/dashboard" replace />} />
+        <Route path="/" element={<HomePage />} />
         <Route path="/dashboard" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
         <Route path="/search" element={<ProtectedRoute><SearchPage /></ProtectedRoute>} />
         <Route path="/notifications" element={<ProtectedRoute><NotificationsPage /></ProtectedRoute>} />
