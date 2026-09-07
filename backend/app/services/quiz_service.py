@@ -250,6 +250,24 @@ class QuizService:
             resolved_topic, target_syllabus_id, syllabus.status if syllabus else None,
         )
 
+        # Validate that the requested topic belongs to this syllabus.
+        if resolved_topic:
+            all_syllabus_topics = extract_syllabus_topics(syllabus.parsed_data, limit=200)
+            if not all_syllabus_topics:
+                all_syllabus_topics = await _fallback_topics_from_db(syllabus.id, db)
+
+            if all_syllabus_topics:
+                topic_lower = resolved_topic.strip().lower()
+                topic_in_syllabus = any(
+                    topic_lower in t.lower() or t.lower() in topic_lower
+                    for t in all_syllabus_topics
+                )
+                if not topic_in_syllabus:
+                    raise ValueError(
+                        f"Topic '{resolved_topic}' is not part of your uploaded syllabus. "
+                        "Please select a topic from your syllabus."
+                    )
+
         # RAG-retrieved content scoped to this syllabus.
         content = ""
         query_text = resolved_topic
