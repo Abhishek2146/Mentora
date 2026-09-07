@@ -25,13 +25,14 @@ export default function MCQ() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [startedAt, setStartedAt] = useState<number>(Date.now());
+  const [syllabusId, setSyllabusId] = useState<number | null>(null);
 
   useEffect(() => {
     syllabusService
       .getAllSyllabi()
       .then((data) => {
         setSyllabi(data);
-        // Collect chapter/topic names from all syllabi as suggestions.
+        // Collect chapter/topic names only from the user's uploaded syllabi.
         const names: string[] = [];
         for (const s of data) {
           for (const subj of s.subjects || []) {
@@ -42,15 +43,32 @@ export default function MCQ() {
           }
         }
         setTopics([...new Set(names)]);
+        // Pre-select the latest syllabus
+        if (data.length > 0) setSyllabusId(data[0].id);
       })
       .catch(() => {});
   }, []);
+
+  // Topics that belong to the currently selected syllabus
+  const syllabusTopics: string[] = (() => {
+    if (!syllabusId) return topics;
+    const s = syllabi.find((x) => x.id === syllabusId);
+    if (!s) return [];
+    const names: string[] = [];
+    for (const subj of s.subjects || []) {
+      for (const ch of subj.chapters || []) {
+        if (ch.name) names.push(ch.name);
+        for (const t of ch.topics || []) if (t) names.push(t);
+      }
+    }
+    return [...new Set(names)];
+  })();
 
   const start = async () => {
     setLoading(true);
     setError(null);
     try {
-      const res = await quizService.generateMCQ(topic.trim(), difficulty, count);
+      const res = await quizService.generateMCQ(topic.trim(), difficulty, count, syllabusId ?? undefined);
       const qs = res?.questions || [];
       if (!qs.length) throw new Error("No questions were generated. Try another topic.");
       setQuizId(res.id ?? null);
@@ -145,23 +163,57 @@ export default function MCQ() {
         <div className="card p-4 sm:p-6 space-y-5">
           <h2 className="font-bold text-xl text-slate-800 dark:text-slate-100">Configure Your Practice Set</h2>
           {error && <p className="text-sm text-red-500">{error}</p>}
+
+          {/* Syllabus selector */}
+          {syllabi.length > 1 && (
+            <div>
+              <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-2">Syllabus</label>
+              <select
+                value={syllabusId ?? ""}
+                onChange={(e) => { setSyllabusId(Number(e.target.value)); setTopic(""); }}
+                className="w-full border rounded-xl px-3 py-2 text-sm dark:bg-slate-800 dark:border-slate-600"
+              >
+                {syllabi.map((s) => (
+                  <option key={s.id} value={s.id}>{s.title}</option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {/* Topic — syllabus topics only, no free-text */}
           <div>
-            <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-2">Topic</label>
-            {topics.length > 0 && (
-              <div className="flex flex-wrap gap-2 mb-3">
-                {topics.map((t) => (
-                  <button key={t} onClick={() => setTopic(t)} className={`px-4 py-2 rounded-xl text-sm font-medium border transition-all ${ topic===t ? "bg-primary-500 text-white border-primary-500" : "border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-300 hover:border-primary-300" }`}>{t}</button>
+            <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-2">
+              Topic <span className="text-xs text-slate-400">(from your syllabus)</span>
+            </label>
+            {syllabusTopics.length > 0 ? (
+              <div className="flex flex-wrap gap-2 max-h-48 overflow-y-auto pr-1">
+                {syllabusTopics.map((t) => (
+                  <button
+                    key={t}
+                    onClick={() => setTopic(t)}
+                    className={`px-3 py-1.5 rounded-xl text-sm font-medium border transition-all ${
+                      topic === t
+                        ? "bg-primary-500 text-white border-primary-500"
+                        : "border-slate-200 dark:border-slate-600 text-slate-600 dark:text-slate-300 hover:border-primary-300"
+                    }`}
+                  >
+                    {t}
+                  </button>
                 ))}
               </div>
+            ) : (
+              <p className="text-sm text-slate-400 italic">
+                No topics found in this syllabus. Please upload a syllabus with structured chapters/topics.
+              </p>
             )}
-            <input
-              type="text"
-              value={topic}
-              onChange={(e) => setTopic(e.target.value)}
-              placeholder={topics.length ? "Or type any topic..." : "e.g. Normalization"}
-              className="w-full border rounded-xl px-3 py-2 text-sm dark:bg-slate-800 dark:border-slate-600"
-            />
+            {topic && (
+              <p className="mt-2 text-xs text-primary-600 dark:text-primary-400">
+                Selected: <span className="font-semibold">{topic}</span>
+                <button onClick={() => setTopic("")} className="ml-2 text-slate-400 hover:text-red-400">✕ clear</button>
+              </p>
+            )}
           </div>
+
           <div>
             <label className="block text-sm font-medium text-slate-600 dark:text-slate-400 mb-2">Difficulty</label>
             <div className="flex gap-2">
