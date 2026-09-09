@@ -272,9 +272,18 @@ class LLMService:
         prompt: str,
         temperature: float = 0.7,
     ) -> str:
-        model = self._get_model(temperature=temperature)
-        response = await model.ainvoke(prompt)
-        return response.content
+        """Generate a plain-text response for the given prompt.
+
+        Routes through ``_ainvoke_text`` so that the fallback-model logic
+        (used when the primary model hits its rate/quota limit) applies
+        here just as it does for all other generation methods.
+        """
+        messages = [HumanMessage(content=prompt)]
+        return await self._ainvoke_text(
+            messages=messages,
+            temperature=temperature,
+            json_mode=False,
+        )
 
     # ================================================================
     # CHAT COMPLETION
@@ -1754,44 +1763,63 @@ by the retrieved content. Return ONLY the JSON object.
         start_date: str,
         end_date: Optional[str] = None,
     ) -> dict:
-        system_prompt = """
-You are an expert educational study planner.
+        """Generate a unit-wise study plan.
 
-Create a detailed study plan based ONLY on the topics and chapters in the supplied syllabus.
+        The LLM is asked ONLY for ordered content (titles, descriptions,
+        unit/chapter labels, task types). Dates are assigned entirely by
+        Python after the LLM returns, so it is impossible for the plan to
+        contain dates outside [start_date, end_date].
+        """
+        # Build a flat outline: [Subject] Chapter: Topic
+        unit_lines: List[str] = []
+        for subj in (syllabus_data.get("subjects") or []):
+            if not isinstance(subj, dict):
+                continue
+            subj_name = (subj.get("name") or "").strip()
+            for ch in (subj.get("chapters") or []):
+                if not isinstance(ch, dict):
+                    continue
+                ch_name = (ch.get("name") or "").strip()
+                topics = [str(t).strip() for t in (ch.get("topics") or []) if str(t).strip()]
+                if topics:
+                    for t in topics:
+                        unit_lines.append(f"  - [{subj_name}] {ch_name}: {t}")
+                elif ch_name:
+                    unit_lines.append(f"  - [{subj_name}] {ch_name}")
 
-Rules:
-- Cover every unit/chapter from the syllabus.
-- Distribute tasks across the available date range.
-- Each task must study ONE specific topic or chapter from the syllabus.
-- Do NOT invent topics that are not in the syllabus.
+        syllabus_outline = "\n".join(unit_lines) if unit_lines else json.dumps(
+            syllabus_data, ensure_ascii=False, indent=2
+        )
 
-Return ONLY valid JSON with this exact structure:
+        system_prompt = """\
+You are an academic study planner. Given a syllabus outline, produce an
+ORDERED list of study tasks that covers every topic unit-by-unit.
 
+RULES:
+1. Cover every topic in the syllabus outline.
+2. Group tasks by subject/chapter — work through one chapter before moving on.
+3. After every 4-5 study tasks for a chapter, insert one revision or quiz task.
+4. Do NOT include any dates, times, or day numbers in the output.
+5. Return ONLY valid JSON — no markdown, no prose.
+
+JSON structure:
 {{
-  "summary": "Brief overview of the plan",
+  "summary": "One-sentence overview of the plan",
   "tasks": [
     {{
-      "title": "Study [specific topic name from syllabus]",
-      "description": "Brief description of what to study",
-      "date": "YYYY-MM-DD",
+      "title": "Study [specific topic]",
+      "description": "What to focus on",
+      "unit": "Subject name",
+      "chapter": "Chapter/unit name",
       "type": "study"
     }}
   ]
 }}
 
-Each task object MUST have: title, description, date (YYYY-MM-DD), type.
-Type must be one of: "study", "quiz", "revision".
+type must be one of: "study", "revision", "quiz".
 """
 
-        human_prompt = """
-Syllabus:
-
-{text}
-
-Start date: {start_date}
-
-End date: {end_date}
-"""
+        human_prompt = "Syllabus outline:\n{outline}\n\nGenerate the ordered task list now."
 
         prompt = ChatPromptTemplate.from_messages(
             [("system", system_prompt), ("human", human_prompt)]
@@ -1799,18 +1827,18 @@ End date: {end_date}
 
         last_result: str = ""
         for attempt in range(2):
-            messages = prompt.format_messages(
-                text=json.dumps(syllabus_data, ensure_ascii=False, indent=2),
-                start_date=start_date,
-                end_date=end_date,
-            )
-            result = await self._ainvoke_text(messages, temperature=0.3, json_mode=True)
+            messages = prompt.format_messages(outline=syllabus_outline)
+            result = await self._ainvoke_text(messages, temperature=0.2, json_mode=True)
             last_result = result or ""
 
             try:
                 cleaned = self._extract_json(last_result)
                 data = json.loads(cleaned)
                 if isinstance(data, dict) and data.get("tasks"):
+                    # Strip any date fields the model included anyway
+                    for task in data["tasks"]:
+                        task.pop("date", None)
+                        task.pop("due_date", None)
                     return data
             except (json.JSONDecodeError, TypeError, ValueError):
                 pass

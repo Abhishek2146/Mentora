@@ -5,6 +5,7 @@ import AiTutorPage from "@/pages/AiTutor";
 import FlashcardsPage from "@/pages/Flashcards";
 import StudyPlanPage from "@/pages/StudyPlan";
 import AnalyticsPage from "@/pages/Analytics";
+import NotesPage from "@/pages/Notes";
 import DailyQuizPage from "@/pages/DailyQuiz";
 import MCQPage from "@/pages/MCQ";
 import ExamSimulatorPage from "@/pages/ExamSimulator";
@@ -56,6 +57,7 @@ export default function App() {
         <Route path="/ai-tutor" element={<ProtectedRoute><AiTutorPage /></ProtectedRoute>} />
         <Route path="/flashcards" element={<ProtectedRoute><FlashcardsPage /></ProtectedRoute>} />
         <Route path="/study-plan" element={<ProtectedRoute><StudyPlanPage /></ProtectedRoute>} />
+        <Route path="/notes" element={<ProtectedRoute><NotesPage /></ProtectedRoute>} />
         <Route path="/analytics" element={<ProtectedRoute><AnalyticsPage /></ProtectedRoute>} />
         <Route path="/daily-quiz" element={<ProtectedRoute><DailyQuizPage /></ProtectedRoute>} />
         <Route path="/mcq" element={<ProtectedRoute><MCQPage /></ProtectedRoute>} />

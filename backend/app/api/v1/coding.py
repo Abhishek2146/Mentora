@@ -157,6 +157,27 @@ async def get_problem(
     return problem
 
 
+# ---------------------------------------------------------------
+# IMPORTANT: /submissions/my MUST be defined BEFORE
+# /submissions/{problem_id} so FastAPI does not interpret "my"
+# as an integer problem_id and raise a 422 validation error.
+# ---------------------------------------------------------------
+
+@router.get("/submissions/my", response_model=List[CodingSubmissionOut])
+async def get_my_submissions(
+    problem_id: Optional[int] = None,
+    db: AsyncSession = Depends(get_db),
+    user_id: int = Depends(get_current_user_id),
+):
+    """Return all submissions by the current user, optionally filtered by problem."""
+    query = select(CodingSubmission).where(CodingSubmission.user_id == user_id)
+    if problem_id is not None:
+        query = query.where(CodingSubmission.problem_id == problem_id)
+    query = query.order_by(CodingSubmission.id.desc())
+    result = await db.execute(query)
+    return result.scalars().all()
+
+
 @router.post(
     "/submissions/{problem_id}",
     response_model=CodingSubmissionOut,
@@ -206,20 +227,6 @@ async def submit_code(
     await db.commit()
     await db.refresh(submission)
     return submission
-
-
-@router.get("/submissions/my", response_model=List[CodingSubmissionOut])
-async def get_my_submissions(
-    problem_id: Optional[int] = None,
-    db: AsyncSession = Depends(get_db),
-    user_id: int = Depends(get_current_user_id),
-):
-    query = select(CodingSubmission).where(CodingSubmission.user_id == user_id)
-    if problem_id is not None:
-        query = query.where(CodingSubmission.problem_id == problem_id)
-    query = query.order_by(CodingSubmission.id.desc())
-    result = await db.execute(query)
-    return result.scalars().all()
 
 
 class SupportedLanguagesResponse(BaseModel):

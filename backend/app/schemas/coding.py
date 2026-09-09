@@ -1,6 +1,7 @@
 """
 Coding schemas
 """
+from datetime import datetime
 from enum import Enum
 from typing import Optional, List, Any
 
@@ -53,6 +54,8 @@ class CodingProblemOut(CodingProblemBase):
     id: int
     user_id: Optional[int] = None
     is_ai_generated: bool = False
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True
@@ -89,6 +92,8 @@ class CodingSubmissionOut(BaseModel):
     total_test_cases: int = 0
     execution_time: Optional[int] = None
     error_message: Optional[str] = None
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True

@@ -36,6 +36,7 @@ from app.api.v1 import (
     subscriptions,
     study_groups,
     study_streak,
+    notes,
 )
 
 from app.middleware.rate_limit import RateLimitMiddleware
@@ -269,6 +270,12 @@ app.include_router(
     subscriptions.usage_router,
     prefix=f"{settings.API_PREFIX}/usage",
     tags=["usage"],
+)
+
+app.include_router(
+    notes.router,
+    prefix=f"{settings.API_PREFIX}/notes",
+    tags=["notes"],
 )
 
 

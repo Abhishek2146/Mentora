@@ -64,6 +64,7 @@ export interface StudyPlan {
   description: string | null;
   start_date: string;
   end_date: string | null;
+  exam_date: string | null;
   syllabus_id: number | null;
   is_active: boolean;
   plan_data: any | null;
@@ -179,6 +180,7 @@ export interface CodingSubmission {
   total_test_cases: number;
   execution_time: number | null;
   error_message: string | null;
+  created_at: string | null;
 }
 
 export interface Progress {

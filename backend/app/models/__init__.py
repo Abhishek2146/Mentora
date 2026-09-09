@@ -12,6 +12,7 @@ from app.models.revision import RevisionSchedule, RevisionItem
 from app.models.chat_history import ChatSession, ChatMessage, VoiceSession, WeeklyReport
 from app.models.analytics import AnalyticsSummary, ActivityLog, ExamSimulation
 from app.models.notification import Notification, NotificationType, NotificationPriority
+from app.models.note import Note
 from app.models.subscription import (
     Subscription,
     Usage,
@@ -37,6 +38,7 @@ __all__ = [
     "ChatSession", "ChatMessage", "VoiceSession", "WeeklyReport",
     "AnalyticsSummary", "ActivityLog", "ExamSimulation",
     "Notification", "NotificationType", "NotificationPriority",
+    "Note",
     "Subscription", "Usage",
     "PlanType", "BillingCycle", "SubscriptionStatus", "UsageType",
     "Payment", "PaymentStatus",

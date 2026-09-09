@@ -30,7 +30,7 @@ class StudyGroup(Base):
     )
     invite_code = Column(String(10), unique=True, nullable=False, index=True)
     is_active = Column(Boolean, default=True, nullable=False)
-    memory = Column(JSONB, nullable=False, server_default="'{}'::jsonb")
+    memory = Column(JSONB, nullable=False, server_default="{}")
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=True

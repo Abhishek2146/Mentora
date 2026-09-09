@@ -15,6 +15,7 @@ from app.api.v1 import (
     reports,
     dashboard,
     notifications,
+    notes,
 )
 
 from app.api.v1.auth import router as auth_router

@@ -422,9 +422,11 @@ export default function CodingPractice() {
                   {result.score > 0 && (
                     <p className="text-xs text-slate-500 mb-2">Score: {result.score}%</p>
                   )}
-                  <pre className="overflow-x-auto text-xs font-mono text-slate-600 dark:text-slate-300 whitespace-pre-wrap">
-                    {result.output}
-                  </pre>
+                  {(result.output || result.error_message) && (
+                    <pre className="overflow-x-auto text-xs font-mono text-slate-600 dark:text-slate-300 whitespace-pre-wrap">
+                      {result.output || result.error_message}
+                    </pre>
+                  )}
                 </div>
               )}
             </div>

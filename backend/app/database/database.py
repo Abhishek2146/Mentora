@@ -116,6 +116,45 @@ async def _provision_pro_for_existing_users(conn) -> None:
         )
 
 
+async def _fix_column_types(conn) -> None:
+    """Upgrade specific columns that were created with an incorrect VARCHAR(255)
+    type and need to be TEXT to handle long AI-generated content.
+
+    This is idempotent: it checks the current column type before issuing
+    any ALTER TABLE so it is safe to run on every startup.
+    """
+    upgrades = [
+        # table_name, column_name
+        ("study_tasks", "description"),
+        ("study_plans", "description"),
+        ("notes", "content"),
+        ("notes", "ai_summary"),
+    ]
+    for table_name, column_name in upgrades:
+        result = await conn.execute(
+            text(
+                "SELECT data_type FROM information_schema.columns "
+                "WHERE table_name = :t AND column_name = :c"
+            ).bindparams(t=table_name, c=column_name)
+        )
+        row = result.fetchone()
+        if row is None:
+            continue  # column doesn't exist yet
+        current_type = (row[0] or "").lower()
+        if "character varying" in current_type or current_type == "varchar":
+            await conn.execute(
+                text(
+                    f'ALTER TABLE "{table_name}" '
+                    f'ALTER COLUMN "{column_name}" TYPE TEXT'
+                )
+            )
+            logger.info(
+                "Upgraded column '%s.%s' from VARCHAR to TEXT",
+                table_name,
+                column_name,
+            )
+
+
 async def _run_migrations(conn) -> None:
     """Idempotently add columns to existing tables that are defined in
     the SQLAlchemy models but missing from the live database.
@@ -300,6 +339,7 @@ async def init_db() -> None:
         async with engine.begin() as conn:
             await conn.execute(text("SELECT 1"))
             await conn.run_sync(Base.metadata.create_all)
+            await _fix_column_types(conn)
             await _run_migrations(conn)
             await _ensure_unique_constraints(conn)
             await _fix_broken_timestamps(conn)
