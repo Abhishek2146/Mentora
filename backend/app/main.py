@@ -34,6 +34,8 @@ from app.api.v1 import (
     exams,
     notifications,
     subscriptions,
+    study_groups,
+    study_streak,
 )
 
 from app.middleware.rate_limit import RateLimitMiddleware
@@ -207,6 +209,18 @@ app.include_router(
     voice.router,
     prefix=f"{settings.API_PREFIX}/voice",
     tags=["voice"],
+)
+
+app.include_router(
+    study_groups.router,
+    prefix=f"{settings.API_PREFIX}/study-groups",
+    tags=["study-groups"],
+)
+
+app.include_router(
+    study_streak.router,
+    prefix=f"{settings.API_PREFIX}/study-streak",
+    tags=["study-streak"],
 )
 
 app.include_router(
