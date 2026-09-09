@@ -22,6 +22,8 @@ from app.models.subscription import (
 )
 from app.models.payment import Payment, PaymentStatus
 from app.models.otp import PasswordResetOTP
+from app.models.study_group import StudyGroup, StudyGroupMember, StudyGroupMessage
+from app.models.study_streak import UserStreak, DailyStudySummary
 
 __all__ = [
     "User", "UserRole",
@@ -39,4 +41,6 @@ __all__ = [
     "PlanType", "BillingCycle", "SubscriptionStatus", "UsageType",
     "Payment", "PaymentStatus",
     "PasswordResetOTP",
+    "StudyGroup", "StudyGroupMember", "StudyGroupMessage",
+    "UserStreak", "DailyStudySummary",
 ]

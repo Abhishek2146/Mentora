@@ -46,6 +46,7 @@ services:
       - POSTGRES_USER=mentora
       - POSTGRES_PASSWORD=mentora123
       - POSTGRES_DB=mentora
+      - TZ=UTC
     volumes:
       - postgres_data:/var/lib/postgresql/data
     networks:
