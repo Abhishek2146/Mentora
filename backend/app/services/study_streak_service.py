@@ -99,9 +99,8 @@ class StudyStreakService:
             study_minutes = row.study_minutes
             is_qualifying = row.qualifying
 
-            total_minutes += study_minutes
-
             if is_qualifying:
+                total_minutes += study_minutes
                 qualifying_dates.append(date_str)
 
         # Calculate current streak (most recent consecutive qualifying days from today)
@@ -336,7 +335,7 @@ class StudyStreakService:
         total_minutes = 0
 
         for d in days:
-            total_minutes += d.study_minutes
+            total_minutes += d.study_minutes if d.qualifying else 0
             if d.qualifying:
                 qualifying_dates.append(d.date)
 
