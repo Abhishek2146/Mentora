@@ -116,6 +116,36 @@ async def _provision_pro_for_existing_users(conn) -> None:
         )
 
 
+async def _migrate_user_roles(conn) -> None:
+    """Ensure the users.role column accepts 'super_admin'.
+
+    PostgreSQL ENUM columns require ALTER TYPE to add new values.
+    This is idempotent — it checks before adding.
+    """
+    result = await conn.execute(
+        text(
+            "SELECT t.typname, e.enumlabel "
+            "FROM pg_type t "
+            "JOIN pg_enum e ON t.oid = e.enumtypid "
+            "WHERE t.typname = 'userrole'"
+        )
+    )
+    rows = result.fetchall()
+
+    if rows:
+        # Column is a PostgreSQL ENUM type — add super_admin if missing.
+        existing_labels = {row[1] for row in rows}
+        if "super_admin" not in existing_labels:
+            await conn.execute(
+                text("ALTER TYPE userrole ADD VALUE IF NOT EXISTS 'super_admin'")
+            )
+            logger.info("Added 'super_admin' to userrole ENUM type")
+    else:
+        # Column is VARCHAR (not an ENUM type) — no DDL needed.
+        # The Python enum handles validation; existing rows keep their values.
+        pass
+
+
 async def _fix_column_types(conn) -> None:
     """Upgrade specific columns that were created with an incorrect VARCHAR(255)
     type and need to be TEXT to handle long AI-generated content.
@@ -344,6 +374,7 @@ async def init_db() -> None:
             await _ensure_unique_constraints(conn)
             await _fix_broken_timestamps(conn)
             await _provision_pro_for_existing_users(conn)
+            await _migrate_user_roles(conn)
         logger.info("Database initialized successfully")
     except Exception as exc:
         logger.exception("Database initialization failed: %s", exc)

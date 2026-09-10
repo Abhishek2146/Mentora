@@ -1,5 +1,5 @@
 import apiClient from "@/lib/api";
-import type { AdminDashboardStats, User } from "@/types";
+import type { AdminDashboardStats, User, UserWithSubscription, AdminSubscription, BillingCycle } from "@/types";
 
 export const adminService = {
   async getDashboard(): Promise<AdminDashboardStats> {
@@ -17,6 +17,11 @@ export const adminService = {
     return res.data;
   },
 
+  async getUserWithMembership(userId: number): Promise<UserWithSubscription> {
+    const res = await apiClient.get<UserWithSubscription>(`/api/v1/admin/users/${userId}`);
+    return res.data;
+  },
+
   async updateUser(
     userId: number,
     data: { role?: string; is_active?: boolean; is_verified?: boolean; full_name?: string }
@@ -27,5 +32,24 @@ export const adminService = {
 
   async deleteUser(userId: number): Promise<void> {
     await apiClient.delete(`/api/v1/admin/users/${userId}`);
+  },
+
+  async grantMembership(
+    userId: number,
+    billingCycle: BillingCycle = "MONTHLY",
+    autoRenew: boolean = false
+  ): Promise<AdminSubscription> {
+    const res = await apiClient.post<AdminSubscription>(
+      `/api/v1/admin/users/${userId}/grant-membership`,
+      { billing_cycle: billingCycle, auto_renew: autoRenew }
+    );
+    return res.data;
+  },
+
+  async revokeMembership(userId: number): Promise<AdminSubscription> {
+    const res = await apiClient.post<AdminSubscription>(
+      `/api/v1/admin/users/${userId}/revoke-membership`
+    );
+    return res.data;
   },
 };

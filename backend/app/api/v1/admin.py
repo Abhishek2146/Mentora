@@ -1,32 +1,74 @@
 """
 Admin API endpoints
 
-Admin-only management endpoints for platform overview and
-user management. All routes require an authenticated admin.
+Super-admin-only management endpoints for platform overview,
+user management, and membership control. All routes require an
+authenticated super admin.
 """
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 
-from app.core.auth import require_admin
+from app.core.auth import require_super_admin
 from app.database.database import get_db
 from app.models.user import User, UserRole
+from app.models.subscription import (
+    Subscription,
+    PlanType,
+    BillingCycle,
+    SubscriptionStatus,
+)
 from app.models.syllabus import Syllabus
 from app.models.study_plan import StudyPlan
 from app.models.quiz import Quiz, QuizAttempt
 from app.models.coding_problem import CodingProblem, CodingSubmission
 from app.models.flashcard import FlashcardDeck
 from app.schemas.user import UserOut, AdminUserUpdate
+from app.schemas.subscription import AdminSubscriptionOut
+from app.services.subscription_service import subscription_service
 
 router = APIRouter()
 
 
+# --------------------------------------------------
+# Request schemas for membership management
+# --------------------------------------------------
+
+class GrantMembershipRequest(BaseModel):
+    """Grant premium membership to a user."""
+    billing_cycle: BillingCycle = BillingCycle.MONTHLY
+    auto_renew: bool = False
+
+
+class RevokeMembershipRequest(BaseModel):
+    """Revoke premium membership from a user."""
+    pass
+
+
+# --------------------------------------------------
+# User + subscription combined response
+# --------------------------------------------------
+
+class UserWithMembershipOut(BaseModel):
+    """User profile combined with their subscription info."""
+    user: UserOut
+    subscription: Optional[AdminSubscriptionOut] = None
+
+    class Config:
+        from_attributes = True
+
+
+# --------------------------------------------------
+# Dashboard
+# --------------------------------------------------
+
 @router.get("/dashboard")
 async def admin_dashboard(
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_admin),
+    _: User = Depends(require_super_admin),
 ):
     """Aggregated platform statistics for the admin dashboard."""
 
@@ -39,6 +81,11 @@ async def admin_dashboard(
     total_admins = (
         await db.execute(
             select(func.count()).select_from(User).where(User.role == UserRole.ADMIN.value)
+        )
+    ).scalar() or 0
+    total_super_admins = (
+        await db.execute(
+            select(func.count()).select_from(User).where(User.role == UserRole.SUPER_ADMIN.value)
         )
     ).scalar() or 0
     active_users = (
@@ -68,6 +115,7 @@ async def admin_dashboard(
             "total_users": total_users,
             "total_students": total_students,
             "total_admins": total_admins,
+            "total_super_admins": total_super_admins,
             "active_users": active_users,
             "total_syllabi": total_syllabi,
             "total_study_plans": total_study_plans,
@@ -93,6 +141,10 @@ async def admin_dashboard(
     }
 
 
+# --------------------------------------------------
+# User listing
+# --------------------------------------------------
+
 @router.get("/users", response_model=List[UserOut])
 async def list_users(
     role: Optional[str] = None,
@@ -100,7 +152,7 @@ async def list_users(
     skip: int = 0,
     limit: int = 100,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_admin),
+    _: User = Depends(require_super_admin),
 ):
     """List all users, optionally filtered by role or search term."""
     query = select(User).order_by(User.created_at.desc()).offset(skip).limit(limit)
@@ -120,12 +172,17 @@ async def list_users(
     return result.scalars().all()
 
 
-@router.get("/users/{user_id}", response_model=UserOut)
-async def get_user(
+# --------------------------------------------------
+# User detail with membership
+# --------------------------------------------------
+
+@router.get("/users/{user_id}", response_model=UserWithMembershipOut)
+async def get_user_with_membership(
     user_id: int,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_admin),
+    _: User = Depends(require_super_admin),
 ):
+    """Get a specific user with their subscription details."""
     result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalars().first()
     if not user:
@@ -133,15 +190,27 @@ async def get_user(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="User not found",
         )
-    return user
 
+    subscription = await subscription_service.get_subscription(db, user_id)
+    if subscription:
+        await subscription_service.resolve_effective_plan(db, subscription)
+
+    return UserWithMembershipOut(
+        user=UserOut.model_validate(user),
+        subscription=AdminSubscriptionOut.model_validate(subscription) if subscription else None,
+    )
+
+
+# --------------------------------------------------
+# User update
+# --------------------------------------------------
 
 @router.patch("/users/{user_id}", response_model=UserOut)
 async def update_user(
     user_id: int,
     user_data: AdminUserUpdate,
     db: AsyncSession = Depends(get_db),
-    admin: User = Depends(require_admin),
+    admin: User = Depends(require_super_admin),
 ):
     result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalars().first()
@@ -171,11 +240,15 @@ async def update_user(
     return user
 
 
+# --------------------------------------------------
+# User delete
+# --------------------------------------------------
+
 @router.delete("/users/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_user(
     user_id: int,
     db: AsyncSession = Depends(get_db),
-    admin: User = Depends(require_admin),
+    admin: User = Depends(require_super_admin),
 ):
     result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalars().first()
@@ -194,3 +267,51 @@ async def delete_user(
     await db.delete(user)
     await db.commit()
     return None
+
+
+# --------------------------------------------------
+# Membership management
+# --------------------------------------------------
+
+@router.post("/users/{user_id}/grant-membership", response_model=AdminSubscriptionOut)
+async def grant_membership(
+    user_id: int,
+    payload: GrantMembershipRequest,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_super_admin),
+):
+    """Grant premium membership to a user. Does not change the user's role."""
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalars().first()
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found",
+        )
+
+    subscription = await subscription_service.activate_subscription(
+        db,
+        user_id,
+        billing_cycle=payload.billing_cycle,
+        auto_renew=payload.auto_renew,
+    )
+    return subscription
+
+
+@router.post("/users/{user_id}/revoke-membership", response_model=AdminSubscriptionOut)
+async def revoke_membership(
+    user_id: int,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_super_admin),
+):
+    """Revoke premium membership. Sets plan to FREE without deleting records."""
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalars().first()
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found",
+        )
+
+    subscription = await subscription_service.revoke_subscription(db, user_id)
+    return subscription

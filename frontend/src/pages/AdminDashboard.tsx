@@ -3,11 +3,11 @@ import {
   Users, UserPlus, ShieldCheck, Activity, FileText, CalendarDays,
   ClipboardList, Code2, CreditCard, BookOpen, Trash2, RefreshCw,
   Search, ChevronUp, ChevronDown, Ban, CheckCircle2, BarChart3,
-  LogOut,
+  LogOut, Crown, ShieldAlert, KeyRound, X,
 } from "lucide-react";
 import { adminService } from "@/services/adminService";
 import { useAuthStore } from "@/store/authStore";
-import type { AdminDashboardStats, User } from "@/types";
+import type { AdminDashboardStats, User, AdminSubscription } from "@/types";
 import { cn, getInitials, formatDate } from "@/lib/utils";
 import { useNavigate } from "react-router-dom";
 
@@ -27,6 +27,12 @@ export default function AdminDashboard() {
   const [sortField, setSortField] = useState<SortField>("created_at");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [actionMsg, setActionMsg] = useState("");
+
+  // Membership management state
+  const [selectedUser, setSelectedUser] = useState<User | null>(null);
+  const [selectedUserSub, setSelectedUserSub] = useState<AdminSubscription | null>(null);
+  const [showMembershipModal, setShowMembershipModal] = useState(false);
+  const [membershipLoading, setMembershipLoading] = useState(false);
 
   const loadStats = async () => {
     try {
@@ -103,6 +109,47 @@ export default function AdminDashboard() {
     }
   };
 
+  const openMembershipModal = async (u: User) => {
+    setSelectedUser(u);
+    setShowMembershipModal(true);
+    setSelectedUserSub(null);
+    try {
+      const data = await adminService.getUserWithMembership(u.id);
+      setSelectedUserSub(data.subscription);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load membership");
+    }
+  };
+
+  const grantMembership = async () => {
+    if (!selectedUser) return;
+    setMembershipLoading(true);
+    try {
+      const sub = await adminService.grantMembership(selectedUser.id, "MONTHLY");
+      setSelectedUserSub(sub);
+      setActionMsg(`Membership granted to "${selectedUser.username}"`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to grant membership");
+    } finally {
+      setMembershipLoading(false);
+    }
+  };
+
+  const revokeMembership = async () => {
+    if (!selectedUser) return;
+    if (!window.confirm(`Revoke premium membership from "${selectedUser.username}"?`)) return;
+    setMembershipLoading(true);
+    try {
+      const sub = await adminService.revokeMembership(selectedUser.id);
+      setSelectedUserSub(sub);
+      setActionMsg(`Membership revoked from "${selectedUser.username}"`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to revoke membership");
+    } finally {
+      setMembershipLoading(false);
+    }
+  };
+
   const sortedUsers = useMemo(() => {
     const arr = [...users];
     arr.sort((a, b) => {
@@ -132,6 +179,7 @@ export default function AdminDashboard() {
     { label: "Students", value: stats?.total_students ?? 0, icon: UserPlus, color: "text-primary-600", bg: "bg-primary-50 dark:bg-primary-900/30" },
     { label: "Active Users", value: stats?.active_users ?? 0, icon: Activity, color: "text-primary-600", bg: "bg-primary-50 dark:bg-primary-900/30" },
     { label: "Admins", value: stats?.total_admins ?? 0, icon: ShieldCheck, color: "text-primary-600", bg: "bg-primary-50 dark:bg-primary-900/30" },
+    { label: "Super Admins", value: stats?.total_super_admins ?? 0, icon: ShieldAlert, color: "text-primary-600", bg: "bg-primary-50 dark:bg-primary-900/30" },
     { label: "Syllabi", value: stats?.total_syllabi ?? 0, icon: FileText, color: "text-primary-600", bg: "bg-primary-50 dark:bg-primary-900/30" },
     { label: "Study Plans", value: stats?.total_study_plans ?? 0, icon: CalendarDays, color: "text-primary-600", bg: "bg-primary-50 dark:bg-primary-900/30" },
     { label: "Quizzes", value: stats?.total_quizzes ?? 0, icon: ClipboardList, color: "text-primary-600", bg: "bg-primary-50 dark:bg-primary-900/30" },
@@ -232,6 +280,7 @@ export default function AdminDashboard() {
                 <option value="">All roles</option>
                 <option value="student">Student</option>
                 <option value="admin">Admin</option>
+                <option value="super_admin">Super Admin</option>
               </select>
             </div>
           </div>
@@ -239,7 +288,7 @@ export default function AdminDashboard() {
           {userLoading && <p className="text-sm text-slate-400 mb-3">Loading…</p>}
 
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[640px] text-sm">
+            <table className="w-full min-w-[800px] text-sm">
               <thead>
                 <tr className="border-b border-slate-200 dark:border-slate-700 text-left text-[11px] uppercase tracking-wider text-slate-400">
                   {(["id", "username", "email", "role", "created_at"] as SortField[]).map(f => (
@@ -251,6 +300,7 @@ export default function AdminDashboard() {
                     </th>
                   ))}
                   <th className="pb-2 px-2">Status</th>
+                  <th className="pb-2 px-2">Membership</th>
                   <th className="pb-2 px-2">Actions</th>
                 </tr>
               </thead>
@@ -273,17 +323,20 @@ export default function AdminDashboard() {
                     <td className="py-2.5 px-2">
                       <select
                         value={u.role}
-                        disabled={u.id === user?.id}
+                        disabled={u.id === user?.id || u.role === "super_admin"}
                         onChange={e => changeRole(u, e.target.value)}
                         className={cn(
                           "text-xs font-medium rounded-lg px-2 py-1 border",
-                          u.role === "admin"
-                            ? "bg-primary-50 text-primary-600 border-primary-200 dark:bg-primary-900/30 dark:text-primary-300 dark:border-primary-700"
-                            : "bg-success-50 text-success-600 border-success-200 dark:bg-success-900/30 dark:text-success-300 dark:border-success-700"
+                          u.role === "super_admin"
+                            ? "bg-warning-50 text-warning-600 border-warning-200 dark:bg-warning-900/30 dark:text-warning-300 dark:border-warning-700"
+                            : u.role === "admin"
+                              ? "bg-primary-50 text-primary-600 border-primary-200 dark:bg-primary-900/30 dark:text-primary-300 dark:border-primary-700"
+                              : "bg-success-50 text-success-600 border-success-200 dark:bg-success-900/30 dark:text-success-300 dark:border-success-700"
                         )}
                       >
                         <option value="student">student</option>
                         <option value="admin">admin</option>
+                        <option value="super_admin">super_admin</option>
                       </select>
                     </td>
                     <td className="py-2.5 px-2 text-slate-500">{u.created_at ? formatDate(u.created_at) : "—"}</td>
@@ -297,6 +350,20 @@ export default function AdminDashboard() {
                         {u.is_active ? <CheckCircle2 className="w-3 h-3" /> : <Ban className="w-3 h-3" />}
                         {u.is_active ? "Active" : "Inactive"}
                       </span>
+                    </td>
+                    <td className="py-2.5 px-2">
+                      <button
+                        onClick={() => openMembershipModal(u)}
+                        className={cn(
+                          "inline-flex items-center gap-1 text-xs font-medium rounded-full px-2 py-0.5 border transition-colors",
+                          "hover:opacity-80 cursor-pointer",
+                          "bg-gradient-to-r from-amber-50 to-orange-50 text-amber-700 border-amber-200 dark:from-amber-900/20 dark:to-orange-900/20 dark:text-amber-300 dark:border-amber-700"
+                        )}
+                        title="Manage membership"
+                      >
+                        <Crown className="w-3 h-3" />
+                        Manage
+                      </button>
                     </td>
                     <td className="py-2.5 px-2">
                       <div className="flex items-center gap-1">
@@ -328,6 +395,120 @@ export default function AdminDashboard() {
           </div>
         </div>
       </div>
+
+      {/* Membership Modal */}
+      {showMembershipModal && selectedUser && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm" onClick={() => setShowMembershipModal(false)} />
+          <div className="relative bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-md p-6 space-y-5">
+            <div className="flex items-center justify-between">
+              <h3 className="font-bold text-slate-800 dark:text-slate-100 text-lg">Membership Management</h3>
+              <button onClick={() => setShowMembershipModal(false)} className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="flex items-center gap-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-700/50">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary-500 to-secondary-500 flex items-center justify-center text-white text-sm font-bold">
+                {selectedUser.full_name ? getInitials(selectedUser.full_name) : selectedUser.username?.[0]?.toUpperCase() ?? "U"}
+              </div>
+              <div>
+                <p className="font-semibold text-slate-800 dark:text-slate-100">{selectedUser.full_name || selectedUser.username}</p>
+                <p className="text-xs text-slate-400">{selectedUser.email}</p>
+              </div>
+            </div>
+
+            {membershipLoading ? (
+              <div className="flex items-center justify-center py-6">
+                <span className="w-6 h-6 border-3 border-primary-500 border-t-transparent rounded-full animate-spin" />
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between p-3 rounded-xl border border-slate-200 dark:border-slate-600">
+                  <div>
+                    <p className="text-sm font-medium text-slate-800 dark:text-slate-100">Plan Type</p>
+                    <p className={cn(
+                      "text-lg font-bold",
+                      selectedUserSub?.plan_type === "SUBSCRIPTION"
+                        ? "text-success-600"
+                        : "text-slate-500"
+                    )}>
+                      {selectedUserSub?.plan_type === "SUBSCRIPTION" ? "PREMIUM" : "FREE"}
+                    </p>
+                  </div>
+                  <div className={cn(
+                    "w-12 h-12 rounded-xl flex items-center justify-center",
+                    selectedUserSub?.plan_type === "SUBSCRIPTION"
+                      ? "bg-success-50 dark:bg-success-900/30"
+                      : "bg-slate-100 dark:bg-slate-700"
+                  )}>
+                    <Crown className={cn(
+                      "w-6 h-6",
+                      selectedUserSub?.plan_type === "SUBSCRIPTION"
+                        ? "text-success-600"
+                        : "text-slate-400"
+                    )} />
+                  </div>
+                </div>
+
+                {selectedUserSub && (
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="p-3 rounded-xl border border-slate-200 dark:border-slate-600">
+                      <p className="text-xs text-slate-400">Billing Cycle</p>
+                      <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">{selectedUserSub.billing_cycle}</p>
+                    </div>
+                    <div className="p-3 rounded-xl border border-slate-200 dark:border-slate-600">
+                      <p className="text-xs text-slate-400">Status</p>
+                      <p className={cn(
+                        "text-sm font-semibold",
+                        selectedUserSub.status === "ACTIVE" ? "text-success-600" : "text-danger-600"
+                      )}>{selectedUserSub.status}</p>
+                    </div>
+                    <div className="p-3 rounded-xl border border-slate-200 dark:border-slate-600">
+                      <p className="text-xs text-slate-400">Expires At</p>
+                      <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">
+                        {selectedUserSub.expires_at ? formatDate(selectedUserSub.expires_at) : "Never"}
+                      </p>
+                    </div>
+                    <div className="p-3 rounded-xl border border-slate-200 dark:border-slate-600">
+                      <p className="text-xs text-slate-400">Auto Renew</p>
+                      <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">
+                        {selectedUserSub.auto_renew ? "Yes" : "No"}
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex gap-3 pt-2">
+                  {selectedUserSub?.plan_type !== "SUBSCRIPTION" ? (
+                    <button
+                      onClick={grantMembership}
+                      className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-success-600 text-white text-sm font-medium hover:bg-success-700 transition-colors"
+                    >
+                      <KeyRound className="w-4 h-4" />
+                      Grant Premium
+                    </button>
+                  ) : (
+                    <button
+                      onClick={revokeMembership}
+                      className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-danger-600 text-white text-sm font-medium hover:bg-danger-700 transition-colors"
+                    >
+                      <Ban className="w-4 h-4" />
+                      Revoke Premium
+                    </button>
+                  )}
+                  <button
+                    onClick={() => setShowMembershipModal(false)}
+                    className="px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 text-sm font-medium hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors"
+                  >
+                    Close
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

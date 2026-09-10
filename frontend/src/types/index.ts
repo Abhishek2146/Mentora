@@ -10,7 +10,7 @@ export interface User {
   email: string;
   username: string;
   full_name: string | null;
-  role: "student" | "admin";
+  role: "student" | "admin" | "super_admin";
   is_active: boolean;
   is_verified: boolean;
   avatar_url: string | null;
@@ -24,7 +24,7 @@ export interface Token {
   token_type: string;
 }
 
-export type UserRole = "student" | "admin";
+export type UserRole = "student" | "admin" | "super_admin";
 
 export interface Syllabus {
   id: number;
@@ -294,6 +294,7 @@ export interface AdminDashboardStats {
     total_users: number;
     total_students: number;
     total_admins: number;
+    total_super_admins: number;
     active_users: number;
     total_syllabi: number;
     total_study_plans: number;
@@ -437,6 +438,17 @@ export interface PaymentOut {
   transaction_id: string | null;
   expires_at: string | null;
   created_at: string | null;
+}
+
+export interface AdminSubscription extends Subscription {
+  provider: string | null;
+  provider_customer_id: string | null;
+  provider_subscription_id: string | null;
+}
+
+export interface UserWithSubscription {
+  user: User;
+  subscription: AdminSubscription | null;
 }
 
 export * from "./api";
