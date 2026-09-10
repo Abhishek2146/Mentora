@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { GraduationCap, Mail, Lock, Eye, EyeOff, LogIn } from "lucide-react";
 import { useAuthStore } from "@/store/authStore";
+import logoImg from "@/logos/logo.png";
 
 export default function Login() {
   const navigate = useNavigate();
@@ -31,10 +32,12 @@ export default function Login() {
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-primary-50 to-secondary-50 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 flex items-center justify-center p-4">
       <div className="w-full max-w-sm">
         <div className="flex flex-col items-center gap-3 mb-8">
-          <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-primary-500 to-secondary-500 flex items-center justify-center shadow-glow-primary">
-            <GraduationCap className="w-8 h-8 text-white" />
-          </div>
-          <h1 className="text-2xl font-black gradient-text">Mentora</h1>
+          <img
+            src={logoImg}
+            alt="Mentora AI Logo"
+            className="w-14 h-14 rounded-2xl object-contain shadow-glow-primary"
+          />
+          <h1 className="text-2xl font-black gradient-text">Mentora AI</h1>
           <p className="text-slate-500 text-sm">Your AI Learning Companion</p>
         </div>
 

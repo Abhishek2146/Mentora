@@ -1,9 +1,10 @@
-﻿import { Link } from "react-router-dom";
+import { Link } from "react-router-dom";
 import {
   Brain, Zap, BarChart3, BookOpen, CreditCard, CalendarDays,
   Upload, ArrowRight, CheckCircle2, Star, GraduationCap,
   TrendingUp, Target, Users, Sparkles, ChevronRight,
 } from "lucide-react";
+import logoImg from "@/logos/logo.png";
 
 const features = [
   { icon: Brain,       color: "from-violet-500 to-purple-600", bg: "bg-violet-50 dark:bg-violet-900/20",  title: "AI Tutor",        desc: "Get instant explanations tailored to your syllabus. Ask anything, anytime." },
@@ -42,10 +43,12 @@ export default function HomePage() {
       <nav className="sticky top-0 z-50 bg-white/80 dark:bg-slate-950/80 backdrop-blur-xl border-b border-slate-200/70 dark:border-slate-800/70">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-4">
           <Link to="/" className="flex items-center gap-2.5 flex-shrink-0">
-            <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-primary-500 to-secondary-500 flex items-center justify-center shadow-md">
-              <GraduationCap className="w-5 h-5 text-white" />
-            </div>
-            <span className="font-bold text-xl bg-gradient-to-r from-primary-600 to-secondary-600 bg-clip-text text-transparent">Mentora</span>
+            <img
+              src={logoImg}
+              alt="Mentora AI Logo"
+              className="w-8 h-8 rounded-xl object-contain shadow-md"
+            />
+            <span className="font-bold text-xl bg-gradient-to-r from-primary-600 to-secondary-600 bg-clip-text text-transparent">Mentora AI</span>
           </Link>
           <div className="hidden md:flex items-center gap-6 text-sm font-medium text-slate-600 dark:text-slate-400">
             <a href="#features" className="hover:text-primary-600 transition-colors">Features</a>
@@ -244,11 +247,13 @@ export default function HomePage() {
       {/* Footer */}
       <footer className="py-10 border-t border-slate-200 dark:border-slate-800">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 flex flex-col sm:flex-row items-center justify-between gap-4">
-          <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-primary-500 to-secondary-500 flex items-center justify-center">
-              <GraduationCap className="w-4 h-4 text-white" />
-            </div>
-            <span className="font-bold text-slate-800 dark:text-white">Mentora</span>
+          <div className="flex items-center gap-2.5">
+            <img
+              src={logoImg}
+              alt="Mentora AI Logo"
+              className="w-7 h-7 rounded-lg object-contain"
+            />
+            <span className="font-bold text-slate-800 dark:text-white">Mentora AI</span>
           </div>
           <p className="text-sm text-slate-500">Built for students, by students.</p>
           <div className="flex items-center gap-4 text-sm text-slate-500">

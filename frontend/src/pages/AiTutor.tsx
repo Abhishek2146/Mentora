@@ -6,6 +6,7 @@ import {
 } from "lucide-react";
 import { tutorService } from "@/services/tutorService";
 import { syllabusService } from "@/services/syllabusService";
+import logoImg from "@/logos/logo.png";
 
 interface Message {
   id: string;
@@ -221,6 +222,9 @@ export default function AiTutor() {
           time: new Date(),
         },
       ]);
+      if (voiceAutoSpeak && voiceModalOpen) {
+        speak(res.response);
+      }
     } catch (e: any) {
       let content =
         "I couldn't connect to the AI tutor. Please make sure the backend server is running and try again.";
@@ -241,7 +245,7 @@ export default function AiTutor() {
         },
       ]);
       if (fromVoice || voiceModalOpen) {
-        speak(errorMsg);
+        speak(content);
       }
     } finally {
       setLoading(false);
@@ -253,9 +257,11 @@ export default function AiTutor() {
       <div className="max-w-4xl mx-auto h-[calc(100vh-10rem)] flex flex-col relative">
         {/* Tutor Top Card */}
         <div className="card p-4 mb-4 flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
-          <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-primary-500 to-secondary-500 flex items-center justify-center shadow-glow-primary">
-            <Bot className="w-7 h-7 text-white" />
-          </div>
+          <img
+            src={logoImg}
+            alt="Mentora AI"
+            className="w-12 h-12 rounded-2xl object-contain shadow-glow-primary flex-shrink-0"
+          />
           <div className="flex-1 min-w-0">
             <h2 className="font-bold text-slate-800 dark:text-slate-100">Mentora AI</h2>
             <p className="text-sm text-slate-500 dark:text-slate-400">

@@ -7,7 +7,8 @@ class ApiClient {
   constructor() {
     this.client = axios.create({
       baseURL: import.meta.env.VITE_API_URL || "http://localhost:8000",
-      timeout: 30000,
+      // Neon is serverless: an idle compute can take 30-60s to wake up.
+      timeout: 120000,
     });
 
     this.setupInterceptors();

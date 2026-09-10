@@ -1,5 +1,6 @@
 import apiClient from "@/lib/api";
 import type { SyllabusSearchParams, SyllabusSearchResponse } from "@/types/api";
+export type { Syllabus } from "@/types";
 
 const PROCESSING_TIMEOUT = 300000;
 

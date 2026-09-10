@@ -3,12 +3,13 @@ import {
   LayoutDashboard, Brain, CreditCard, CalendarDays, BarChart3,
   ClipboardList, BookOpen, Trophy, AlertTriangle, RotateCcw,
   Upload, Code2, Mic, User, Settings, ChevronLeft, ChevronRight, X,
-  GraduationCap, TrendingUp, ShieldCheck, Users, Crown,
+  GraduationCap, TrendingUp, ShieldCheck, Users, Crown, Flame, FileText,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useUIStore } from "@/store/uiStore";
 import { useAuthStore } from "@/store/authStore";
 import { getInitials } from "@/lib/utils";
+import logoImg from "@/logos/logo.png";
 
 const navGroups = [
   {
@@ -18,7 +19,10 @@ const navGroups = [
       { label: "AI Tutor",        icon: Brain,           path: "/ai-tutor" },
       { label: "Flashcards",      icon: CreditCard,      path: "/flashcards" },
       { label: "Study Plan",      icon: CalendarDays,    path: "/study-plan" },
+      { label: "Notes",           icon: FileText,        path: "/notes" },
       { label: "Analytics",       icon: BarChart3,       path: "/analytics" },
+      { label: "Study Groups",    icon: Users,           path: "/study-groups" },
+      { label: "Study Streak",    icon: Flame,           path: "/study-streak" },
     ],
   },
   {
@@ -97,14 +101,16 @@ export default function Sidebar() {
         {/* Logo */}
         <div className="flex items-center justify-between px-4 py-5 border-b border-slate-100 dark:border-slate-700/50">
           <Link to="/dashboard" onClick={handleNavClick} className="flex items-center gap-2.5 min-w-0">
-            <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-primary-500 to-secondary-500 flex items-center justify-center shadow-glow-primary flex-shrink-0">
-              <GraduationCap className="w-5 h-5 text-white" />
-            </div>
+            <img
+              src={logoImg}
+              alt="Mentora AI Logo"
+              className="w-8 h-8 rounded-xl object-contain shadow-glow-primary flex-shrink-0"
+            />
             <span className={cn(
               "font-bold text-lg bg-gradient-to-r from-primary-600 to-secondary-600 bg-clip-text text-transparent whitespace-nowrap",
               !sidebarOpen && "lg:hidden"
             )}>
-              Mentora
+              Mentora AI
             </span>
           </Link>
           <button

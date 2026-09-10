@@ -7,6 +7,16 @@ import apiClient from "@/lib/api";
 // Marker for frontend-only test sessions (no backend involved).
 export const TEST_ACCESS_TOKEN = "test-access-token";
 
+// Neon cold starts can take 30-60s; the default fetch() has no timeout and
+// would hang forever while an idle compute wakes up.
+const NEON_TIMEOUT_MS = 120000;
+
+function fetchWithTimeout(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), NEON_TIMEOUT_MS);
+  return fetch(input, { ...init, signal: controller.signal }).finally(() => clearTimeout(timer));
+}
+
 function createTestUser(role: UserRole): User {
   const now = new Date().toISOString();
   return {
@@ -77,7 +87,7 @@ export const useAuthStore = create<AuthState>()(
           formData.append("password", password);
 
           const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:8000";
-          const response = await fetch(`${apiUrl}/api/v1/auth/login`, {
+          const response = await fetchWithTimeout(`${apiUrl}/api/v1/auth/login`, {
             method: "POST",
             body: formData,
           });
@@ -91,7 +101,7 @@ export const useAuthStore = create<AuthState>()(
           apiClient.setTokensOnLogin(tokens);
           set({ tokens });
 
-          const userResponse = await fetch(`${apiUrl}/api/v1/auth/me`, {
+          const userResponse = await fetchWithTimeout(`${apiUrl}/api/v1/auth/me`, {
             headers: { Authorization: `Bearer ${tokens.access_token}` },
           });
           const user: User = await userResponse.json();
@@ -169,7 +179,7 @@ export const useAuthStore = create<AuthState>()(
         }
         try {
           const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:8000";
-          const response = await fetch(`${apiUrl}/api/v1/auth/me`, {
+          const response = await fetchWithTimeout(`${apiUrl}/api/v1/auth/me`, {
             headers: { Authorization: `Bearer ${tokens.access_token}` },
           });
           if (response.ok) {
@@ -245,7 +255,7 @@ export const useAuthStore = create<AuthState>()(
           const tokens = get().tokens;
           if (!tokens) throw new Error("Not authenticated");
           const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:8000";
-          const response = await fetch(`${apiUrl}/api/v1/auth/change-password`, {
+          const response = await fetchWithTimeout(`${apiUrl}/api/v1/auth/change-password`, {
             method: "POST",
             headers: {
               "Content-Type": "application/json",

@@ -7,6 +7,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { syllabusService } from "@/services/syllabusService";
 import { notificationService } from "@/services/notificationService";
 import type { SyllabusSearchResult, Notification } from "@/types/api";
+import headerLogo from "@/logos/header.png";
 
 export default function Header({ title }: { title?: string }) {
   const { setMobileNavOpen } = useUIStore();
@@ -174,11 +175,26 @@ export default function Header({ title }: { title?: string }) {
           <Menu className="w-5 h-5 text-slate-600 dark:text-slate-400" />
         </button>
 
+        {/* Brand / Logo near Mentora AI */}
+        <Link to="/dashboard" className="flex items-center gap-2.5 flex-shrink-0 group">
+          <img
+            src={headerLogo}
+            alt="Mentora AI Logo"
+            className="w-8 h-8 rounded-xl object-contain shadow-sm group-hover:scale-105 transition-transform"
+          />
+          <span className="font-bold text-base bg-gradient-to-r from-primary-600 to-secondary-600 bg-clip-text text-transparent whitespace-nowrap">
+            Mentora AI
+          </span>
+        </Link>
+
         {/* Page title */}
         {title && (
-          <h1 className="text-base sm:text-lg font-bold text-slate-800 dark:text-slate-100 truncate hidden sm:block">
-            {title}
-          </h1>
+          <div className="hidden sm:flex items-center gap-2 text-slate-300 dark:text-slate-600">
+            <span>/</span>
+            <h1 className="text-sm sm:text-base font-semibold text-slate-700 dark:text-slate-200 truncate">
+              {title}
+            </h1>
+          </div>
         )}
 
         <div className="flex-1" />
