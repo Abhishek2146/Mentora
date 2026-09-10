@@ -283,6 +283,7 @@ class StudyStreakService:
 
         await self.db.flush()
         await self.db.commit()
+        await self.db.refresh(summary)
 
         is_new_record = False
         message = None

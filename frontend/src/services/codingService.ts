@@ -53,4 +53,8 @@ export const codingService = {
     const res = await apiClient.get("/api/v1/coding/languages");
     return res.data.languages;
   },
+
+  async deleteProblem(problemId: number): Promise<void> {
+    await apiClient.delete(`/api/v1/coding/problems/${problemId}`);
+  },
 };

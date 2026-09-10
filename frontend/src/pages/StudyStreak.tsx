@@ -1,15 +1,27 @@
 import { useState, useEffect, useMemo } from "react";
 import AppLayout from "@/components/layout/AppLayout";
-import { useAuthStore } from "@/store/authStore";
 import { apiClient } from "@/lib/api";
-import { cn, formatDate, formatTime } from "@/lib/utils";
+import { formatTime } from "@/lib/utils";
+import {
+  Flame,
+  Trophy,
+  CalendarDays,
+  Clock,
+  Target,
+  Timer,
+  Loader2,
+  CheckCircle2,
+  X,
+  Zap,
+  Plus,
+} from "lucide-react";
 
 interface CalendarDay {
   date: string;
-  dayOfWeek: string;
-  studyMinutes: number;
+  day_of_week: string;
+  study_minutes: number;
   qualifying: boolean;
-  heatmapLevel: number;
+  heatmap_level: number;
 }
 
 interface WeekColumn {
@@ -17,359 +29,423 @@ interface WeekColumn {
   days: (CalendarDay | null)[];
 }
 
-const MONTH_NAMES = [
-  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
-];
+interface StreakInfo {
+  current_streak: number;
+  longest_streak: number;
+  total_study_days: number;
+  total_study_minutes: number;
+  last_qualifying_date: string | null;
+}
 
-const DAY_LABELS = ["Mon", "", "Wed", "", "Fri", "", ""];
+interface ActivitySummary {
+  current_streak: number;
+  longest_streak: number;
+  total_study_days: number;
+  total_study_minutes: number;
+  today_study_minutes: number;
+  today_qualifying: boolean;
+  avg_qualifying_minutes: number;
+}
+
+function normalizeCalendarDay(raw: any): CalendarDay {
+  return {
+    date: raw.date,
+    day_of_week: raw.dayOfWeek ?? raw.day_of_week ?? "",
+    study_minutes: raw.studyMinutes ?? raw.study_minutes ?? 0,
+    qualifying: raw.qualifying ?? false,
+    heatmap_level: raw.heatmapLevel ?? raw.heatmap_level ?? 0,
+  };
+}
+
+const MINUTE_STRIDES = [15, 30, 45, 60];
+const WEEK_GOAL_MINUTES = 150;
+const MILESTONES = [1, 3, 7, 14, 30, 60, 100];
+const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
 function getHeatmapColor(level: number): string {
   switch (level) {
-    case 0: return "bg-slate-100 dark:bg-slate-700/50";
-    case 1: return "bg-emerald-100 dark:bg-emerald-900/40";
-    case 2: return "bg-emerald-300 dark:bg-emerald-700/60";
-    case 3: return "bg-emerald-500 dark:bg-emerald-500/80";
+    case 0: return "bg-slate-200 dark:bg-slate-700/60";
+    case 1: return "bg-emerald-200 dark:bg-emerald-900/60";
+    case 2: return "bg-emerald-300 dark:bg-emerald-700";
+    case 3: return "bg-emerald-500 dark:bg-emerald-500";
     case 4: return "bg-emerald-700 dark:bg-emerald-400";
-    default: return "bg-slate-100 dark:bg-slate-700/50";
+    default: return "bg-slate-200 dark:bg-slate-700/60";
   }
 }
 
 function buildWeekColumns(calendar: CalendarDay[]): WeekColumn[] {
-  if (!calendar.length) return [];
+  const byDate = new Map(calendar.map((d) => [d.date, d]));
+  if (calendar.length === 0) return [];
 
-  const dateMap = new Map<string, CalendarDay>();
-  calendar.forEach((d) => dateMap.set(d.date, d));
+  const start = new Date(calendar[0].date);
+  const end = new Date(calendar[calendar.length - 1].date);
+  const first = new Date(start);
+  first.setDate(start.getDate() - ((start.getDay() + 6) % 7));
 
-  // Find the first Sunday on or before the first calendar date
-  const firstDate = new Date(calendar[0].date + "T00:00:00");
-  const firstDayOfWeek = firstDate.getDay(); // 0=Sun
-  const gridStart = new Date(firstDate);
-  gridStart.setDate(gridStart.getDate() - firstDayOfWeek);
-
-  // Find the last Saturday on or after the last calendar date
-  const lastDate = new Date(calendar[calendar.length - 1].date + "T00:00:00");
-  const lastDayOfWeek = lastDate.getDay();
-  const gridEnd = new Date(lastDate);
-  gridEnd.setDate(gridEnd.getDate() + (6 - lastDayOfWeek));
-
-  const weeks: WeekColumn[] = [];
-  const current = new Date(gridStart);
-
-  while (current <= gridEnd) {
-    const weekStart = current.toISOString().slice(0, 10);
-    const days: (CalendarDay | null)[] = [];
-
+  const columns: WeekColumn[] = [];
+  const cursor = new Date(first);
+  const last = new Date(end);
+  while (cursor <= last) {
+    const weekDays: (CalendarDay | null)[] = [];
     for (let i = 0; i < 7; i++) {
-      const dateStr = current.toISOString().slice(0, 10);
-      days.push(dateMap.get(dateStr) ?? null);
-      current.setDate(current.getDate() + 1);
+      const d = new Date(cursor);
+      const key = d.toISOString().slice(0, 10);
+      weekDays.push(byDate.get(key) ?? null);
+      cursor.setDate(cursor.getDate() + 1);
     }
-
-    weeks.push({ weekStart, days });
+    columns.push({ weekStart: weekDays[0]?.date ?? "", days: weekDays });
   }
-
-  return weeks;
+  return columns;
 }
 
-function getMonthLabels(weeks: WeekColumn[]): { label: string; index: number }[] {
-  const labels: { label: string; index: number }[] = [];
-  let lastMonth = -1;
-
-  weeks.forEach((week, i) => {
-    const month = new Date(week.weekStart + "T00:00:00").getMonth();
-    if (month !== lastMonth) {
-      labels.push({ label: MONTH_NAMES[month], index: i });
-      lastMonth = month;
-    }
+function getMonthGroups(columns: WeekColumn[]): { label: string; start: number; end: number }[] {
+  const groups: { label: string; start: number; end: number }[] = [];
+  columns.forEach((col, i) => {
+    const d = col.days.find((day) => day !== null) ?? col.days[0];
+    if (!d) return;
+    const month = MONTH_NAMES[parseInt(d.date.slice(5, 7), 10) - 1];
+    const last = groups[groups.length - 1];
+    if (!last || last.label !== month) groups.push({ label: month, start: i, end: i + 1 });
+    else last.end = i + 1;
   });
+  return groups;
+}
 
-  return labels;
+function todayKey(): string {
+  return new Date().toISOString().slice(0, 10);
 }
 
 export default function StudyStreak() {
-  const { user } = useAuthStore();
-  const [streak, setStreak] = useState<any>(null);
-  const [activity, setActivity] = useState<any>(null);
+  const [streak, setStreak] = useState<StreakInfo | null>(null);
+  const [activity, setActivity] = useState<ActivitySummary | null>(null);
   const [calendar, setCalendar] = useState<CalendarDay[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
-  const [customMinutes, setCustomMinutes] = useState("");
-  const [recordingSession, setRecordingSession] = useState(false);
-  const [hoveredDay, setHoveredDay] = useState<CalendarDay | null>(null);
-  const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
+  const [minutesInput, setMinutesInput] = useState("30");
+  const [recording, setRecording] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
 
-  useEffect(() => {
-    fetchStreakData();
-  }, []);
-
-  const fetchStreakData = async () => {
-    setLoading(true);
+  const loadData = async () => {
     try {
-      const [streakRes, activityRes, calendarRes] = await Promise.all([
+      const [streakResp, activityResp, calendarResp] = await Promise.all([
         apiClient.get("/api/v1/study-streak/streak"),
         apiClient.get("/api/v1/study-streak/activity"),
         apiClient.get("/api/v1/study-streak/calendar"),
       ]);
-      setStreak(streakRes.data);
-      setActivity(activityRes.data);
-      setCalendar(calendarRes.data);
-    } catch (error) {
-      console.error("Failed to fetch streak data:", error);
+      setStreak(streakResp.data);
+      setActivity(activityResp.data);
+      setCalendar((calendarResp.data ?? []).map(normalizeCalendarDay));
+      setLoadError(false);
+    } catch (e) {
+      console.error("Failed to load study streak:", e);
+      setLoadError(true);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleRecordSession = async (minutes: number) => {
-    setRecordingSession(true);
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(null), 4000);
+    return () => clearTimeout(t);
+  }, [toast]);
+
+  const weeks = useMemo(() => buildWeekColumns(calendar), [calendar]);
+  const monthGroups = useMemo(() => getMonthGroups(weeks), [weeks]);
+
+  const currentStreak = streak?.current_streak ?? 0;
+  const todayStudied = activity?.today_study_minutes ?? 0;
+  const todayQualifying = activity?.today_qualifying ?? false;
+  const today = todayKey();
+
+  const weekMinutes = useMemo(() => {
+    const now = new Date();
+    now.setHours(0, 0, 0, 0);
+    const dow = (now.getDay() + 6) % 7;
+    now.setDate(now.getDate() - dow);
+    return calendar
+      .filter((d) => new Date(d.date) >= now)
+      .reduce((sum, d) => sum + (d.study_minutes || 0), 0);
+  }, [calendar]);
+
+  const nextMilestone = MILESTONES.find((m) => m > currentStreak);
+  const milestonePct = nextMilestone
+    ? Math.min(100, Math.round((currentStreak / nextMilestone) * 100))
+    : 100;
+  const weekPct = Math.min(100, Math.round((weekMinutes / WEEK_GOAL_MINUTES) * 100));
+
+  const selected = calendar.find((d) => d.date === selectedDate) ?? null;
+
+  const recordSession = async (studyMinutes: number) => {
+    if (studyMinutes <= 0) return;
+    setRecording(true);
     try {
-      const res = await apiClient.post("/api/v1/study-streak/session", {
-        study_minutes: minutes,
-      });
-      if (res.data?.is_new_record && res.data?.message) {
-        alert(res.data.message);
-      }
-      setCustomMinutes("");
-      await fetchStreakData();
-    } catch (error) {
-      console.error("Failed to record session:", error);
+      await apiClient.post("/api/v1/study-streak/session", { study_minutes: studyMinutes });
+      await loadData();
+      setMinutesInput("30");
+      setToast(`Logged ${formatTime(studyMinutes)} of study time. Keep it up!`);
+    } catch (e) {
+      console.error("Failed to record session:", e);
+      setToast("Could not record session. Please try again.");
     } finally {
-      setRecordingSession(false);
+      setRecording(false);
     }
   };
 
-  const handleCustomSubmit = () => {
-    const mins = parseInt(customMinutes, 10);
-    if (!isNaN(mins) && mins > 0 && mins <= 480) {
-      handleRecordSession(mins);
-    }
+  const selectedDay = (date: string) => {
+    setSelectedDate((prev) => (prev === date ? null : date));
   };
 
-  const weekColumns = useMemo(() => buildWeekColumns(calendar), [calendar]);
-  const monthLabels = useMemo(() => getMonthLabels(weekColumns), [weekColumns]);
-
-  const selectedDay = useMemo(() => {
-    if (!selectedDate) return null;
-    return calendar.find((d) => d.date === selectedDate) ?? null;
-  }, [selectedDate, calendar]);
+  if (loading) {
+    return (
+      <AppLayout title="Study Streak">
+        <div className="max-w-7xl mx-auto flex items-center justify-center h-64">
+          <Loader2 className="w-8 h-8 text-primary-500 animate-spin" />
+        </div>
+      </AppLayout>
+    );
+  }
 
   return (
     <AppLayout title="Study Streak">
-      <div className="space-y-6">
-        {/* Dashboard Stats */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          {streak && (
-            <div className="border rounded-lg p-4 bg-white dark:bg-slate-800">
-              <div className="text-2xl font-bold text-primary-600 dark:text-primary-400">
-                {streak.current_streak}
-              </div>
-              <div className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                day{streak.current_streak !== 1 ? "s" : ""} current
-              </div>
-            </div>
-          )}
-          {streak && (
-            <div className="border rounded-lg p-4 bg-white dark:bg-slate-800">
-              <div className="text-2xl font-bold text-green-600 dark:text-green-400">
-                {streak.longest_streak}
-              </div>
-              <div className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                longest streak
-              </div>
-            </div>
-          )}
-          {streak && (
-            <div className="border rounded-lg p-4 bg-white dark:bg-slate-800">
-              <div className="text-2xl font-bold text-cyan-600 dark:text-cyan-400">
-                {streak.total_study_days}
-              </div>
-              <div className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                study days
-              </div>
-            </div>
-          )}
-          {activity && (
-            <div className="border rounded-lg p-4 bg-white dark:bg-slate-800">
-              <div className="text-2xl font-bold text-slate-800 dark:text-slate-100">
-                {formatTime(activity.today_study_minutes)}
-              </div>
-              <div className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                today{activity.today_qualifying ? " ✓" : ""}
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* GitHub-style Heatmap */}
-        {!loading && (
-          <div className="border rounded-lg p-4 bg-white dark:bg-slate-800">
-            <h2 className="text-sm font-semibold text-slate-800 dark:text-slate-100 mb-3">
-              Study Activity
-            </h2>
-
-            <div className="overflow-x-auto">
-              <div className="inline-flex flex-col gap-0.5">
-                {/* Month labels row */}
-                <div className="relative ml-7" style={{ height: "14px" }}>
-                  {monthLabels.map((m, i) => (
-                    <span
-                      key={`${m.label}-${i}`}
-                      className="absolute text-[10px] text-slate-500 dark:text-slate-400"
-                      style={{ left: `${m.index * 12}px` }}
-                    >
-                      {m.label}
-                    </span>
-                  ))}
-                </div>
-
-                {/* Heatmap grid */}
-                <div className="flex gap-0">
-                  {/* Day labels column */}
-                  <div className="flex flex-col gap-0.5 mr-1">
-                    {DAY_LABELS.map((label, i) => (
-                      <div
-                        key={i}
-                        className="text-[10px] text-slate-500 dark:text-slate-400 flex items-center"
-                        style={{ height: "12px", width: "24px" }}
-                      >
-                        {label}
-                      </div>
-                    ))}
+      <div className="max-w-7xl mx-auto space-y-6">
+        {loadError ? (
+          <div className="card p-8 text-center">
+            <Flame className="w-10 h-10 text-primary-400 mx-auto" />
+            <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100 mt-3">Could not load your streak</h3>
+            <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Something went wrong while fetching your study data.</p>
+            <button onClick={() => { setLoading(true); loadData(); }} className="btn btn-primary btn-md mt-4">
+              <Loader2 className="w-4 h-4" /> Try again
+            </button>
+          </div>
+        ) : (
+          <>
+            {/* Hero */}
+            <div className="card p-5 sm:p-6 bg-gradient-to-r from-primary-600 via-primary-500 to-secondary-500 text-white border-0 shadow-glow-primary">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="flex items-center gap-4">
+                  <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-white/20 flex items-center justify-center shrink-0">
+                    <Flame className="w-8 h-8 sm:w-9 sm:h-9 text-warning-400" />
                   </div>
-
-                {/* Week columns */}
-                {weekColumns.map((week) => (
-                    <div key={week.weekStart} className="flex flex-col gap-[2px]">
-                      {week.days.map((day, dayIndex) => {
-                        if (!day) {
-                          return (
-                            <div
-                              key={dayIndex}
-                              style={{ width: "12px", height: "12px" }}
-                            />
-                          );
-                        }
-                        return (
-                          <div
-                            key={day.date}
-                            className={cn(
-                              "rounded-sm cursor-pointer transition-all",
-                              getHeatmapColor(day.heatmapLevel),
-                              selectedDate === day.date && "ring-1 ring-slate-400 dark:ring-slate-500"
-                            )}
-                            style={{ width: "12px", height: "12px" }}
-                            onClick={() => setSelectedDate(day.date === selectedDate ? null : day.date)}
-                            onMouseEnter={(e) => {
-                              setHoveredDay(day);
-                              setTooltipPos({ x: e.clientX, y: e.clientY });
-                            }}
-                            onMouseLeave={() => setHoveredDay(null)}
-                          />
-                        );
-                      })}
-                    </div>
-                  ))}
+                  <div>
+                    <p className="text-primary-100 text-sm font-medium">Current streak</p>
+                    <h2 className="text-3xl sm:text-4xl font-bold mt-0.5">{currentStreak} day{currentStreak !== 1 ? "s" : ""}</h2>
+                  </div>
+                </div>
+                <div className="flex flex-col sm:items-end gap-1.5 w-full sm:w-auto">
+                  <div className={`inline-flex items-center gap-2 rounded-xl px-3 py-2 bg-white/20 w-fit`}>
+                    <Timer className="w-4 h-4" />
+                    <span className="text-sm font-semibold">
+                      {todayQualifying
+                        ? "Streak protected today"
+                        : todayStudied > 0
+                          ? `${formatTime(todayStudied)} studied today`
+                          : "Study 30+ min today to keep it up"}
+                    </span>
+                  </div>
+                  {!todayQualifying && (
+                    <p className="text-primary-100 text-xs hidden sm:block">
+                      {30 - todayStudied > 0 ? `${formatTime(30 - todayStudied)} more this session to qualify` : "Log a session to protect your streak"}
+                    </p>
+                  )}
                 </div>
               </div>
             </div>
 
-            {/* Legend */}
-            <div className="flex items-center gap-1.5 mt-3 text-[10px] text-slate-500 dark:text-slate-400">
-              <span>Less</span>
-              <div className="w-3 h-3 rounded-sm bg-slate-100 dark:bg-slate-700/50 border border-slate-200 dark:border-slate-600" />
-              <div className="w-3 h-3 rounded-sm bg-emerald-100 dark:bg-emerald-900/40" />
-              <div className="w-3 h-3 rounded-sm bg-emerald-300 dark:bg-emerald-700/60" />
-              <div className="w-3 h-3 rounded-sm bg-emerald-500 dark:bg-emerald-500/80" />
-              <div className="w-3 h-3 rounded-sm bg-emerald-700 dark:bg-emerald-400" />
-              <span>More</span>
+            {/* Stats */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
+              {[
+                { label: "Current Streak", value: `${currentStreak}d`, icon: Flame, color: "text-warning-600", bg: "bg-warning-50 dark:bg-warning-900/30" },
+                { label: "Longest Streak", value: `${streak?.longest_streak ?? 0}d`, icon: Trophy, color: "text-secondary-600", bg: "bg-secondary-50 dark:bg-secondary-900/30" },
+                { label: "Study Days", value: `${streak?.total_study_days ?? 0}`, icon: CalendarDays, color: "text-primary-600", bg: "bg-primary-50 dark:bg-primary-900/30" },
+                { label: "Total Time", value: formatTime(streak?.total_study_minutes ?? 0), icon: Clock, color: "text-success-600", bg: "bg-success-50 dark:bg-success-900/30" },
+              ].map((s) => (
+                <div key={s.label} className="stat-card">
+                  <div className={`w-10 h-10 rounded-xl ${s.bg} flex items-center justify-center`}>
+                    <s.icon className={`w-5 h-5 ${s.color}`} />
+                  </div>
+                  <div>
+                    <p className="text-2xl font-bold text-slate-800 dark:text-slate-100">{s.value}</p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">{s.label}</p>
+                  </div>
+                </div>
+              ))}
             </div>
-          </div>
-        )}
 
-        {/* Tooltip */}
-        {hoveredDay && (
-          <div
-            className="fixed z-50 px-2.5 py-1.5 rounded-md bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 text-xs font-medium pointer-events-none shadow-lg"
-            style={{ left: tooltipPos.x + 12, top: tooltipPos.y - 40 }}
-          >
-            {formatTime(hoveredDay.studyMinutes)} studied on {hoveredDay.date}
-          </div>
-        )}
-
-        {/* Selected Day Details */}
-        {selectedDate && selectedDay && (
-          <div className="p-4 bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700">
-            <h3 className="text-sm font-medium text-slate-800 dark:text-slate-100 mb-2">
-              {selectedDate}
-            </h3>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <p className="text-xs text-slate-500 dark:text-slate-400">Study time</p>
-                <p className="text-lg font-bold">{formatTime(selectedDay.studyMinutes)}</p>
+            {/* Goals */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
+              <div className="card p-5">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="flex items-center gap-2 font-bold text-slate-800 dark:text-slate-100">
+                    <Target className="w-4 h-4 text-primary-500" /> Next Milestone
+                  </h3>
+                  {nextMilestone && (
+                    <span className="badge-blue">{nextMilestone - currentStreak} day{nextMilestone - currentStreak !== 1 ? "s" : ""} to go</span>
+                  )}
+                </div>
+                <div className="progress-bar">
+                  <div className="progress-fill bg-gradient-to-r from-primary-500 to-secondary-500" style={{ width: `${milestonePct}%` }} />
+                </div>
+                <p className="text-sm text-slate-500 dark:text-slate-400 mt-3">
+                  {nextMilestone
+                    ? `You're ${milestonePct}% of the way to a ${nextMilestone}-day streak.`
+                    : "You've reached the top milestone. Keep the fire burning!"}
+                </p>
               </div>
-              <div>
-                <p className="text-xs text-slate-500 dark:text-slate-400">Qualifying</p>
-                <p className={cn(
-                  "text-lg font-bold",
-                  selectedDay.qualifying ? "text-green-600" : "text-slate-400"
-                )}>
-                  {selectedDay.qualifying ? "Yes" : "No"}
+
+              <div className="card p-5">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="flex items-center gap-2 font-bold text-slate-800 dark:text-slate-100">
+                    <Zap className="w-4 h-4 text-warning-500" /> Weekly Goal
+                  </h3>
+                  <span className="badge-green">{formatTime(weekMinutes)} / {formatTime(WEEK_GOAL_MINUTES)}</span>
+                </div>
+                <div className="progress-bar">
+                  <div className="progress-fill bg-gradient-to-r from-success-500 to-emerald-500" style={{ width: `${weekPct}%` }} />
+                </div>
+                <p className="text-sm text-slate-500 dark:text-slate-400 mt-3">
+                  {weekMinutes >= WEEK_GOAL_MINUTES
+                    ? "Goal hit! Add a little extra to build momentum."
+                    : `${formatTime(Math.max(0, WEEK_GOAL_MINUTES - weekMinutes))} more this week to hit your goal.`}
                 </p>
               </div>
             </div>
-            <button
-              onClick={() => setSelectedDate(null)}
-              className="mt-3 py-1 px-3 rounded-md text-xs font-medium bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600"
-            >
-              Close
-            </button>
-          </div>
-        )}
 
-        {/* Record Study Session */}
-        <div className="border rounded-lg p-4 bg-white dark:bg-slate-800">
-          <h2 className="text-sm font-semibold text-slate-800 dark:text-slate-100 mb-3">
-            Record Study Session
-          </h2>
-          <div className="flex flex-col sm:flex-row gap-3">
-            <div className="flex items-center gap-2">
-              <input
-                type="number"
-                min="1"
-                max="480"
-                value={customMinutes}
-                onChange={(e) => setCustomMinutes(e.target.value)}
-                onKeyDown={(e) => { if (e.key === "Enter") handleCustomSubmit(); }}
-                placeholder="Minutes"
-                className="w-24 rounded-md border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
-              />
-              <button
-                onClick={handleCustomSubmit}
-                disabled={recordingSession || !customMinutes || parseInt(customMinutes) <= 0}
-                className="px-3 py-1.5 rounded-md text-sm font-medium bg-primary-600 text-white hover:bg-primary-500 disabled:opacity-50"
-              >
-                {recordingSession ? "Saving..." : "Save"}
-              </button>
+            {/* Heatmap */}
+            <div className="card p-5 sm:p-6">
+              <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
+                <div className="flex items-center gap-2">
+                  <Flame className="w-5 h-5 text-warning-500" />
+                  <h3 className="font-bold text-slate-800 dark:text-slate-100">Last 12 months</h3>
+                </div>
+                <div className="flex items-center gap-1.5 text-xs text-slate-400">
+                  <span>Less</span>
+                  {[0, 1, 2, 3, 4].map((l) => (
+                    <span key={l} className={`w-3 h-3 rounded-sm ${getHeatmapColor(l)}`} />
+                  ))}
+                  <span>More</span>
+                </div>
+              </div>
+
+              {weeks.length > 0 ? (
+                <div className="overflow-x-auto no-scrollbar -mx-1 px-1">
+                  <div
+                    className="grid gap-1 w-max"
+                    style={{
+                      gridTemplateColumns: `auto repeat(${weeks.length}, 12px)`,
+                      gridTemplateRows: `auto repeat(7, 12px)`,
+                    }}
+                  >
+                    {monthGroups.map((g) => (
+                      <span
+                        key={`${g.label}-${g.start}`}
+                        className="text-[10px] text-slate-400 font-medium leading-none self-end truncate"
+                        style={{ gridColumn: `${g.start + 2} / ${g.end + 2}`, gridRow: 1 }}
+                      >
+                        {g.label}
+                      </span>
+                    ))}
+                    <span className="text-[10px] text-slate-400 leading-none" style={{ gridColumn: 1, gridRow: 2 }}>Mon</span>
+                    <span className="text-[10px] text-slate-400 leading-none" style={{ gridColumn: 1, gridRow: 4 }}>Wed</span>
+                    <span className="text-[10px] text-slate-400 leading-none" style={{ gridColumn: 1, gridRow: 6 }}>Fri</span>
+
+                    {weeks.map((col, ci) =>
+                      col.days.map((d, di) => (
+                        <button
+                          key={`${ci}-${di}`}
+                          onClick={() => d && selectedDay(d.date)}
+                          title={d ? `${d.date}: ${formatTime(d.study_minutes)} ${d.qualifying ? "(qualifying)" : ""}` : "No data"}
+                          className={`w-3 h-3 rounded-sm ${d ? getHeatmapColor(d.heatmap_level ?? 0) : "bg-transparent"} transition-transform hover:scale-125 ${
+                            d?.date === today ? "ring-2 ring-primary-500 ring-offset-1 ring-offset-white dark:ring-offset-slate-800" : ""
+                          }`}
+                          style={{ gridColumn: ci + 2, gridRow: di + 2 }}
+                        />
+                      ))
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <p className="text-sm text-slate-400 text-center py-8">No activity yet. Start studying to light up your calendar!</p>
+              )}
+
+              {selected && (
+                <div className="mt-4 rounded-xl border border-primary-200 dark:border-primary-800/60 bg-primary-50/60 dark:bg-primary-950/30 p-4 flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-bold text-slate-800 dark:text-slate-100 capitalize">
+                      {new Date(`${selected.date}T00:00:00`).toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}
+                    </p>
+                    <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">
+                      {selected.study_minutes > 0 ? formatTime(selected.study_minutes) + " studied" : "No study logged"}
+                    </p>
+                  </div>
+                  <span className={selected.qualifying ? "badge-green" : "badge"}>
+                    {selected.qualifying ? "Qualifying day" : "Below 30 minutes"}
+                  </span>
+                  <button onClick={() => setSelectedDate(null)} className="btn btn-ghost btn-sm">
+                    <X className="w-4 h-4" /> Close
+                  </button>
+                </div>
+              )}
             </div>
-            <div className="flex gap-1.5">
-              {[15, 30, 45, 60].map((mins) => (
+
+            {/* Record session */}
+            <div className="card p-5 sm:p-6">
+              <h3 className="font-bold text-slate-800 dark:text-slate-100">Log Study Session</h3>
+              <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">A day with 30+ minutes of study counts toward your streak.</p>
+              <div className="flex flex-wrap gap-3 mt-4">
+                {MINUTE_STRIDES.map((m) => (
+                  <button
+                    key={m}
+                    onClick={() => recordSession(m)}
+                    disabled={recording}
+                    className="btn btn-outline btn-md"
+                  >
+                    {formatTime(m)}
+                  </button>
+                ))}
+              </div>
+              <div className="flex flex-col sm:flex-row gap-3 mt-4">
+                <div className="relative flex-1 max-w-[160px]">
+                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-sm">+</span>
+                  <input
+                    type="number"
+                    min={1}
+                    step={5}
+                    value={minutesInput}
+                    onChange={(e) => setMinutesInput(e.target.value)}
+                    className="input !pl-9"
+                    placeholder="Minutes"
+                  />
+                </div>
                 <button
-                  key={mins}
-                  onClick={() => handleRecordSession(mins)}
-                  disabled={recordingSession}
-                  className="px-3 py-1.5 rounded-md text-sm font-medium bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-600 disabled:opacity-50 transition-colors"
+                  onClick={() => recordSession(parseInt(minutesInput, 10) || 0)}
+                  disabled={recording}
+                  className="btn btn-primary btn-md"
                 >
-                  {mins}m
+                  {recording ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+                  {recording ? "Logging..." : "Log custom time"}
                 </button>
-              ))}
+              </div>
             </div>
-          </div>
-          <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-2">
-            A day with 30+ minutes of study counts toward your streak.
-          </p>
-        </div>
+          </>
+        )}
       </div>
+
+      {/* Toast */}
+      {toast && (
+        <div className="toast bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 border-slate-200 dark:border-slate-700">
+          <CheckCircle2 className="w-5 h-5 text-success-500 shrink-0" />
+          {toast}
+          <button onClick={() => setToast(null)} className="ml-1 text-slate-400 hover:text-slate-600">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
     </AppLayout>
   );
 }

@@ -9,6 +9,7 @@ import {
   Sparkles,
   Loader2,
   Lightbulb,
+  Trash2,
 } from "lucide-react";
 import { codingService } from "@/services/codingService";
 import { syllabusService } from "@/services/syllabusService";
@@ -34,6 +35,8 @@ export default function CodingPractice() {
   const [genLanguage, setGenLanguage] = useState("python");
   const [generating, setGenerating] = useState(false);
   const [showGenerate, setShowGenerate] = useState(false);
+  const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<CodingProblem | null>(null);
 
   async function loadProblems() {
     setLoading(true);
@@ -105,6 +108,32 @@ export default function CodingPractice() {
       );
     } finally {
       setGenerating(false);
+    }
+  };
+
+  const handleDelete = (e: React.MouseEvent | null, p: CodingProblem) => {
+    e?.stopPropagation();
+    setDeleteTarget(p);
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteTarget) return;
+    setDeletingId(deleteTarget.id);
+    setError(null);
+    try {
+      await codingService.deleteProblem(deleteTarget.id);
+      if (selected?.id === deleteTarget.id) setSelected(null);
+      setDeleteTarget(null);
+      await loadProblems();
+    } catch (err: any) {
+      const detail = err?.response?.data?.detail;
+      setError(
+        typeof detail === "string" && detail
+          ? detail
+          : err?.message || "Failed to delete problem."
+      );
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -258,7 +287,23 @@ export default function CodingPractice() {
                         ))}
                       </div>
                     </div>
-                    <ChevronRight className="w-5 h-5 text-slate-400 flex-shrink-0" />
+                    <div className="flex items-center gap-2">
+                        {p.user_id != null && (
+                          <button
+                            onClick={(e) => handleDelete(e, p)}
+                            disabled={deletingId === p.id}
+                            className="p-2 rounded-lg text-slate-400 hover:text-danger-600 hover:bg-danger-50 dark:hover:bg-danger-900/20 transition-colors"
+                            title="Delete problem"
+                          >
+                            {deletingId === p.id ? (
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : (
+                              <Trash2 className="w-4 h-4" />
+                            )}
+                          </button>
+                        )}
+                        <ChevronRight className="w-5 h-5 text-slate-400 flex-shrink-0" />
+                      </div>
                   </div>
                 </div>
               ))
@@ -275,9 +320,25 @@ export default function CodingPractice() {
                   <h2 className="font-bold text-lg text-slate-800 dark:text-slate-100">
                     {selected.title}
                   </h2>
-                  <span className={`badge ${diffColor(selected.difficulty)}`}>
-                    {selected.difficulty}
-                  </span>
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    <span className={`badge ${diffColor(selected.difficulty)}`}>
+                      {selected.difficulty}
+                    </span>
+                    {selected.user_id != null && (
+                      <button
+                        onClick={() => handleDelete(null, selected)}
+                        disabled={deletingId === selected.id}
+                        className="p-1.5 rounded-lg text-slate-400 hover:text-danger-600 hover:bg-danger-50 dark:hover:bg-danger-900/20 transition-colors"
+                        title="Delete problem"
+                      >
+                        {deletingId === selected.id ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <Trash2 className="w-4 h-4" />
+                        )}
+                      </button>
+                    )}
+                  </div>
                 </div>
                 <p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed whitespace-pre-wrap">
                   {selected.description}
@@ -433,6 +494,50 @@ export default function CodingPractice() {
           </div>
         )}
       </div>
+
+      {deleteTarget && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+          onClick={() => setDeleteTarget(null)}
+        >
+          <div
+            className="card w-full max-w-sm p-5 sm:p-6 text-center"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mx-auto w-12 h-12 flex items-center justify-center rounded-full bg-danger-100 dark:bg-danger-900/30 mb-4">
+              <Trash2 className="w-6 h-6 text-danger-600 dark:text-danger-400" />
+            </div>
+            <h3 className="font-bold text-lg text-slate-800 dark:text-slate-100">
+              Delete problem?
+            </h3>
+            <p className="text-sm text-slate-500 mt-2 break-words">
+              "{deleteTarget.title}" will be permanently deleted. This cannot be undone.
+            </p>
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={() => setDeleteTarget(null)}
+                disabled={deletingId === deleteTarget.id}
+                className="btn-ghost btn-md flex-1"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmDelete}
+                disabled={deletingId === deleteTarget.id}
+                className="btn-md flex-1 bg-danger-600 hover:bg-danger-700 text-white rounded-xl disabled:opacity-40"
+              >
+                {deletingId === deleteTarget.id ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" /> Deleting…
+                  </>
+                ) : (
+                  <>Delete</>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </AppLayout>
   );
 }

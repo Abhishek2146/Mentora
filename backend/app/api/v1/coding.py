@@ -229,6 +229,30 @@ async def submit_code(
     return submission
 
 
+@router.delete("/problems/{problem_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_problem(
+    problem_id: int,
+    db: AsyncSession = Depends(get_db),
+    user_id: int = Depends(get_current_user_id),
+):
+    result = await db.execute(
+        select(CodingProblem).where(
+            CodingProblem.id == problem_id,
+            CodingProblem.user_id == user_id,
+        )
+    )
+    problem = result.scalars().first()
+    if not problem:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Problem not found",
+        )
+
+    await db.delete(problem)
+    await db.commit()
+    return None
+
+
 class SupportedLanguagesResponse(BaseModel):
     languages: List[str]
 
