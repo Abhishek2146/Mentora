@@ -3,6 +3,22 @@ import type { SyllabusSearchParams, SyllabusSearchResponse } from "@/types/api";
 
 const PROCESSING_TIMEOUT = 300000;
 
+export interface Syllabus {
+  id: number;
+  user_id: number;
+  title: string;
+  description?: string;
+  file_path?: string;
+  file_type?: string;
+  status: string;
+  is_processed: boolean;
+  is_ai_processed: boolean;
+  ai_summary?: string;
+  processing_error?: string;
+  created_at: string;
+  updated_at: string;
+}
+
 export const syllabusService = {
   async uploadSyllabus(file: File, title: string, description?: string) {
     const formData = new FormData();

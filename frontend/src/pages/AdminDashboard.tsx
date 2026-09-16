@@ -323,7 +323,7 @@ export default function AdminDashboard() {
                     <td className="py-2.5 px-2">
                       <select
                         value={u.role}
-                        disabled={u.id === user?.id || u.role === "super_admin"}
+                        disabled={u.id === user?.id}
                         onChange={e => changeRole(u, e.target.value)}
                         className={cn(
                           "text-xs font-medium rounded-lg px-2 py-1 border",

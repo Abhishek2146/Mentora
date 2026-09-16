@@ -40,6 +40,7 @@ import VoiceLearning from "./pages/VoiceLearning";
 import Profile from "./pages/Profile";
 import Settings from "./pages/Settings";
 import Progress from "./pages/Progress";
+import MindMapPage from "@/pages/MindMap";
 
 export default function App() {
   useEffect(() => {
@@ -58,6 +59,7 @@ export default function App() {
         <Route path="/flashcards" element={<ProtectedRoute><FlashcardsPage /></ProtectedRoute>} />
         <Route path="/study-plan" element={<ProtectedRoute><StudyPlanPage /></ProtectedRoute>} />
         <Route path="/notes" element={<ProtectedRoute><NotesPage /></ProtectedRoute>} />
+        <Route path="/mindmap" element={<ProtectedRoute><MindMapPage /></ProtectedRoute>} />
         <Route path="/analytics" element={<ProtectedRoute><AnalyticsPage /></ProtectedRoute>} />
         <Route path="/daily-quiz" element={<ProtectedRoute><DailyQuizPage /></ProtectedRoute>} />
         <Route path="/mcq" element={<ProtectedRoute><MCQPage /></ProtectedRoute>} />
