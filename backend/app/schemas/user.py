@@ -80,6 +80,7 @@ class UserRole(str, Enum):
 
     STUDENT = "student"
     ADMIN = "admin"
+    SUPER_ADMIN = "super_admin"
 
 
 # ============================================================

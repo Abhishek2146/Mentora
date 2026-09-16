@@ -26,6 +26,8 @@ from app.models.otp import PasswordResetOTP
 from app.models.study_group import StudyGroup, StudyGroupMember, StudyGroupMessage
 from app.models.study_streak import UserStreak, DailyStudySummary
 
+from app.models.mindmap import MindMap
+
 __all__ = [
     "User", "UserRole",
     "Syllabus", "Subject", "Chapter",
@@ -45,4 +47,5 @@ __all__ = [
     "PasswordResetOTP",
     "StudyGroup", "StudyGroupMember", "StudyGroupMessage",
     "UserStreak", "DailyStudySummary",
+    "MindMap",
 ]

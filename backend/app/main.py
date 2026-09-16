@@ -37,6 +37,7 @@ from app.api.v1 import (
     study_groups,
     study_streak,
     notes,
+    mindmap,
 )
 
 from app.middleware.rate_limit import RateLimitMiddleware
@@ -276,6 +277,12 @@ app.include_router(
     notes.router,
     prefix=f"{settings.API_PREFIX}/notes",
     tags=["notes"],
+)
+
+app.include_router(
+    mindmap.router,
+    prefix=f"{settings.API_PREFIX}/mindmap",
+    tags=["mindmap"],
 )
 
 

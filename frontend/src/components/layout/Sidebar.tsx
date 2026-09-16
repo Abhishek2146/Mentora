@@ -3,7 +3,7 @@ import {
   LayoutDashboard, Brain, CreditCard, CalendarDays, BarChart3,
   ClipboardList, BookOpen, Trophy, AlertTriangle, RotateCcw,
   Upload, Code2, Mic, User, Settings, ChevronLeft, ChevronRight, X,
-  GraduationCap, TrendingUp, ShieldCheck, Users, Crown, Flame, FileText,
+  GraduationCap, TrendingUp, ShieldCheck, Users, Crown, Flame, FileText, Network,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useUIStore } from "@/store/uiStore";
@@ -19,6 +19,7 @@ const navGroups = [
       { label: "Flashcards",      icon: CreditCard,      path: "/flashcards" },
       { label: "Study Plan",      icon: CalendarDays,    path: "/study-plan" },
       { label: "Notes",           icon: FileText,        path: "/notes" },
+      { label: "Mind Map",        icon: Network,         path: "/mindmap" },
       { label: "Analytics",       icon: BarChart3,       path: "/analytics" },
       { label: "Study Groups",    icon: Users,           path: "/study-groups" },
       { label: "Study Streak",    icon: Flame,           path: "/study-streak" },
@@ -57,7 +58,7 @@ export default function Sidebar() {
   const { user } = useAuthStore();
   const { pathname } = useLocation();
   const userName = user?.full_name || user?.username || "Student";
-  const isAdmin = user?.role === "admin";
+  const isAdmin = user?.role === "admin" || user?.role === "super_admin";
 
   const groups = [
     ...(isAdmin

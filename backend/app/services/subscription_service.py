@@ -497,5 +497,25 @@ class SubscriptionService:
         await db.refresh(subscription)
         return subscription
 
+    async def revoke_subscription(
+        self,
+        db: AsyncSession,
+        user_id: int,
+    ) -> Subscription:
+        """Revoke premium membership. Sets plan to FREE while preserving the historical record."""
+        subscription = await self.get_or_create_subscription(db, user_id)
+        subscription.plan_type = PlanType.FREE.value
+        subscription.billing_cycle = BillingCycle.NONE.value
+        subscription.status = SubscriptionStatus.CANCELLED.value
+        subscription.expires_at = None
+        subscription.auto_renew = False
+        await db.commit()
+        await db.refresh(subscription)
+        logger.info(
+            "Revoked membership for user %s — set to FREE",
+            user_id,
+        )
+        return subscription
+
 
 subscription_service = SubscriptionService()

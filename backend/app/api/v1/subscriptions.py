@@ -13,7 +13,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.auth import get_current_user, get_current_user_id, require_admin
+from app.core.auth import get_current_user, get_current_user_id, require_super_admin
 from app.core.config import settings
 from app.database.database import get_db
 from app.models.payment import Payment
@@ -233,7 +233,7 @@ async def list_subscriptions(
     plan_type: Optional[PlanType] = None,
     status: Optional[SubscriptionStatus] = None,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_admin),
+    _: User = Depends(require_super_admin),
 ):
     """List all subscriptions with optional filters."""
     query = select(Subscription).order_by(Subscription.id)
@@ -250,7 +250,7 @@ async def list_subscriptions(
 async def admin_get_subscription(
     user_id: int,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_admin),
+    _: User = Depends(require_super_admin),
 ):
     subscription = await subscription_service.get_or_create_subscription(
         db, user_id
@@ -264,7 +264,7 @@ async def admin_activate_subscription(
     user_id: int,
     payload: AdminActivateRequest,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_admin),
+    _: User = Depends(require_super_admin),
 ):
     """Activate a paid SUBSCRIPTION plan for a user."""
     return await subscription_service.activate_subscription(
@@ -279,7 +279,7 @@ async def admin_activate_subscription(
 async def admin_cancel_subscription(
     user_id: int,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_admin),
+    _: User = Depends(require_super_admin),
 ):
     """Cancel a user's subscription immediately."""
     return await subscription_service.cancel_subscription(db, user_id)
@@ -289,7 +289,7 @@ async def admin_cancel_subscription(
 async def admin_expire_subscription(
     user_id: int,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_admin),
+    _: User = Depends(require_super_admin),
 ):
     """Force-expire a user's subscription."""
     return await subscription_service.expire_subscription(db, user_id)

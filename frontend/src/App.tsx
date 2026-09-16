@@ -29,7 +29,7 @@ import SetNewPasswordPage from "@/pages/SetNewPassword";
 import SearchPage from "@/pages/Search";
 import SyllabusDetailPage from "@/pages/SyllabusDetail";
 import NotificationsPage from "@/pages/Notifications";
-import { ProtectedRoute, PublicRoute, AdminRoute } from "@/components/ProtectedRoute";
+import { ProtectedRoute, PublicRoute, AdminRoute, SuperAdminRoute } from "@/components/ProtectedRoute";
 import { useAuthStore } from "@/store/authStore";
 import HomePage from "@/pages/HomePage";
 import AdminRegisterPage from "@/pages/AdminRegister";
@@ -40,6 +40,7 @@ import VoiceLearning from "./pages/VoiceLearning";
 import Profile from "./pages/Profile";
 import Settings from "./pages/Settings";
 import Progress from "./pages/Progress";
+import MindMapPage from "@/pages/MindMap";
 
 export default function App() {
   useEffect(() => {
@@ -58,6 +59,7 @@ export default function App() {
         <Route path="/flashcards" element={<ProtectedRoute><FlashcardsPage /></ProtectedRoute>} />
         <Route path="/study-plan" element={<ProtectedRoute><StudyPlanPage /></ProtectedRoute>} />
         <Route path="/notes" element={<ProtectedRoute><NotesPage /></ProtectedRoute>} />
+        <Route path="/mindmap" element={<ProtectedRoute><MindMapPage /></ProtectedRoute>} />
         <Route path="/analytics" element={<ProtectedRoute><AnalyticsPage /></ProtectedRoute>} />
         <Route path="/daily-quiz" element={<ProtectedRoute><DailyQuizPage /></ProtectedRoute>} />
         <Route path="/mcq" element={<ProtectedRoute><MCQPage /></ProtectedRoute>} />
@@ -80,7 +82,7 @@ export default function App() {
         <Route path="/verify-otp" element={<PublicRoute><VerifyOtpPage /></PublicRoute>} />
         <Route path="/set-new-password" element={<PublicRoute><SetNewPasswordPage /></PublicRoute>} />
         <Route path="/admin/register" element={<AdminRegisterPage />} />
-        <Route path="/admin/dashboard" element={<AdminRoute><AdminDashboardPage /></AdminRoute>} />
+        <Route path="/admin/dashboard" element={<SuperAdminRoute><AdminDashboardPage /></SuperAdminRoute>} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>

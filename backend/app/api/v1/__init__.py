@@ -16,6 +16,7 @@ from app.api.v1 import (
     dashboard,
     notifications,
     notes,
+    mindmap,
 )
 
 from app.api.v1.auth import router as auth_router
@@ -34,6 +35,7 @@ from app.api.v1.voice import router as voice_router
 from app.api.v1.reports import router as reports_router
 from app.api.v1.dashboard import router as dashboard_router
 from app.api.v1.notifications import router as notifications_router
+from app.api.v1.mindmap import router as mindmap_router
 
 __all__ = [
     "auth",
@@ -68,4 +70,5 @@ __all__ = [
     "reports_router",
     "dashboard_router",
     "notifications_router",
+    "mindmap_router",
 ]
