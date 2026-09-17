@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { ShieldCheck, Mail, Lock, User, Eye, EyeOff, KeyRound, LogIn } from "lucide-react";
 import { useAuthStore } from "@/store/authStore";
+import { isGmailAddress } from "@/lib/emailValidation";
 
 export default function AdminRegister() {
   const navigate = useNavigate();
@@ -19,6 +20,10 @@ export default function AdminRegister() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
+    if (!isGmailAddress(form.email)) {
+      setError("Please enter a valid Gmail address ending in @gmail.com.");
+      return;
+    }
     try {
       await registerAdmin(form);
       navigate("/admin/dashboard");
@@ -28,6 +33,8 @@ export default function AdminRegister() {
   };
 
   const f = (k: string) => (e: React.ChangeEvent<HTMLInputElement>) => setForm(p => ({ ...p, [k]: e.target.value }));
+
+  const emailInvalid = form.email.length > 0 && !isGmailAddress(form.email);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-primary-50 to-secondary-50 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 flex items-center justify-center p-4">
@@ -49,7 +56,6 @@ export default function AdminRegister() {
             {[
               { key: "full_name", icon: User, placeholder: "Full name", type: "text" },
               { key: "username", icon: User, placeholder: "Username", type: "text" },
-              { key: "email", icon: Mail, placeholder: "Email address", type: "email" },
             ].map(field => (
               <div key={field.key} className="relative">
                 <field.icon className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
@@ -59,6 +65,22 @@ export default function AdminRegister() {
                   className="input pl-10" required />
               </div>
             ))}
+            <div className="space-y-1">
+              <div className="relative">
+                <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                <input
+                  type="email"
+                  value={form.email}
+                  onChange={f("email")}
+                  placeholder="name@gmail.com"
+                  id="admin-register-email"
+                  className={`input pl-10${emailInvalid ? " !border-danger-500 focus:!ring-danger-500/20" : ""}`}
+                  required />
+              </div>
+              {emailInvalid && (
+                <p className="text-xs text-danger-600">Use a valid Gmail address ending in @gmail.com.</p>
+              )}
+            </div>
             <div className="relative">
               <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
               <input id="admin-register-password" type={showPw ? "text" : "password"} value={form.password} onChange={f("password")}

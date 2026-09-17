@@ -8,8 +8,9 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm, HTTPAuthorizationCredentials, HTTPBearer
 
 security = HTTPBearer()
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.exc import IntegrityError
 
 from app.core.security import (
     verify_password,
@@ -37,20 +38,40 @@ from app.services.token_blacklist import token_blacklist
 router = APIRouter()
 
 
+async def _registration_conflict_detail(
+    db: AsyncSession,
+    email: str,
+    username: str,
+) -> str | None:
+    """Return a user-facing duplicate message for canonicalized identities."""
+    result = await db.execute(
+        select(User).where(
+            (func.lower(User.email) == email.lower())
+            | (func.lower(User.username) == username.lower())
+        )
+    )
+    existing_user = result.scalars().first()
+    if not existing_user:
+        return None
+    if existing_user.email.strip().lower() == email.lower():
+        return "That email is already registered"
+    if existing_user.username.strip().lower() == username.lower():
+        return "That username is already taken"
+    return "Email or username already registered"
+
+
 @router.post("/register", response_model=UserOut, status_code=status.HTTP_201_CREATED)
 async def register(
     user_data: UserCreate,
     db: AsyncSession = Depends(get_db),
 ):
-    existing_user = await db.execute(
-        select(User).where(
-            (User.email == user_data.email) | (User.username == user_data.username)
-        )
+    conflict_detail = await _registration_conflict_detail(
+        db, str(user_data.email), user_data.username
     )
-    if existing_user.scalars().first():
+    if conflict_detail:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Email or username already registered",
+            detail=conflict_detail,
         )
 
     role = user_data.role
@@ -70,12 +91,27 @@ async def register(
         role=role_value,
         hashed_password=hashed_password,
     )
-    db.add(new_user)
-    await db.flush()
+    try:
+        db.add(new_user)
+        await db.flush()
 
-    # Every new student starts on Mentora Pro.
-    db.add(Subscription.create_default(new_user.id))
-    await db.commit()
+        # Every new student starts on Mentora Pro.
+        db.add(Subscription.create_default(new_user.id))
+        await db.commit()
+    except IntegrityError as exc:
+        await db.rollback()
+        conflict_detail = await _registration_conflict_detail(
+            db, str(user_data.email), user_data.username
+        )
+        if conflict_detail:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=conflict_detail,
+            ) from exc
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Unable to create account. Please check your registration details and try again.",
+        ) from exc
     await db.refresh(new_user)
     return new_user
 
@@ -101,15 +137,13 @@ async def register_admin(
             detail="Invalid admin registration key",
         )
 
-    existing_user = await db.execute(
-        select(User).where(
-            (User.email == user_data.email) | (User.username == user_data.username)
-        )
+    conflict_detail = await _registration_conflict_detail(
+        db, str(user_data.email), user_data.username
     )
-    if existing_user.scalars().first():
+    if conflict_detail:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Email or username already registered",
+            detail=conflict_detail,
         )
 
     hashed_password = get_password_hash(user_data.password)
@@ -121,12 +155,27 @@ async def register_admin(
         is_verified=True,
         hashed_password=hashed_password,
     )
-    db.add(new_user)
-    await db.flush()
+    try:
+        db.add(new_user)
+        await db.flush()
 
-    # Admins also start on Mentora Pro.
-    db.add(Subscription.create_default(new_user.id))
-    await db.commit()
+        # Admins also start on Mentora Pro.
+        db.add(Subscription.create_default(new_user.id))
+        await db.commit()
+    except IntegrityError as exc:
+        await db.rollback()
+        conflict_detail = await _registration_conflict_detail(
+            db, str(user_data.email), user_data.username
+        )
+        if conflict_detail:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=conflict_detail,
+            ) from exc
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Unable to create account. Please check your registration details and try again.",
+        ) from exc
     await db.refresh(new_user)
     return new_user
 
