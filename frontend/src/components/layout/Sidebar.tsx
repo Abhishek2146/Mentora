@@ -16,6 +16,7 @@ const navGroups = [
     items: [
       { label: "Dashboard",       icon: LayoutDashboard, path: "/dashboard" },
       { label: "AI Tutor",        icon: Brain,           path: "/ai-tutor" },
+      { label: "AI Detection",    icon: ShieldCheck,     path: "/ai-detection" },
       { label: "Flashcards",      icon: CreditCard,      path: "/flashcards" },
       { label: "Study Plan",      icon: CalendarDays,    path: "/study-plan" },
       { label: "Notes",           icon: FileText,        path: "/notes" },

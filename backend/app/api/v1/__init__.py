@@ -1,5 +1,6 @@
 from app.api.v1 import (
     auth,
+    ai_detection,
     users,
     syllabus,
     study_plan,
@@ -39,6 +40,7 @@ from app.api.v1.mindmap import router as mindmap_router
 
 __all__ = [
     "auth",
+    "ai_detection",
     "users",
     "syllabus",
     "study_plan",

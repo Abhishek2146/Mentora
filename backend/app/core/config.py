@@ -274,6 +274,7 @@ class Settings(BaseSettings):
         "STUDY_PLAN_GENERATION": 3,
         "CODING_PROBLEM_GENERATION": 3,
         "SYLLABUS_ANALYSIS": 2,
+        "AI_DETECTION": 3,
     }
 
     SUBSCRIPTION_DAILY_LIMITS: dict = {
@@ -284,6 +285,7 @@ class Settings(BaseSettings):
         "STUDY_PLAN_GENERATION": 30,
         "CODING_PROBLEM_GENERATION": 30,
         "SYLLABUS_ANALYSIS": 20,
+        "AI_DETECTION": 30,
     }
 
     # Per-plan Redis request rate limits (requests per minute).

@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { useEffect } from "react";
 import DashboardPage from "@/pages/Dashboard";
 import AiTutorPage from "@/pages/AiTutor";
+import AIDetectionPage from "@/pages/AIDetection";
 import FlashcardsPage from "@/pages/Flashcards";
 import StudyPlanPage from "@/pages/StudyPlan";
 import AnalyticsPage from "@/pages/Analytics";
@@ -56,6 +57,7 @@ export default function App() {
         <Route path="/notifications" element={<ProtectedRoute><NotificationsPage /></ProtectedRoute>} />
         <Route path="/syllabus/:id" element={<ProtectedRoute><SyllabusDetailPage /></ProtectedRoute>} />
         <Route path="/ai-tutor" element={<ProtectedRoute><AiTutorPage /></ProtectedRoute>} />
+        <Route path="/ai-detection" element={<ProtectedRoute><AIDetectionPage /></ProtectedRoute>} />
         <Route path="/flashcards" element={<ProtectedRoute><FlashcardsPage /></ProtectedRoute>} />
         <Route path="/study-plan" element={<ProtectedRoute><StudyPlanPage /></ProtectedRoute>} />
         <Route path="/notes" element={<ProtectedRoute><NotesPage /></ProtectedRoute>} />
