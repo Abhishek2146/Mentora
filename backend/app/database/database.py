@@ -195,7 +195,13 @@ async def _run_migrations(conn) -> None:
     ``chapters``) are applied without a separate migration tool.
     """
     # Columns handled by specific migrations below — skip in the generic loop.
-    _specific_migration_columns = {("study_groups", "memory")}
+    _specific_migration_columns = {
+        ("study_groups", "memory"),
+        ("study_group_messages", "edited_at"),
+        ("study_group_messages", "deleted_at"),
+        ("study_group_messages", "reply_to_message_id"),
+        ("study_group_messages", "forwarded_from_id"),
+    }
 
     # Iterate over every registered model and check each column.
     for table in Base.metadata.tables.values():
@@ -271,6 +277,64 @@ async def _run_migrations(conn) -> None:
         if not result.fetchone():
             await conn.execute(text(ddl))
             logger.info("Added JSONB column '%s' to table '%s'", col_name, table_name)
+
+    # Migration: add invite_token column to study_groups
+    result = await conn.execute(
+        text(
+            "SELECT 1 FROM information_schema.columns "
+            "WHERE table_name = 'study_groups' AND column_name = 'invite_token'"
+        )
+    )
+    if not result.fetchone():
+        await conn.execute(
+            text(
+                "ALTER TABLE study_groups ADD COLUMN invite_token VARCHAR(64) UNIQUE"
+            )
+        )
+        logger.info("Added invite_token column to study_groups")
+
+        # Backfill existing groups with tokens
+        import secrets
+        rows = await conn.execute(text("SELECT id FROM study_groups WHERE invite_token IS NULL"))
+        for row in rows.fetchall():
+            token = secrets.token_urlsafe(32)
+            await conn.execute(
+                text("UPDATE study_groups SET invite_token = :token WHERE id = :id"),
+                {"token": token, "id": row[0]},
+            )
+        logger.info("Backfilled invite_token for existing study_groups")
+
+    # Migration: make invite_code nullable (old system kept for backward compat)
+    result = await conn.execute(
+        text(
+            "SELECT is_nullable FROM information_schema.columns "
+            "WHERE table_name = 'study_groups' AND column_name = 'invite_code'"
+        )
+    )
+    row = result.fetchone()
+    if row and row[0].upper() == "NO":
+        await conn.execute(
+            text("ALTER TABLE study_groups ALTER COLUMN invite_code DROP NOT NULL")
+        )
+        logger.info("Made invite_code column nullable in study_groups")
+
+    # Migration: add messenger-like feature columns to study_group_messages
+    msg_columns = [
+        ("edited_at", "ALTER TABLE study_group_messages ADD COLUMN IF NOT EXISTS edited_at TIMESTAMPTZ"),
+        ("deleted_at", "ALTER TABLE study_group_messages ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ"),
+        ("reply_to_message_id", "ALTER TABLE study_group_messages ADD COLUMN IF NOT EXISTS reply_to_message_id INTEGER REFERENCES study_group_messages(id) ON DELETE SET NULL"),
+        ("forwarded_from_id", "ALTER TABLE study_group_messages ADD COLUMN IF NOT EXISTS forwarded_from_id INTEGER REFERENCES study_group_messages(id) ON DELETE SET NULL"),
+    ]
+    for col_name, ddl in msg_columns:
+        result = await conn.execute(
+            text(
+                "SELECT 1 FROM information_schema.columns "
+                "WHERE table_name = 'study_group_messages' AND column_name = :c"
+            ).bindparams(c=col_name),
+        )
+        if not result.fetchone():
+            await conn.execute(text(ddl))
+            logger.info("Added column '%s' to study_group_messages", col_name)
 
 
 async def _ensure_unique_constraints(conn) -> None:

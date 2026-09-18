@@ -17,7 +17,8 @@ class StudyGroupCreate(StudyGroupBase):
 
 class StudyGroupOut(StudyGroupBase):
     id: int
-    invite_code: str
+    invite_code: Optional[str] = None
+    invite_token: Optional[str] = None
     is_active: bool
     owner_id: int
     created_at: datetime
@@ -79,21 +80,54 @@ class StudyGroupMessageBase(BaseModel):
 
 
 class StudyGroupMessageCreate(StudyGroupMessageBase):
-    pass
+    reply_to_message_id: Optional[int] = Field(None, description="ID of message to reply to")
 
 
-class StudyGroupMessageOut(StudyGroupMessageBase):
+class StudyGroupMessageEdit(BaseModel):
+    content: str = Field(..., min_length=1, max_length=2000, description="Updated message content")
+
+
+class StudyGroupMessageForward(BaseModel):
+    target_group_ids: List[int] = Field(..., min_length=1, description="Group IDs to forward to")
+
+
+class ReplyToMessage(BaseModel):
+    """Preview of a message being replied to."""
+    id: int
+    sender_name: Optional[str] = None
+    content: str
+    message_type: str = "user"
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ForwardedFromMessage(BaseModel):
+    """Preview of the original forwarded message."""
+    id: int
+    sender_name: Optional[str] = None
+    content: str
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class StudyGroupMessageOut(BaseModel):
     id: int
     sender_id: Optional[int] = None
     group_id: int
     message_type: str = "user"
     sender_name: Optional[str] = None
+    content: str
     created_at: datetime
     updated_at: Optional[datetime] = None
+    edited_at: Optional[datetime] = None
+    deleted_at: Optional[datetime] = None
+    is_deleted: bool = False
+    reply_to: Optional[ReplyToMessage] = None
+    forwarded_from: Optional[ForwardedFromMessage] = None
 
     model_config = ConfigDict(from_attributes=True)
 
-    @field_serializer("created_at", "updated_at")
+    @field_serializer("created_at", "updated_at", "edited_at", "deleted_at")
     @classmethod
     def serialize_datetime(cls, v: Optional[datetime]) -> Optional[str]:
         if v is None:
@@ -147,3 +181,50 @@ class GroupMemoryUpdate(BaseModel):
     """Schema for LLM memory extraction response."""
     should_update_memory: bool = False
     updates: dict = {}
+
+
+# ============================================================
+# Invitation Schemas
+# ============================================================
+
+class InvitationByUsername(BaseModel):
+    """Invite a user by username."""
+    username: str = Field(..., min_length=1, max_length=100)
+
+
+class InvitationByEmail(BaseModel):
+    """Invite a user by email."""
+    email: str = Field(..., max_length=255)
+
+
+class StudyGroupInvitationOut(BaseModel):
+    """Outgoing invitation representation."""
+    id: int
+    group_id: int
+    group_name: Optional[str] = None
+    invited_user_id: Optional[int] = None
+    invited_email: Optional[str] = None
+    invited_by: int
+    inviter_name: Optional[str] = None
+    status: str
+    token: Optional[str] = None
+    created_at: datetime
+    expires_at: Optional[datetime] = None
+    accepted_at: Optional[datetime] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+    @field_serializer("created_at", "expires_at", "accepted_at")
+    @classmethod
+    def serialize_datetime(cls, v: Optional[datetime]) -> Optional[str]:
+        if v is None:
+            return None
+        if v.tzinfo is None:
+            v = v.replace(tzinfo=timezone.utc)
+        return v.isoformat()
+
+
+class InviteLinkOut(BaseModel):
+    """Response for invite link operations."""
+    token: str
+    link: str

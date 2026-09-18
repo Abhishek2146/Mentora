@@ -41,6 +41,8 @@ from app.api.v1 import (
     mindmap,
 )
 
+from app.websocket.ws_handler import router as ws_router
+
 from app.middleware.rate_limit import RateLimitMiddleware
 
 
@@ -290,6 +292,13 @@ app.include_router(
     mindmap.router,
     prefix=f"{settings.API_PREFIX}/mindmap",
     tags=["mindmap"],
+)
+
+# WebSocket routes (no API prefix - WebSockets have their own path)
+app.include_router(
+    ws_router,
+    prefix=f"{settings.API_PREFIX}/study-groups",
+    tags=["study-groups-ws"],
 )
 
 

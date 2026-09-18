@@ -3,9 +3,26 @@ Application Configuration.
 """
 
 import os
+import socket
 from typing import List
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+def _get_lan_ip() -> str:
+    """Best-effort local network IP of this machine (no external traffic)."""
+    try:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        sock.settimeout(0.1)
+        sock.connect(("8.8.8.8", 80))
+        ip = sock.getsockname()[0]
+        sock.close()
+        return ip
+    except OSError:
+        try:
+            return socket.gethostbyname(socket.gethostname())
+        except OSError:
+            return ""
 
 
 class Settings(BaseSettings):
@@ -212,18 +229,31 @@ class Settings(BaseSettings):
 
     @property
     def ALLOWED_ORIGINS(self) -> List[str]:
-        """Return allowed frontend/backend origins."""
+        """Return allowed frontend/backend origins.
+
+        LAN-origin hints (like http://192.168.x.x:5173) are appended
+        automatically so friends on the network can open the app.
+        """
 
         origins_str = os.getenv(
             "ALLOWED_ORIGINS",
             "http://localhost:3000,http://localhost:5173,http://127.0.0.1:5173,http://localhost:5174,http://127.0.0.1:5174,http://localhost:8000,http://127.0.0.1:8000",
         )
 
-        return [
+        origins = [
             origin.strip()
             for origin in origins_str.split(",")
             if origin.strip()
         ]
+
+        lan_ip = _get_lan_ip()
+        if lan_ip:
+            for port in ("5173", "5174", "8000"):
+                candidate = f"http://{lan_ip}:{port}"
+                if candidate not in origins:
+                    origins.append(candidate)
+
+        return origins
 
     @property
     def ALLOWED_METHODS(self) -> List[str]:
