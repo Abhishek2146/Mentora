@@ -20,6 +20,7 @@ import SettingsPage from "@/pages/Settings";
 import ProgressPage from "@/pages/Progress";
 import SubscriptionPage from "@/pages/Subscription";
 import StudyGroupPage from "@/pages/StudyGroup";
+import StudyGroupJoinPage from "@/pages/StudyGroupJoin";
 import StudyStreakPage from "@/pages/StudyStreak";
 import RegisterPage from "@/pages/Register";
 import LoginPage from "@/pages/Login";
@@ -75,6 +76,7 @@ export default function App() {
         <Route path="/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
         <Route path="/progress" element={<ProtectedRoute><ProgressPage /></ProtectedRoute>} />
         <Route path="/study-groups" element={<ProtectedRoute><StudyGroupPage /></ProtectedRoute>} />
+        <Route path="/study-groups/join/:token" element={<ProtectedRoute><StudyGroupJoinPage /></ProtectedRoute>} />
         <Route path="/study-streak" element={<ProtectedRoute><StudyStreakPage /></ProtectedRoute>} />
         <Route path="/subscription" element={<ProtectedRoute><SubscriptionPage /></ProtectedRoute>} />
         <Route path="/register" element={<PublicRoute><RegisterPage /></PublicRoute>} />
