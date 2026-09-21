@@ -100,4 +100,5 @@ python-dotenv
 email-validator
 dnspython
 argon2-cffi
+aiosqlite
 aiosmtplib

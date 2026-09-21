@@ -74,6 +74,14 @@ export const subscriptionService = {
     return res.data;
   },
 
+  /** Delete the authenticated user's local payment-history records. */
+  async clearMyPayments(): Promise<{ deleted_count: number }> {
+    const res = await apiClient.delete<{ deleted_count: number }>(
+      "/api/v1/subscriptions/khalti/payments",
+    );
+    return res.data;
+  },
+
   featureLabel(usageType: string): string {
     return (
       (

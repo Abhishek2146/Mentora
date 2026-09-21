@@ -15,6 +15,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from app.core.config import settings
+from app.services.syllabus_structure import build_tutor_system_prompt
 from app.services.tutor_service import TutorService
 
 
@@ -195,8 +197,20 @@ class TestProcessMessageContextBudget:
         mock_chat.assert_called_once()
         messages = mock_chat.call_args[0][0]
         system_msg = messages[0]["content"]
-        # System message should be less than base prompt (~7200) + max context (2000) + margin
-        assert len(system_msg) < 10000
+        # The RAG content embedded in the system prompt must be capped at the
+        # configured TUTOR_MAX_CONTEXT_CHARS (the base prompt itself is large).
+        context_marker = "RETRIEVED SYLLABUS CONTEXT:\n"
+        assert context_marker in system_msg
+        rag_context = system_msg.split(context_marker, 1)[1]
+        assert len(rag_context) <= settings.TUTOR_MAX_CONTEXT_CHARS
+        # And the whole system message stays within base prompt + context budget.
+        base_prompt = build_tutor_system_prompt(
+            context="", syllabus_selected=True, syllabus_title=mock_syllabus.title
+        )
+        assert (
+            len(system_msg)
+            < len(base_prompt) + settings.TUTOR_MAX_CONTEXT_CHARS + 500
+        )
 
     @pytest.mark.asyncio
     async def test_413_error_falls_back_to_minimal_context(self):

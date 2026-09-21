@@ -8,7 +8,9 @@ export function normalizeEmail(email: string): string {
 const EMAIL_REGEX = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/;
 
 export function isValidEmail(email: string): boolean {
-  return EMAIL_REGEX.test(normalizeEmail(email));
+  const normalized = normalizeEmail(email);
+  const localPart = normalized.split("@")[0] || "";
+  return !normalized.includes("..") && !localPart.startsWith(".") && !localPart.endsWith(".") && EMAIL_REGEX.test(normalized);
 }
 
 export function isGmailAddress(email: string): boolean {

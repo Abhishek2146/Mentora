@@ -358,6 +358,34 @@ async def _ensure_unique_constraints(conn) -> None:
         )
         logger.info("Added unique constraint uq_study_group_member_group_user")
 
+    # Column-level UNIQUE constraints are case-sensitive in PostgreSQL. These
+    # expression indexes make the identity rule durable for requests that race
+    # past the application-level duplicate lookup (and cover legacy schemas).
+    if conn.dialect.name == "postgresql":
+        for index_name, expression in (
+            ("uq_users_email_lower", "LOWER(email)"),
+            ("uq_users_username_lower", "LOWER(username)"),
+        ):
+            try:
+                await conn.execute(
+                    text(
+                        f"CREATE UNIQUE INDEX IF NOT EXISTS {index_name} "
+                        f"ON users ({expression})"
+                    )
+                )
+                logger.info("Ensured unique identity index %s", index_name)
+            except Exception as exc:
+                # Existing case-variant duplicates must not be deleted or
+                # silently changed during startup. The API lookup still
+                # rejects all future duplicates until the legacy rows are
+                # manually reconciled and the index can be created.
+                logger.error(
+                    "Could not create %s. Resolve existing duplicate users "
+                    "before enabling the database index: %s",
+                    index_name,
+                    exc,
+                )
+
 
 async def _fix_broken_timestamps(conn) -> None:
     """Fix study_group_messages timestamps that were created with the broken

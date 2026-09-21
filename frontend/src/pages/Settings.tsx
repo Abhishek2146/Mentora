@@ -1,5 +1,5 @@
 import AppLayout from "@/components/layout/AppLayout";
-import { Bell, Moon, Globe, LogOut, Lock, Eye, EyeOff, AlertCircle, CheckCircle2 } from "lucide-react";
+import { Bell, Moon, LogOut, Lock, Eye, EyeOff, AlertCircle, CheckCircle2 } from "lucide-react";
 import { useAuthStore } from "@/store/authStore";
 import { useState } from "react";
 
@@ -25,14 +25,6 @@ export default function Settings() {
         <button onClick={() => setNotifs(n => !n)} className={`w-12 h-6 rounded-full transition-all ${ notifs ? "bg-primary-500" : "bg-slate-200" }`}>
           <span className={`block w-5 h-5 bg-white rounded-full shadow transition-transform ${ notifs ? "translate-x-6" : "translate-x-0.5" }`} />
         </button>
-      ) }],
-    },
-    {
-      title: "Language",
-      items: [{ icon: Globe, label: "Display Language", sub: "Currently: English", control: (
-        <select className="text-sm border border-slate-200 dark:border-slate-600 rounded-lg px-3 py-1.5 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200">
-          <option>English</option><option>Hindi</option><option>Nepali</option>
-        </select>
       ) }],
     },
   ];

@@ -44,6 +44,8 @@ async def _registration_conflict_detail(
     username: str,
 ) -> str | None:
     """Return a user-facing duplicate message for canonicalized identities."""
+    email = email.strip().lower()
+    username = username.strip().lower()
     result = await db.execute(
         select(User).where(
             (func.lower(User.email) == email.lower())
@@ -54,9 +56,9 @@ async def _registration_conflict_detail(
     if not existing_user:
         return None
     if existing_user.email.strip().lower() == email.lower():
-        return "That email is already registered"
+        return "Email already registered. Please use another email address."
     if existing_user.username.strip().lower() == username.lower():
-        return "That username is already taken"
+        return "Username already exists. Please choose another username."
     return "Email or username already registered"
 
 
@@ -65,8 +67,10 @@ async def register(
     user_data: UserCreate,
     db: AsyncSession = Depends(get_db),
 ):
+    normalized_email = str(user_data.email).strip().lower()
+    normalized_username = user_data.username.strip().lower()
     conflict_detail = await _registration_conflict_detail(
-        db, str(user_data.email), user_data.username
+        db, normalized_email, normalized_username
     )
     if conflict_detail:
         raise HTTPException(
@@ -85,8 +89,8 @@ async def register(
 
     hashed_password = get_password_hash(user_data.password)
     new_user = User(
-        email=user_data.email,
-        username=user_data.username,
+        email=normalized_email,
+        username=normalized_username,
         full_name=user_data.full_name,
         role=role_value,
         hashed_password=hashed_password,

@@ -10,7 +10,7 @@ from datetime import date
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import get_current_user, get_current_user_id, require_super_admin
@@ -409,6 +409,22 @@ async def khalti_list_payments(
 ):
     """List the authenticated user's recent Khalti payments."""
     return await khalti_service.list_user_payments(db, user.id, limit=limit)
+
+
+@khalti_router.delete("/payments")
+async def khalti_delete_payments(
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Delete the authenticated user's visible payment history only.
+
+    This does not change subscription state or contact Khalti. It removes the
+    local history rows belonging to the current user and is intentionally
+    scoped by user_id so one account cannot affect another account's records.
+    """
+    result = await db.execute(delete(Payment).where(Payment.user_id == user.id))
+    await db.commit()
+    return {"deleted_count": result.rowcount or 0}
 
 
 @khalti_router.get("/config")

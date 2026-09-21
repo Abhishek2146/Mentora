@@ -20,6 +20,7 @@ import {
   Star,
   ChevronDown,
   GraduationCap,
+  Trash2,
 } from "lucide-react";
 import { subscriptionService } from "@/services/subscriptionService";
 import type {
@@ -82,6 +83,11 @@ export default function Subscription() {
   const [verifyBanner, setVerifyBanner] = useState<{ type: "success" | "error" | "info"; msg: string } | null>(null);
   const [verifying, setVerifying] = useState(false);
   const [selectedCycle, setSelectedCycle] = useState<BillingCycle>("YEARLY");
+  const [deletingHistory, setDeletingHistory] = useState(false);
+  const [deleteToast, setDeleteToast] = useState<{
+    type: "confirm" | "success" | "error";
+    message: string;
+  } | null>(null);
 
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -191,6 +197,32 @@ export default function Subscription() {
     }
   };
 
+  const handleDeletePaymentHistory = () => {
+    setDeleteToast({
+      type: "confirm",
+      message: "Delete payment history? This cannot be undone. Your subscription will not be changed.",
+    });
+  };
+
+  const confirmDeletePaymentHistory = async () => {
+    setDeletingHistory(true);
+    setPayError("");
+    try {
+      await subscriptionService.clearMyPayments();
+      setPayments([]);
+      setDeleteToast({ type: "success", message: "Payment history deleted." });
+      window.setTimeout(() => setDeleteToast(null), 3500);
+    } catch (e: any) {
+      const detail = e?.response?.data?.detail;
+      setDeleteToast({
+        type: "error",
+        message: typeof detail === "string" ? detail : "Could not delete payment history. Please try again.",
+      });
+    } finally {
+      setDeletingHistory(false);
+    }
+  };
+
   // Filter out note generation from usage display safely
   const activeUsageFeatures = usage?.features.filter(
     f => (f.usage_type as string) !== "NOTE_GENERATION"
@@ -199,6 +231,39 @@ export default function Subscription() {
   return (
     <AppLayout title="Subscription">
       <div className="max-w-6xl mx-auto space-y-8 pb-12">
+        {deleteToast && (
+          <div
+            role="status"
+            className={`fixed bottom-5 right-5 z-[60] w-96 max-w-[calc(100vw-2.5rem)] rounded-2xl border p-4 shadow-2xl ${
+              deleteToast.type === "confirm"
+                ? "border-amber-200 bg-white text-slate-700 dark:border-amber-800 dark:bg-slate-900 dark:text-slate-200"
+                : deleteToast.type === "success"
+                ? "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/70 dark:text-emerald-200"
+                : "border-danger-200 bg-danger-50 text-danger-800 dark:border-danger-800 dark:bg-danger-950/70 dark:text-danger-200"
+            }`}
+          >
+            <p className="text-sm font-semibold leading-relaxed">{deleteToast.message}</p>
+            {deleteToast.type === "confirm" && (
+              <div className="mt-3 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setDeleteToast(null)}
+                  className="rounded-lg px-3 py-1.5 text-xs font-bold text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={confirmDeletePaymentHistory}
+                  disabled={deletingHistory}
+                  className="rounded-lg bg-danger-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-danger-700 disabled:opacity-50"
+                >
+                  {deletingHistory ? "Deleting…" : "Delete"}
+                </button>
+              </div>
+            )}
+          </div>
+        )}
         {/* Error Notification */}
         {error && (
           <div className="rounded-2xl p-4 flex items-center gap-3 bg-danger-50 text-danger-600 dark:bg-danger-900/20 dark:text-danger-400 border border-danger-200 dark:border-danger-800">
@@ -643,12 +708,22 @@ export default function Subscription() {
                     <Receipt className="w-5 h-5 text-primary-500" />
                     Payment History
                   </h3>
-                  <button
-                    onClick={reload}
-                    className="text-xs text-slate-500 hover:text-slate-900 dark:hover:text-white font-semibold flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 transition-colors"
-                  >
-                    <RefreshCw className="w-3.5 h-3.5" /> Refresh
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={reload}
+                      className="text-xs text-slate-500 hover:text-slate-900 dark:hover:text-white font-semibold flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 transition-colors"
+                    >
+                      <RefreshCw className="w-3.5 h-3.5" /> Refresh
+                    </button>
+                    <button
+                      onClick={handleDeletePaymentHistory}
+                      disabled={deletingHistory}
+                      className="text-xs text-danger-600 hover:text-danger-700 dark:text-danger-400 font-semibold flex items-center gap-1 px-2.5 py-1 rounded-lg bg-danger-50 dark:bg-danger-900/20 transition-colors disabled:opacity-50"
+                    >
+                      {deletingHistory ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                      {deletingHistory ? "Deleting…" : "Delete history"}
+                    </button>
+                  </div>
                 </div>
 
                 <div className="overflow-x-auto">

@@ -46,7 +46,13 @@ def normalize_email(email: str) -> str:
 
 def is_valid_email(email: str) -> bool:
     """Return True when the email has a proper, well-formed structure."""
-    return bool(EMAIL_REGEX.fullmatch(normalize_email(email)))
+    normalized = normalize_email(email)
+    if ".." in normalized:
+        return False
+    local_part, _, domain = normalized.rpartition("@")
+    if not local_part or local_part.startswith(".") or local_part.endswith("."):
+        return False
+    return bool(EMAIL_REGEX.fullmatch(normalized)) and bool(domain)
 
 
 def get_email_domain(email: str) -> str | None:
