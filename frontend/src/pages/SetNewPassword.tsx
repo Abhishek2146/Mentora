@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { useLocation, Link, useSearchParams, useNavigate } from "react-router-dom";
-import { GraduationCap, Lock, Eye, EyeOff, CheckCircle2, AlertCircle } from "lucide-react";
+import { Lock, Eye, EyeOff, CheckCircle2, AlertCircle } from "lucide-react";
 import { useAuthStore } from "@/store/authStore";
+import logo from "@/assets/logo.png";
 
 export default function SetNewPassword() {
   const location = useLocation();
@@ -49,8 +50,8 @@ export default function SetNewPassword() {
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-primary-50 to-secondary-50 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 flex items-center justify-center p-4">
       <div className="w-full max-w-sm">
         <div className="flex flex-col items-center gap-3 mb-8">
-          <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-primary-500 to-secondary-500 flex items-center justify-center">
-            <GraduationCap className="w-8 h-8 text-white" />
+          <div className="w-16 h-16 rounded-2xl bg-white dark:bg-[#222120] flex items-center justify-center shadow-glow-primary border border-[#D6CBEC]/60 dark:border-[#383533] overflow-hidden">
+            <img src={logo} alt="Mentora logo" className="w-14 h-14 object-contain" />
           </div>
           <h1 className="text-2xl font-black gradient-text">Mentora</h1>
         </div>

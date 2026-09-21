@@ -21,10 +21,10 @@ export const quizService = {
     return res.data;
   },
 
-  async generateMCQ(topic: string, difficulty: string, count = 5) {
+  async generateMCQ(topic: string, difficulty: string, count = 5, syllabusId?: number) {
     const res = await apiClient.post(
       "/api/v1/quizzes/generate-mcq",
-      { topic, difficulty, count },
+      { topic, difficulty, count, syllabus_id: syllabusId ?? null },
       { timeout: 300000 }
     );
     return res.data;

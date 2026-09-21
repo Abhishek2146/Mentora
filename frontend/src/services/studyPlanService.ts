@@ -15,6 +15,8 @@ export interface StudyPlan {
   description: string | null;
   start_date: string;
   end_date: string | null;
+  /** ISO date string, e.g. "2026-09-25" */
+  exam_date: string | null;
   syllabus_id: number | null;
   is_active: boolean;
   plan_data: any;
@@ -30,13 +32,15 @@ export const studyPlanService = {
   async generatePlan(
     syllabusId: number,
     startDate: string,
-    endDate?: string
+    endDate?: string,
+    examDate?: string
   ): Promise<StudyPlan> {
     const res = await apiClient.post("/api/v1/study-plan/", {
       title: "AI Study Plan",
       syllabus_id: syllabusId,
       start_date: startDate,
       end_date: endDate || null,
+      exam_date: examDate || null,
       is_ai_generated: true,
     });
     return res.data;
@@ -44,6 +48,15 @@ export const studyPlanService = {
 
   async getPlan(planId: number): Promise<StudyPlan> {
     const res = await apiClient.get(`/api/v1/study-plan/${planId}`);
+    return res.data;
+  },
+
+  /** Update any combination of plan fields, including exam_date. */
+  async updatePlan(
+    planId: number,
+    data: { exam_date?: string | null; end_date?: string | null; is_active?: boolean }
+  ): Promise<StudyPlan> {
+    const res = await apiClient.put(`/api/v1/study-plan/${planId}`, data);
     return res.data;
   },
 

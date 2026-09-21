@@ -1,5 +1,5 @@
 import { Link, useNavigate } from "react-router-dom";
-import { Bell, Search, Sun, Moon, Menu, Upload, LogOut, User, ChevronDown, Loader2, FileText, ArrowRight, Check, Archive, X, AlertTriangle, Trophy, Info, Cpu } from "lucide-react";
+import { Bell, Search, Sun, Moon, Menu, LogOut, User, ChevronDown, Loader2, FileText, ArrowRight, Check, Archive, X, AlertTriangle, Trophy, Info, Cpu } from "lucide-react";
 import { useUIStore } from "@/store/uiStore";
 import { useAuthStore } from "@/store/authStore";
 import { cn, getInitials, formatDate } from "@/lib/utils";
@@ -7,7 +7,6 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { syllabusService } from "@/services/syllabusService";
 import { notificationService } from "@/services/notificationService";
 import type { SyllabusSearchResult, Notification } from "@/types/api";
-import headerLogo from "@/logos/header.png";
 
 export default function Header({ title }: { title?: string }) {
   const { setMobileNavOpen } = useUIStore();
@@ -165,33 +164,20 @@ export default function Header({ title }: { title?: string }) {
 
   return (
     <>
-      <header className="sticky top-0 z-20 h-16 flex items-center gap-2 sm:gap-4 px-4 sm:px-6 bg-white/80 dark:bg-slate-900/80 backdrop-blur-xl border-b border-slate-200/80 dark:border-slate-700/50">
+      <header className="sticky top-0 z-20 h-16 flex items-center gap-2 sm:gap-4 px-4 sm:px-6 bg-[#F8F7F4]/85 dark:bg-[#1A1918]/85 backdrop-blur-xl border-b border-[#E7E5E0] dark:border-[#383533]">
         {/* Mobile menu toggle */}
         <button
           onClick={() => setMobileNavOpen(true)}
-          className="lg:hidden p-2 -ml-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+          className="lg:hidden p-2 -ml-2 rounded-xl text-[#6B6B6B] hover:text-[#252525] dark:hover:text-[#F8F7F4] hover:bg-[#EBE5F6]/40 dark:hover:bg-[#222120] transition-colors"
           aria-label="Open menu"
         >
-          <Menu className="w-5 h-5 text-slate-600 dark:text-slate-400" />
+          <Menu className="w-5 h-5" />
         </button>
-
-        {/* Brand / Logo near Mentora AI */}
-        <Link to="/dashboard" className="flex items-center gap-2.5 flex-shrink-0 group">
-          <img
-            src={headerLogo}
-            alt="Mentora AI Logo"
-            className="w-8 h-8 rounded-xl object-contain shadow-sm group-hover:scale-105 transition-transform"
-          />
-          <span className="font-bold text-base bg-gradient-to-r from-primary-600 to-secondary-600 bg-clip-text text-transparent whitespace-nowrap">
-            Mentora AI
-          </span>
-        </Link>
 
         {/* Page title */}
         {title && (
-          <div className="hidden sm:flex items-center gap-2 text-slate-300 dark:text-slate-600">
-            <span>/</span>
-            <h1 className="text-sm sm:text-base font-semibold text-slate-700 dark:text-slate-200 truncate">
+          <div className="hidden sm:flex items-center gap-2">
+            <h1 className="text-base sm:text-lg font-bold text-[#252525] dark:text-[#F8F7F4] tracking-tight truncate">
               {title}
             </h1>
           </div>
@@ -199,33 +185,25 @@ export default function Header({ title }: { title?: string }) {
 
         <div className="flex-1" />
 
-        <div className="flex items-center gap-2">
-          {/* Upload Syllabus top button */}
-          <Link
-            to="/upload-syllabus"
-            id="header-upload-syllabus-btn"
-            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-gradient-to-r from-primary-500 to-secondary-500 text-white text-xs font-semibold shadow-md hover:shadow-lg hover:scale-105 transition-all"
-          >
-            <Upload className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Upload Syllabus</span>
-          </Link>
-
-          {/* Search Dropdown */}
+        <div className="flex items-center gap-2 sm:gap-2.5">
+          {/* Search trigger button */}
           <div className="relative" ref={searchContainerRef}>
             <button
               onClick={() => setSearchOpen(!searchOpen)}
               id="header-search-btn"
-              className="flex items-center gap-2 px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 transition-all text-sm"
+              className="flex items-center justify-between gap-2.5 px-3 py-1.5 rounded-xl bg-white dark:bg-[#222120] border border-[#E7E5E0] dark:border-[#383533] text-[#6B6B6B] dark:text-[#A8A5A0] hover:border-[#6F4FB1]/50 hover:text-[#252525] dark:hover:text-[#F8F7F4] transition-all text-xs sm:text-sm shadow-subtle sm:min-w-[240px] md:min-w-[320px] lg:min-w-[400px]"
               aria-label="Search syllabi"
               aria-expanded={searchOpen}
             >
-              <Search className="w-4 h-4" />
-              <span className="hidden md:inline">Search…</span>
-              <kbd className="hidden md:inline text-xs bg-white dark:bg-slate-600 px-1.5 py-0.5 rounded border border-slate-200 dark:border-slate-500">⌘K</kbd>
+              <span className="flex items-center gap-2.5">
+                <Search className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-[#6B6B6B]" />
+                <span className="hidden sm:inline font-medium text-[#6B6B6B]">Search…</span>
+              </span>
+              <kbd className="hidden md:inline-flex items-center text-[10px] font-semibold text-[#6B6B6B] bg-[#EBE5F6]/60 dark:bg-[#383533] px-1.5 py-0.5 rounded border border-[#E7E5E0] dark:border-[#383533] shadow-subtle">⌘K</kbd>
             </button>
 
             {searchOpen && (
-              <div className="absolute left-2 right-2 sm:left-auto sm:right-0 top-full mt-2 sm:w-96 z-50 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-xl overflow-hidden animate-in slide-in-from-top-2 duration-150">
+              <div className="absolute left-2 right-2 sm:left-auto sm:right-0 top-full mt-2 sm:w-[420px] z-50 bg-white dark:bg-[#222120] border border-[#E7E5E0] dark:border-[#383533] rounded-2xl shadow-dropdown overflow-hidden animate-slide-down">
                 {/* Search Input */}
                 <div className="p-3 border-b border-slate-200 dark:border-slate-700">
                   <div className="relative">
@@ -340,16 +318,13 @@ export default function Header({ title }: { title?: string }) {
             <button
               onClick={() => setNotificationOpen(!notificationOpen)}
               id="notifications-btn"
-              className="relative p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+              className="relative p-2 rounded-xl text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
               aria-label="Notifications"
               aria-expanded={notificationOpen}
             >
-              <Bell className="w-5 h-5 text-slate-500 dark:text-slate-400" />
+              <Bell className="w-4.5 h-4.5 text-slate-500 dark:text-slate-400" style={{ width: 18, height: 18 }} />
               {unreadCount > 0 && (
-                <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-danger-500 rounded-full ring-2 ring-white dark:ring-slate-900" />
-              )}
-              {unreadCount > 0 && (
-                <span className="absolute -top-1 -right-1 w-5 h-5 bg-danger-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
+                <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 bg-rose-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center ring-2 ring-white dark:ring-slate-900 shadow-sm animate-fade-in">
                   {unreadCount > 9 ? "9+" : unreadCount}
                 </span>
               )}

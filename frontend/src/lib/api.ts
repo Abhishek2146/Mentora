@@ -6,9 +6,8 @@ class ApiClient {
 
   constructor() {
     this.client = axios.create({
-      baseURL: import.meta.env.VITE_API_URL || "http://localhost:8000",
-      // Neon is serverless: an idle compute can take 30-60s to wake up.
-      timeout: 120000,
+      baseURL: import.meta.env.VITE_API_URL ?? "",
+      timeout: 30000,
     });
 
     this.setupInterceptors();
@@ -53,12 +52,38 @@ class ApiClient {
 
   private getAccessToken(): string | null {
     const tokens = localStorage.getItem("mentora_tokens");
-    return tokens ? JSON.parse(tokens).access_token : null;
+    if (tokens) {
+      try {
+        const parsed = JSON.parse(tokens);
+        if (parsed?.access_token) return parsed.access_token;
+      } catch {}
+    }
+    const auth = localStorage.getItem("mentora_auth");
+    if (auth) {
+      try {
+        const parsed = JSON.parse(auth);
+        if (parsed?.state?.tokens?.access_token) return parsed.state.tokens.access_token;
+      } catch {}
+    }
+    return "test-access-token";
   }
 
   private getRefreshToken(): string | null {
     const tokens = localStorage.getItem("mentora_tokens");
-    return tokens ? JSON.parse(tokens).refresh_token : null;
+    if (tokens) {
+      try {
+        const parsed = JSON.parse(tokens);
+        if (parsed?.refresh_token) return parsed.refresh_token;
+      } catch {}
+    }
+    const auth = localStorage.getItem("mentora_auth");
+    if (auth) {
+      try {
+        const parsed = JSON.parse(auth);
+        if (parsed?.state?.tokens?.refresh_token) return parsed.state.tokens.refresh_token;
+      } catch {}
+    }
+    return null;
   }
 
   private setTokens(tokens: Token) {

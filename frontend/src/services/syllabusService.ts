@@ -4,6 +4,19 @@ export type { Syllabus } from "@/types";
 
 const PROCESSING_TIMEOUT = 300000;
 
+// Simple event emitter for syllabus changes
+type SyllabusChangeListener = () => void;
+const listeners = new Set<SyllabusChangeListener>();
+
+function notifySyllabusChange() {
+  listeners.forEach((fn) => fn());
+}
+
+export function onSyllabusChange(fn: SyllabusChangeListener) {
+  listeners.add(fn);
+  return () => listeners.delete(fn);
+}
+
 export const syllabusService = {
   async uploadSyllabus(file: File, title: string, description?: string) {
     const formData = new FormData();
@@ -15,6 +28,7 @@ export const syllabusService = {
       formData,
       { timeout: PROCESSING_TIMEOUT }
     );
+    notifySyllabusChange();
     return res.data;
   },
 
@@ -32,6 +46,7 @@ export const syllabusService = {
 
   async deleteSyllabus(syllabusId: number) {
     await apiClient.delete(`/api/v1/syllabus/${syllabusId}`);
+    notifySyllabusChange();
   },
 
   async searchSyllabi(params: SyllabusSearchParams): Promise<SyllabusSearchResponse> {

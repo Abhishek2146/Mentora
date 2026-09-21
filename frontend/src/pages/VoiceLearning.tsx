@@ -178,7 +178,7 @@ export default function VoiceLearning() {
           setMessages((prev) => [...prev, userMsg, assistantMsg]);
 
           if (result.audio_url) {
-            const baseUrl = import.meta.env.VITE_API_URL || "http://localhost:8000";
+            const baseUrl = import.meta.env.VITE_API_URL ?? "";
             playAudio(`${baseUrl}${result.audio_url}`);
           }
         } catch (e: any) {
@@ -233,35 +233,20 @@ export default function VoiceLearning() {
     setMessages((prev) => [...prev, userMsg]);
 
     try {
-      const formData = new FormData();
-      const emptyBlob = new Blob([], { type: "audio/webm" });
-      formData.append("audio", emptyBlob, "empty.webm");
-      if (selectedSyllabusId) formData.append("syllabus_id", selectedSyllabusId.toString());
-      if (sessionId) formData.append("session_id", sessionId.toString());
-
-      const res = await fetch(
-        `${import.meta.env.VITE_API_URL || "http://localhost:8000"}/api/v1/voice/speak?text=${encodeURIComponent(text)}`,
-        {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem("mentora_tokens") ? JSON.parse(localStorage.getItem("mentora_tokens")!).access_token : ""}`,
-          },
-        }
-      );
-      const data = await res.json();
+      const result = await voiceService.speak(text);
 
       const assistantMsg: Message = {
         id: (Date.now() + 1).toString(),
         role: "assistant",
         content: text,
-        audioUrl: data.audio_url ?? undefined,
+        audioUrl: result.audio_url ?? undefined,
         time: new Date(),
       };
       setMessages((prev) => [...prev, assistantMsg]);
 
-      if (data.audio_url) {
-        const baseUrl = import.meta.env.VITE_API_URL || "http://localhost:8000";
-        playAudio(`${baseUrl}${data.audio_url}`);
+      if (result.audio_url) {
+        const baseUrl = import.meta.env.VITE_API_URL ?? "";
+        playAudio(`${baseUrl}${result.audio_url}`);
       }
     } catch {
       setMessages((prev) => [
@@ -369,7 +354,7 @@ export default function VoiceLearning() {
                 {m.role === "assistant" && m.audioUrl && (
                   <button
                     onClick={() => {
-                      const baseUrl = import.meta.env.VITE_API_URL || "http://localhost:8000";
+                      const baseUrl = import.meta.env.VITE_API_URL ?? "";
                       const url = m.audioUrl!.startsWith("http") ? m.audioUrl! : `${baseUrl}${m.audioUrl}`;
                       if (playingAudio === url) {
                         audioRef.current?.pause();
@@ -381,13 +366,13 @@ export default function VoiceLearning() {
                     className="mt-2 flex items-center gap-1.5 text-xs text-primary-600 dark:text-primary-400 hover:text-primary-700 transition-colors"
                   >
                     {playingAudio ===
-                    `${import.meta.env.VITE_API_URL || "http://localhost:8000"}${m.audioUrl}` ? (
+                    `${import.meta.env.VITE_API_URL ?? ""}${m.audioUrl}` ? (
                       <Pause className="w-3.5 h-3.5" />
                     ) : (
                       <Play className="w-3.5 h-3.5" />
                     )}
                     {playingAudio ===
-                    `${import.meta.env.VITE_API_URL || "http://localhost:8000"}${m.audioUrl}`
+                    `${import.meta.env.VITE_API_URL ?? ""}${m.audioUrl}`
                       ? "Playing..."
                       : "Play audio"}
                   </button>

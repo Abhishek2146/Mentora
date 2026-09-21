@@ -34,7 +34,6 @@ export const voiceService = {
     formData.append("voice", voice);
 
     const res = await apiClient.post<VoiceResponse>("/api/v1/voice/listen", formData, {
-      headers: { "Content-Type": "multipart/form-data" },
       timeout: 120000,
     });
     return res.data;
