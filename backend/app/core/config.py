@@ -202,6 +202,28 @@ class Settings(BaseSettings):
     ALLOWED_EXTENSIONS: str = "pdf,png,jpg,jpeg,gif,doc,docx,txt"
 
     # ============================================================
+    # AI Text Detection (multi-signal statistical detector)
+    # ============================================================
+
+    # Score bands translate model output to human-readable labels:
+    #   < AI_DETECTION_LOW_THRESHOLD    -> likely_human
+    #   [LOW, MEDIUM)                   -> uncertain
+    #   [MEDIUM, HIGH)                  -> potentially_ai_generated
+    #   >= HIGH                         -> strong_ai_like_signals
+    AI_DETECTION_LOW_THRESHOLD: float = 0.30
+    AI_DETECTION_MEDIUM_THRESHOLD: float = 0.60
+    AI_DETECTION_HIGH_THRESHOLD: float = 0.80
+    # Minimum analyzable prose words before a verdict is returned; below
+    # this the response reports "Insufficient text for reliable detection".
+    AI_DETECTION_MIN_WORDS: int = 40
+
+    # Optional ML model blending (default OFF so the app runs offline).
+    AI_DETECTOR_MODEL_ENABLED: bool = False
+    AI_DETECTOR_MODEL_NAME: str = ""
+    # How much the model shifts the document score (0.0 = statistical only).
+    AI_DETECTOR_MODEL_BLEND_WEIGHT: float = 0.3
+
+    # ============================================================
     # Email / SMTP
     # ============================================================
 
