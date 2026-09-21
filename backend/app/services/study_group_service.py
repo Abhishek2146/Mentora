@@ -51,7 +51,9 @@ class StudyGroupService:
         description: Optional[str] = None,
     ) -> StudyGroupOut:
         """Create a new study group. Creator becomes admin."""
+        from app.models.study_group import generate_invite_token as _gen_token
         invite_code = generate_invite_code()
+        invite_token = _gen_token()
         now = datetime.now(timezone.utc)
 
         group = StudyGroup(
@@ -59,6 +61,7 @@ class StudyGroupService:
             description=description,
             owner_id=user_id,
             invite_code=invite_code,
+            invite_token=invite_token,
             created_at=now,
             updated_at=now,
         )
@@ -91,6 +94,7 @@ class StudyGroupService:
             name=group.name,
             description=group.description,
             invite_code=group.invite_code,
+            invite_token=group.invite_token,
             is_active=group.is_active,
             owner_id=group.owner_id,
             created_at=group.created_at,
@@ -117,6 +121,7 @@ class StudyGroupService:
             name=group.name,
             description=group.description,
             invite_code=group.invite_code,
+            invite_token=group.invite_token,
             is_active=group.is_active,
             owner_id=group.owner_id,
             created_at=group.created_at,
@@ -150,6 +155,7 @@ class StudyGroupService:
                 name=g.name,
                 description=g.description,
                 invite_code=g.invite_code,
+                invite_token=g.invite_token,
                 is_active=g.is_active,
                 owner_id=g.owner_id,
                 created_at=g.created_at,
@@ -364,7 +370,8 @@ class StudyGroupService:
         return True
 
     async def send_message(
-        self, user_id: int, group_id: int, content: str, message_type: str = "user"
+        self, user_id: int, group_id: int, content: str, message_type: str = "user",
+        reply_to_message_id: Optional[int] = None,
     ) -> Optional[StudyGroupMessageOut]:
         """Send a message to a study group (members only)."""
         # Check if user is a member
@@ -378,12 +385,24 @@ class StudyGroupService:
         if not member_result.scalars().first():
             return None  # User is not a member
 
+        # Validate reply_to_message if provided
+        if reply_to_message_id is not None:
+            reply_msg = await self.db.execute(
+                select(StudyGroupMessage).where(
+                    StudyGroupMessage.id == reply_to_message_id,
+                    StudyGroupMessage.group_id == group_id,
+                )
+            )
+            if not reply_msg.scalars().first():
+                reply_to_message_id = None  # Invalid reply target, ignore
+
         now = datetime.now(timezone.utc)
         message = StudyGroupMessage(
             group_id=group_id,
             sender_id=user_id,
             content=content,
             message_type=message_type,
+            reply_to_message_id=reply_to_message_id,
             created_at=now,
             updated_at=now,
         )
@@ -393,26 +412,7 @@ class StudyGroupService:
         await self.db.commit()
         await self.db.refresh(message)
 
-        # Refresh with sender info
-        sender_name = None
-        if user_id:
-            user_result = await self.db.execute(
-                select(User).where(User.id == user_id)
-            )
-            sender = user_result.scalars().first()
-            if sender:
-                sender_name = sender.full_name or sender.username
-
-        return StudyGroupMessageOut(
-            id=message.id,
-            sender_id=user_id,
-            content=message.content,
-            group_id=message.group_id,
-            message_type=message.message_type,
-            sender_name=sender_name,
-            created_at=message.created_at,
-            updated_at=message.updated_at,
-        )
+        return await self._build_message_out(message)
 
     async def save_ai_message(
         self, group_id: int, content: str
@@ -432,56 +432,218 @@ class StudyGroupService:
         await self.db.commit()
         await self.db.refresh(message)
 
+        return await self._build_message_out(message)
+
+    async def _build_message_out(self, msg_row: StudyGroupMessage) -> StudyGroupMessageOut:
+        """Build a StudyGroupMessageOut with sender info, reply_to, and forwarded_from."""
+        sender_name = None
+        if msg_row.sender_id:
+            user_result = await self.db.execute(
+                select(User).where(User.id == msg_row.sender_id)
+            )
+            sender = user_result.scalars().first()
+            if sender:
+                sender_name = sender.full_name or sender.username
+        elif msg_row.message_type == "ai":
+            sender_name = "Mentora AI"
+
+        # Build reply_to preview
+        reply_to = None
+        if msg_row.reply_to_message_id:
+            reply_msg_result = await self.db.execute(
+                select(StudyGroupMessage).where(StudyGroupMessage.id == msg_row.reply_to_message_id)
+            )
+            reply_msg = reply_msg_result.scalars().first()
+            if reply_msg:
+                reply_sender_name = None
+                if reply_msg.sender_id:
+                    reply_user = await self.db.execute(select(User).where(User.id == reply_msg.sender_id))
+                    reply_user_obj = reply_user.scalars().first()
+                    if reply_user_obj:
+                        reply_sender_name = reply_user_obj.full_name or reply_user_obj.username
+                elif reply_msg.message_type == "ai":
+                    reply_sender_name = "Mentora AI"
+                reply_to = {
+                    "id": reply_msg.id,
+                    "sender_name": reply_sender_name,
+                    "content": reply_msg.content[:200],
+                    "message_type": reply_msg.message_type,
+                }
+
+        # Build forwarded_from preview
+        forwarded_from = None
+        if msg_row.forwarded_from_id:
+            fwd_msg_result = await self.db.execute(
+                select(StudyGroupMessage).where(StudyGroupMessage.id == msg_row.forwarded_from_id)
+            )
+            fwd_msg = fwd_msg_result.scalars().first()
+            if fwd_msg:
+                fwd_sender_name = None
+                if fwd_msg.sender_id:
+                    fwd_user = await self.db.execute(select(User).where(User.id == fwd_msg.sender_id))
+                    fwd_user_obj = fwd_user.scalars().first()
+                    if fwd_user_obj:
+                        fwd_sender_name = fwd_user_obj.full_name or fwd_user_obj.username
+                elif fwd_msg.message_type == "ai":
+                    fwd_sender_name = "Mentora AI"
+                forwarded_from = {
+                    "id": fwd_msg.id,
+                    "sender_name": fwd_sender_name,
+                    "content": fwd_msg.content[:200],
+                }
+
         return StudyGroupMessageOut(
-            id=message.id,
-            sender_id=None,
-            content=message.content,
-            group_id=message.group_id,
-            message_type="ai",
-            sender_name="Mentora",
-            created_at=message.created_at,
-            updated_at=message.updated_at,
+            id=msg_row.id,
+            sender_id=msg_row.sender_id,
+            content=msg_row.content,
+            group_id=msg_row.group_id,
+            message_type=msg_row.message_type,
+            sender_name=sender_name,
+            created_at=msg_row.created_at,
+            updated_at=msg_row.updated_at,
+            edited_at=msg_row.edited_at,
+            deleted_at=msg_row.deleted_at,
+            is_deleted=msg_row.deleted_at is not None,
+            reply_to=reply_to,
+            forwarded_from=forwarded_from,
         )
 
-    async def get_messages(
-        self, group_id: int, limit: int = 50, before: Optional[datetime] = None
+    async def edit_message(
+        self, user_id: int, group_id: int, message_id: int, new_content: str
+    ) -> Optional[StudyGroupMessageOut]:
+        """Edit a message. Only the sender can edit their own messages."""
+        result = await self.db.execute(
+            select(StudyGroupMessage).where(
+                StudyGroupMessage.id == message_id,
+                StudyGroupMessage.group_id == group_id,
+            )
+        )
+        message = result.scalars().first()
+        if not message:
+            return None
+        if message.sender_id != user_id:
+            return None  # Can't edit others' messages
+        if message.deleted_at is not None:
+            return None  # Can't edit deleted messages
+        if message.message_type == "ai":
+            return None  # Can't edit AI messages
+
+        message.content = new_content
+        message.edited_at = datetime.now(timezone.utc)
+        await self.db.commit()
+        await self.db.refresh(message)
+
+        return await self._build_message_out(message)
+
+    async def delete_message(
+        self, user_id: int, group_id: int, message_id: int
+    ) -> Optional[StudyGroupMessageOut]:
+        """Soft-delete a message. Any active group member can delete any message
+        (removed for everyone, like Messenger). Edit is still restricted to the sender."""
+        result = await self.db.execute(
+            select(StudyGroupMessage).where(
+                StudyGroupMessage.id == message_id,
+                StudyGroupMessage.group_id == group_id,
+            )
+        )
+        message = result.scalars().first()
+        if not message:
+            return None
+        if message.deleted_at is not None:
+            return None  # Already deleted
+
+        # Check the user is an active member of the group
+        member_check = await self.db.execute(
+            select(StudyGroupMember).where(
+                StudyGroupMember.group_id == group_id,
+                StudyGroupMember.user_id == user_id,
+                StudyGroupMember.status == "active",
+            )
+        )
+        if not member_check.scalars().first():
+            return None  # Not a member
+
+        message.deleted_at = datetime.now(timezone.utc)
+        message.content = "This message has been deleted"
+        await self.db.commit()
+        await self.db.refresh(message)
+
+        return await self._build_message_out(message)
+
+    async def forward_message(
+        self, user_id: int, source_group_id: int, message_id: int, target_group_ids: List[int]
     ) -> List[StudyGroupMessageOut]:
-        """Get messages from a study group with pagination."""
+        """Forward a message to one or more groups."""
+        # Get the original message
+        result = await self.db.execute(
+            select(StudyGroupMessage).where(
+                StudyGroupMessage.id == message_id,
+                StudyGroupMessage.group_id == source_group_id,
+            )
+        )
+        original = result.scalars().first()
+        if not original or original.deleted_at is not None:
+            return []
+
+        forwarded_messages = []
+        now = datetime.now(timezone.utc)
+
+        for target_group_id in target_group_ids:
+            # Check user is a member of target group
+            member_check = await self.db.execute(
+                select(StudyGroupMember).where(
+                    StudyGroupMember.group_id == target_group_id,
+                    StudyGroupMember.user_id == user_id,
+                    StudyGroupMember.status == "active",
+                )
+            )
+            if not member_check.scalars().first():
+                continue
+
+            fwd_msg = StudyGroupMessage(
+                group_id=target_group_id,
+                sender_id=user_id,
+                content=original.content,
+                message_type=original.message_type,
+                forwarded_from_id=original.id,
+                created_at=now,
+                updated_at=now,
+            )
+            self.db.add(fwd_msg)
+            await self.db.flush()
+            await self.db.refresh(fwd_msg)
+            forwarded_messages.append(await self._build_message_out(fwd_msg))
+
+        await self.db.commit()
+        return forwarded_messages
+
+    async def get_messages(
+        self, group_id: int, limit: int = 50, before: Optional[int] = None
+    ) -> List[StudyGroupMessageOut]:
+        """Get messages from a study group with cursor-based pagination.
+
+        Args:
+            group_id: The study group ID
+            limit: Maximum number of messages to return
+            before: If provided, return messages with id < before (for older messages)
+        """
         query = (
             select(StudyGroupMessage)
             .where(StudyGroupMessage.group_id == group_id)
-            .order_by(StudyGroupMessage.created_at.asc())
-            .limit(limit)
         )
+        if before is not None:
+            query = query.where(StudyGroupMessage.id < before)
+        query = query.order_by(StudyGroupMessage.created_at.desc()).limit(limit)
 
         result = await self.db.execute(query)
         msg_rows = result.scalars().all()
 
+        # Reverse to get chronological order
+        msg_rows = list(reversed(msg_rows))
+
         messages = []
         for msg_row in msg_rows:
-            sender_name = None
-            if msg_row.sender_id:
-                user_result = await self.db.execute(
-                    select(User).where(User.id == msg_row.sender_id)
-                )
-                sender = user_result.scalars().first()
-                if sender:
-                    sender_name = sender.full_name or sender.username
-            elif msg_row.message_type == "ai":
-                sender_name = "Mentora"
-
-            messages.append(
-                StudyGroupMessageOut(
-                    id=msg_row.id,
-                    sender_id=msg_row.sender_id,
-                    content=msg_row.content,
-                    group_id=msg_row.group_id,
-                    message_type=msg_row.message_type,
-                    sender_name=sender_name,
-                    created_at=msg_row.created_at,
-                    updated_at=msg_row.updated_at,
-                )
-            )
+            messages.append(await self._build_message_out(msg_row))
 
         return messages
 

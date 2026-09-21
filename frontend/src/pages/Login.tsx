@@ -6,11 +6,12 @@ import logo from "@/assets/logo.png";
 
 export default function Login() {
   const navigate = useNavigate();
-  const { login, isLoading } = useAuthStore();
+const { login, resendVerification, isLoading } = useAuthStore();
   const [email, setEmail]       = useState("");
   const [password, setPassword] = useState("");
   const [showPw, setShowPw]     = useState(false);
   const [error, setError]       = useState("");
+  const [resendMsg, setResendMsg] = useState("");
   const [focused, setFocused]   = useState<string | null>(null);
   const [visible, setVisible]   = useState(false);
 
@@ -23,12 +24,26 @@ export default function Login() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
+    setResendMsg("");
     try {
       await login(email, password);
       const role = useAuthStore.getState().user?.role;
       navigate(role === "admin" ? "/admin/dashboard" : "/dashboard");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Invalid email or password");
+    }
+  };
+
+  const needsVerification = error.includes("verify your email");
+
+  const handleResend = async () => {
+    setResendMsg("");
+    setError("");
+    try {
+      await resendVerification(email);
+      setResendMsg("A new confirmation email has been sent.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to resend verification email.");
     }
   };
 
@@ -118,6 +133,19 @@ export default function Login() {
             >
               {error}
             </div>
+          )}
+
+          {resendMsg && (
+            <div className="p-3 bg-success-50 dark:bg-success-900/20 border border-success-200 dark:border-success-700 rounded-xl text-sm text-success-600 dark:text-success-400">
+              {resendMsg}
+            </div>
+          )}
+
+          {needsVerification && (
+            <button id="login-resend-verification" type="button" onClick={handleResend} disabled={isLoading}
+              className="w-full text-center text-sm text-primary-600 font-semibold hover:underline">
+              {isLoading ? "Sending…" : "Resend confirmation email"}
+            </button>
           )}
 
           <form onSubmit={handleSubmit} className="space-y-4">

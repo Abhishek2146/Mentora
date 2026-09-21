@@ -15,6 +15,15 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.ext.compiler import compiles
+
+
+@compiles(JSONB, "sqlite")
+def _compile_jsonb_sqlite(type_, compiler, **kw):
+    # SQLite has no native JSONB; render the JSON type so schema creation
+    # works when tests run against sqlite+aiosqlite.
+    return "JSON"
 
 from app.core.auth import get_current_user_id
 from app.core.quotas import record_usage, require_ai_quota

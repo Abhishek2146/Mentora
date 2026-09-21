@@ -285,6 +285,23 @@ class LLMService:
             json_mode=False,
         )
 
+    async def generate_json(
+        self,
+        prompt: str,
+        temperature: float = 0.0,
+    ) -> str:
+        """Generate a response using the provider's JSON response mode.
+
+        This is used by classifiers and extractors where accepting arbitrary
+        prose would make a seemingly valid but unreliable result possible.
+        """
+        messages = [HumanMessage(content=prompt)]
+        return await self._ainvoke_text(
+            messages=messages,
+            temperature=temperature,
+            json_mode=True,
+        )
+
     # ================================================================
     # CHAT COMPLETION
     # ================================================================

@@ -3,6 +3,7 @@ Application Configuration.
 """
 
 import os
+import socket
 from typing import List, Optional
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
@@ -53,6 +54,22 @@ def normalize_database_url(url: str) -> str:
 
     new_query = urlencode(clean_params)
     return urlunsplit((scheme, parts.netloc, parts.path, new_query, parts.fragment))
+
+
+def _get_lan_ip() -> str:
+    """Best-effort local network IP of this machine (no external traffic)."""
+    try:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        sock.settimeout(0.1)
+        sock.connect(("8.8.8.8", 80))
+        ip = sock.getsockname()[0]
+        sock.close()
+        return ip
+    except OSError:
+        try:
+            return socket.gethostbyname(socket.gethostname())
+        except OSError:
+            return ""
 
 
 class Settings(BaseSettings):
@@ -247,6 +264,28 @@ class Settings(BaseSettings):
     ALLOWED_EXTENSIONS: str = "pdf,png,jpg,jpeg,gif,doc,docx,txt"
 
     # ============================================================
+    # AI Text Detection (multi-signal statistical detector)
+    # ============================================================
+
+    # Score bands translate model output to human-readable labels:
+    #   < AI_DETECTION_LOW_THRESHOLD    -> likely_human
+    #   [LOW, MEDIUM)                   -> uncertain
+    #   [MEDIUM, HIGH)                  -> potentially_ai_generated
+    #   >= HIGH                         -> strong_ai_like_signals
+    AI_DETECTION_LOW_THRESHOLD: float = 0.30
+    AI_DETECTION_MEDIUM_THRESHOLD: float = 0.60
+    AI_DETECTION_HIGH_THRESHOLD: float = 0.80
+    # Minimum analyzable prose words before a verdict is returned; below
+    # this the response reports "Insufficient text for reliable detection".
+    AI_DETECTION_MIN_WORDS: int = 40
+
+    # Optional ML model blending (default OFF so the app runs offline).
+    AI_DETECTOR_MODEL_ENABLED: bool = False
+    AI_DETECTOR_MODEL_NAME: str = ""
+    # How much the model shifts the document score (0.0 = statistical only).
+    AI_DETECTOR_MODEL_BLEND_WEIGHT: float = 0.3
+
+    # ============================================================
     # Email / SMTP
     # ============================================================
 
@@ -274,18 +313,31 @@ class Settings(BaseSettings):
 
     @property
     def ALLOWED_ORIGINS(self) -> List[str]:
-        """Return allowed frontend/backend origins."""
+        """Return allowed frontend/backend origins.
+
+        LAN-origin hints (like http://192.168.x.x:5173) are appended
+        automatically so friends on the network can open the app.
+        """
 
         origins_str = os.getenv(
             "ALLOWED_ORIGINS",
             "http://localhost:3000,http://localhost:5173,http://127.0.0.1:5173,http://localhost:5174,http://127.0.0.1:5174,http://localhost:8000,http://127.0.0.1:8000",
         )
 
-        return [
+        origins = [
             origin.strip()
             for origin in origins_str.split(",")
             if origin.strip()
         ]
+
+        lan_ip = _get_lan_ip()
+        if lan_ip:
+            for port in ("5173", "5174", "8000"):
+                candidate = f"http://{lan_ip}:{port}"
+                if candidate not in origins:
+                    origins.append(candidate)
+
+        return origins
 
     @property
     def ALLOWED_METHODS(self) -> List[str]:
@@ -336,6 +388,7 @@ class Settings(BaseSettings):
         "STUDY_PLAN_GENERATION": 3,
         "CODING_PROBLEM_GENERATION": 3,
         "SYLLABUS_ANALYSIS": 2,
+        "AI_DETECTION": 3,
     }
 
     SUBSCRIPTION_DAILY_LIMITS: dict = {
@@ -346,6 +399,7 @@ class Settings(BaseSettings):
         "STUDY_PLAN_GENERATION": 30,
         "CODING_PROBLEM_GENERATION": 30,
         "SYLLABUS_ANALYSIS": 20,
+        "AI_DETECTION": 30,
     }
 
     # Per-plan Redis request rate limits (requests per minute).

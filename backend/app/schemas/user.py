@@ -72,7 +72,53 @@ from datetime import datetime
 from enum import Enum
 from typing import Optional
 
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, field_validator
+
+from app.utils.email_validation import (
+    is_valid_email,
+    normalize_email,
+    verify_email_domain,
+    verify_gmail_address,
+)
+
+
+def _check_email_format(value: EmailStr) -> EmailStr:
+    """Normalize an email and ensure it has a proper, well-formed structure."""
+    email = normalize_email(str(value))
+    if not is_valid_email(email):
+        raise ValueError("Please provide a proper, valid email address")
+    return email  # type: ignore[return-value]
+
+
+def _valid_email(value: EmailStr) -> EmailStr:
+    """
+    Normalize and fully verify an email for registration/profile changes.
+
+    In addition to the syntax check, the address's domain must
+    actually receive mail (has MX records) so fake/test domains like
+    ``@no-such-domain.xyz`` are rejected.
+    """
+    email = _check_email_format(value)
+    error = verify_email_domain(str(email))
+    if error:
+        raise ValueError(error)
+    return email
+
+
+def _valid_registration_email(value: EmailStr) -> EmailStr:
+    """Normalize and validate the Gmail-only registration policy."""
+    email = normalize_email(str(value))
+    error = verify_gmail_address(email)
+    if error:
+        raise ValueError(error)
+    return email  # type: ignore[return-value]
+
+
+def _normalize_username(value: str) -> str:
+    """Use one canonical username representation for validation and storage."""
+    if isinstance(value, str):
+        return value.strip().lower()
+    return value
 
 
 class UserRole(str, Enum):
@@ -80,6 +126,7 @@ class UserRole(str, Enum):
 
     STUDENT = "student"
     ADMIN = "admin"
+    SUPER_ADMIN = "super_admin"
 
 
 # ============================================================
@@ -88,6 +135,11 @@ class UserRole(str, Enum):
 
 class UserBase(BaseModel):
     """Common fields used by user schemas."""
+
+    @field_validator("username", mode="before")
+    @classmethod
+    def _normalize_username(cls, v: str) -> str:
+        return _normalize_username(v)
 
     email: EmailStr
 
@@ -126,6 +178,11 @@ class UserCreate(UserBase):
         description="User role: 'student'"
     )
 
+    @field_validator("email")
+    @classmethod
+    def _validate_email(cls, v: EmailStr) -> EmailStr:
+        return _valid_registration_email(v)
+
 
 # ============================================================
 # Admin Registration
@@ -163,6 +220,16 @@ class AdminCreate(BaseModel):
         min_length=1
     )
 
+    @field_validator("email")
+    @classmethod
+    def _validate_email(cls, v: EmailStr) -> EmailStr:
+        return _valid_registration_email(v)
+
+    @field_validator("username", mode="before")
+    @classmethod
+    def _normalize_username(cls, v: str) -> str:
+        return _normalize_username(v)
+
 
 # ============================================================
 # User Login
@@ -185,6 +252,15 @@ class UserLogin(BaseModel):
         max_length=128
     )
 
+    @field_validator("email")
+    @classmethod
+    def _validate_email(cls, v: Optional[EmailStr]) -> Optional[EmailStr]:
+        if v is None:
+            return v
+        # Login only needs a well-formed address; no MX lookup (the account
+        # already exists, so we must not block sign-in on DNS hiccups).
+        return _check_email_format(v)
+
 
 # ============================================================
 # User Update
@@ -192,6 +268,13 @@ class UserLogin(BaseModel):
 
 class UserUpdate(BaseModel):
     """Schema used when updating user information."""
+
+    @field_validator("username", mode="before")
+    @classmethod
+    def _normalize_username(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return v
+        return _normalize_username(v)
 
     email: Optional[EmailStr] = None
 
@@ -210,6 +293,13 @@ class UserUpdate(BaseModel):
         None,
         max_length=500
     )
+
+    @field_validator("email")
+    @classmethod
+    def _validate_email(cls, v: Optional[EmailStr]) -> Optional[EmailStr]:
+        if v is None:
+            return v
+        return _valid_email(v)
 
 
 # ============================================================
@@ -303,6 +393,12 @@ class ForgotPasswordRequest(BaseModel):
 
     email: EmailStr
 
+    @field_validator("email")
+    @classmethod
+    def _validate_email(cls, v: EmailStr) -> EmailStr:
+        # Format-only: reset must work even if DNS is temporarily unavailable.
+        return _check_email_format(v)
+
 
 class ResetPasswordRequest(BaseModel):
     """Schema for reset password request."""
@@ -324,10 +420,17 @@ class VerifyOtpRequest(BaseModel):
     email: EmailStr
     otp: str = Field(..., min_length=6, max_length=6, pattern=r"^\d{6}$")
 
+    @field_validator("email")
+    @classmethod
+    def _validate_email(cls, v: EmailStr) -> EmailStr:
+        # Format-only, matching forgot-password behaviour.
+        return _check_email_format(v)
+
 
 class VerifyOtpResponse(BaseModel):
     """Response after successful OTP verification."""
 
     reset_token: str
     message: str = "OTP verified successfully"
+
 

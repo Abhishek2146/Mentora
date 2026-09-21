@@ -1,6 +1,5 @@
 import apiClient from "@/lib/api";
 import type { SyllabusSearchParams, SyllabusSearchResponse } from "@/types/api";
-export type { Syllabus } from "@/types";
 
 const PROCESSING_TIMEOUT = 300000;
 
@@ -15,6 +14,22 @@ function notifySyllabusChange() {
 export function onSyllabusChange(fn: SyllabusChangeListener) {
   listeners.add(fn);
   return () => listeners.delete(fn);
+}
+
+export interface Syllabus {
+  id: number;
+  user_id: number;
+  title: string;
+  description?: string;
+  file_path?: string;
+  file_type?: string;
+  status: string;
+  is_processed: boolean;
+  is_ai_processed: boolean;
+  ai_summary?: string;
+  processing_error?: string;
+  created_at: string;
+  updated_at: string;
 }
 
 export const syllabusService = {

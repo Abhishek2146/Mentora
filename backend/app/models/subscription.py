@@ -60,6 +60,7 @@ class UsageType(str, Enum):
     STUDY_PLAN_GENERATION = "STUDY_PLAN_GENERATION"
     CODING_PROBLEM_GENERATION = "CODING_PROBLEM_GENERATION"
     SYLLABUS_ANALYSIS = "SYLLABUS_ANALYSIS"
+    AI_DETECTION = "AI_DETECTION"
 
 
 # --------------------------------------------------

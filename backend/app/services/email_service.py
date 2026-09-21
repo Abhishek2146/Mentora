@@ -167,5 +167,119 @@ Go to {frontend_url}/verify-otp?email={to_email} to enter it.
 
         return await self.send_email(to_email, subject, html_content, text_content)
 
+    async def send_verification_email(
+        self,
+        to_email: str,
+        verification_token: str,
+        frontend_url: str,
+    ) -> bool:
+        """
+        Send a registration email-verification email with a confirm button.
+
+        Args:
+            to_email: Recipient email address
+            verification_token: JWT email-verification token
+            frontend_url: Frontend base URL for the verify link
+
+        Returns:
+            True if email sent successfully, False otherwise
+        """
+        verify_link = f"{frontend_url}/verify-email?token={verification_token}"
+
+        subject = f"Confirm your {self.app_name} account"
+
+        html_content = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        </head>
+        <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
+            <div style="background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%); padding: 30px; border-radius: 12px 12px 0 0; text-align: center;">
+                <h1 style="color: white; margin: 0; font-size: 28px;">Mentora</h1>
+                <p style="color: rgba(255,255,255,0.9); margin: 10px 0 0;">Your AI Learning Companion</p>
+            </div>
+            <div style="background: #f8fafc; padding: 30px; border-radius: 0 0 12px 12px; border: 1px solid #e2e8f0; border-top: none;">
+                <h2 style="color: #1e293b; margin-top: 0;">Confirm your email</h2>
+                <p style="color: #475569; font-size: 16px;">Thanks for signing up for {self.app_name}. Please confirm your email address to activate your account.</p>
+                <div style="text-align: center; margin: 24px 0;">
+                    <a href="{verify_link}" style="background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%); color: white; padding: 14px 28px; border-radius: 8px; text-decoration: none; font-weight: 600; display: inline-block; box-shadow: 0 4px 14px rgba(99, 102, 241, 0.4);">Confirm Email</a>
+                </div>
+                <p style="color: #64748b; font-size: 14px;">Or copy and paste this link into your browser:</p>
+                <p style="color: #6366f1; font-size: 14px; word-break: break-all; background: #f1f5f9; padding: 12px; border-radius: 6px;">{verify_link}</p>
+                <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 24px 0;">
+                <p style="color: #94a3b8; font-size: 12px; margin: 0;">
+                    This link expires in 24 hours. If you didn't create an account, you can safely ignore this email.
+                </p>
+            </div>
+        </body>
+        </html>
+        """
+
+        text_content = f"""
+        Confirm your {self.app_name} account
+
+        Thanks for signing up. Confirm your email to activate your account:
+
+        {verify_link}
+
+        This link expires in 24 hours. If you didn't create an account, you can safely ignore this email.
+        """
+
+        return await self.send_email(to_email, subject, html_content, text_content)
+
+    async def send_group_invitation_email(
+        self,
+        to_email: str,
+        group_name: str,
+        inviter_name: str,
+        join_link: str,
+        frontend_url: str,
+    ) -> bool:
+        """Send a study group invitation email to a potential member."""
+        subject = f'You\'re invited to join the study group "{group_name}" on {self.app_name}'
+
+        html_content = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        </head>
+        <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
+            <div style="background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%); padding: 30px; border-radius: 12px 12px 0 0; text-align: center;">
+                <h1 style="color: white; margin: 0; font-size: 28px;">Mentora</h1>
+                <p style="color: rgba(255,255,255,0.9); margin: 10px 0 0;">Your AI Learning Companion</p>
+            </div>
+            <div style="background: #f8fafc; padding: 30px; border-radius: 0 0 12px 12px; border: 1px solid #e2e8f0; border-top: none;">
+                <h2 style="color: #1e293b; margin-top: 0;">You're invited to a study group</h2>
+                <p style="color: #475569; font-size: 16px;">
+                    <strong>{inviter_name}</strong> invited you to join the study group
+                    <strong>"{group_name}"</strong> on Mentora.
+                </p>
+                <div style="text-align: center; margin: 24px 0;">
+                    <a href="{join_link}" style="background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%); color: white; padding: 14px 28px; border-radius: 8px; text-decoration: none; font-weight: 600; display: inline-block; box-shadow: 0 4px 14px rgba(99, 102, 241, 0.4);">Join Study Group</a>
+                </div>
+                <p style="color: #64748b; font-size: 14px;">Or copy and paste this link into your browser:</p>
+                <p style="color: #6366f1; font-size: 14px; word-break: break-all; background: #f1f5f9; padding: 12px; border-radius: 6px;">{join_link}</p>
+                <p style="color: #64748b; font-size: 14px;">If you don't have a Mentora account yet, <a href="{frontend_url}/register" style="color: #6366f1;">create one here</a>, then open the link above.</p>
+                <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 24px 0;">
+                <p style="color: #94a3b8; font-size: 12px; margin: 0;">If this invitation wasn't meant for you, you can safely ignore this email.</p>
+            </div>
+        </body>
+        </html>
+        """
+
+        text_content = f"""
+        {inviter_name} invited you to join the study group "{group_name}" on {self.app_name}.
+
+        Join now: {join_link}
+
+        If you don't have a {self.app_name} account yet, create one at {frontend_url}/register and then open the link above.
+        """
+
+        return await self.send_email(to_email, subject, html_content, text_content)
+
 
 email_service = EmailService()

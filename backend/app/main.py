@@ -16,6 +16,7 @@ from app.database.database import init_db
 
 from app.api.v1 import (
     auth,
+    ai_detection,
     users,
     syllabus,
     study_plan,
@@ -37,7 +38,10 @@ from app.api.v1 import (
     study_groups,
     study_streak,
     notes,
+    mindmap,
 )
+
+from app.websocket.ws_handler import router as ws_router
 
 from app.middleware.rate_limit import RateLimitMiddleware
 
@@ -138,6 +142,12 @@ app.include_router(
     auth.router,
     prefix=f"{settings.API_PREFIX}/auth",
     tags=["auth"],
+)
+
+app.include_router(
+    ai_detection.router,
+    prefix=f"{settings.API_PREFIX}/ai-detection",
+    tags=["ai-detection"],
 )
 
 app.include_router(
@@ -276,6 +286,19 @@ app.include_router(
     notes.router,
     prefix=f"{settings.API_PREFIX}/notes",
     tags=["notes"],
+)
+
+app.include_router(
+    mindmap.router,
+    prefix=f"{settings.API_PREFIX}/mindmap",
+    tags=["mindmap"],
+)
+
+# WebSocket routes (no API prefix - WebSockets have their own path)
+app.include_router(
+    ws_router,
+    prefix=f"{settings.API_PREFIX}/study-groups",
+    tags=["study-groups-ws"],
 )
 
 

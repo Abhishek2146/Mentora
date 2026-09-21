@@ -8,8 +8,9 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm, HTTPAuthorizationCredentials, HTTPBearer
 
 security = HTTPBearer()
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.exc import IntegrityError
 
 from app.core.security import (
     verify_password,
@@ -19,6 +20,8 @@ from app.core.security import (
     verify_refresh_token,
     create_password_reset_token,
     verify_password_reset_token,
+    create_email_verification_token,
+    verify_email_verification_token,
 )
 from app.core.auth import get_current_user_id, get_current_user
 from app.core.config import settings
@@ -37,25 +40,52 @@ from app.services.token_blacklist import token_blacklist
 router = APIRouter()
 
 
+def _frontend_url() -> str:
+    """Return the public frontend base URL used in email links."""
+    url = (settings.FRONTEND_URL or "").strip() or (
+        settings.ALLOWED_ORIGINS[0] if settings.ALLOWED_ORIGINS else "http://localhost:5173"
+    )
+    return url.rstrip("/")
+
+
+async def _registration_conflict_detail(
+    db: AsyncSession,
+    email: str,
+    username: str,
+) -> str | None:
+    """Return a user-facing duplicate message for canonicalized identities."""
+    email = email.strip().lower()
+    username = username.strip().lower()
+    result = await db.execute(
+        select(User).where(
+            (func.lower(User.email) == email.lower())
+            | (func.lower(User.username) == username.lower())
+        )
+    )
+    existing_user = result.scalars().first()
+    if not existing_user:
+        return None
+    if existing_user.email.strip().lower() == email.lower():
+        return "Email already registered. Please use another email address."
+    if existing_user.username.strip().lower() == username.lower():
+        return "Username already exists. Please choose another username."
+    return "Email or username already registered"
+
+
 @router.post("/register", response_model=UserOut, status_code=status.HTTP_201_CREATED)
 async def register(
     user_data: UserCreate,
     db: AsyncSession = Depends(get_db),
 ):
-    email = user_data.email.strip().lower()
-    username = (user_data.username or "").strip()
-    if not username:
-        username = email.split("@")[0]
-
-    existing_user = await db.execute(
-        select(User).where(
-            (User.email == email) | (User.username == username)
-        )
+    normalized_email = str(user_data.email).strip().lower()
+    normalized_username = user_data.username.strip().lower()
+    conflict_detail = await _registration_conflict_detail(
+        db, normalized_email, normalized_username
     )
-    if existing_user.scalars().first():
+    if conflict_detail:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="An account with this email or username already exists. Please sign in instead.",
+            detail=conflict_detail,
         )
 
     role_value = UserRole.STUDENT.value
@@ -64,22 +94,134 @@ async def register(
 
     hashed_password = get_password_hash(user_data.password)
     new_user = User(
-        email=email,
-        username=username,
-        full_name=user_data.full_name or username,
+        email=normalized_email,
+        username=normalized_username,
+        full_name=user_data.full_name,
         role=role_value,
         is_active=True,
         is_verified=True,
         hashed_password=hashed_password,
     )
-    db.add(new_user)
-    await db.flush()
+    try:
+        db.add(new_user)
+        await db.flush()
 
-    # Every new student starts on Mentora Pro.
-    db.add(Subscription.create_default(new_user.id))
-    await db.commit()
+        # Every new student starts on Mentora Pro.
+        db.add(Subscription.create_default(new_user.id))
+        await db.commit()
+    except IntegrityError as exc:
+        await db.rollback()
+        conflict_detail = await _registration_conflict_detail(
+            db, str(user_data.email), user_data.username
+        )
+        if conflict_detail:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=conflict_detail,
+            ) from exc
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Unable to create account. Please check your registration details and try again.",
+        ) from exc
+
     await db.refresh(new_user)
+
+    # Accounts are inactive until the email is confirmed. Send a
+    # verification email with a confirm button; the user can only
+    # sign in once they have verified their email address.
+    verification_token = create_email_verification_token(
+        data={"sub": str(new_user.id)}
+    )
+    sent = await email_service.send_verification_email(
+        to_email=new_user.email,
+        verification_token=verification_token,
+        frontend_url=_frontend_url(),
+    )
+    import logging as _logging
+    if not sent:
+        _logging.getLogger(__name__).warning(
+            "Verification email not sent (check SMTP config). "
+            "DEV VERIFY LINK for %s: %s/verify-email?token=%s",
+            new_user.email, _frontend_url(), verification_token,
+        )
+    else:
+        _logging.getLogger(__name__).info(
+            "Sent verification email to %s", new_user.email
+        )
+
     return new_user
+
+
+@router.get("/verify-email")
+async def verify_email(
+    token: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Verify a newly registered user's email address.
+
+    The user clicks the "Confirm Email" button in the registration
+    email, which points here (via the frontend) with a short-lived
+    JWT token. On success the account is activated and can log in.
+    """
+    payload = verify_email_verification_token(token)
+    if not payload:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Verification link is invalid or has expired. Please request a new one.",
+        )
+
+    user_id = payload.get("sub")
+    result = await db.execute(select(User).where(User.id == int(user_id)))
+    user = result.scalars().first()
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found",
+        )
+
+    user.is_verified = True
+    user.is_active = True
+    await db.commit()
+
+    return {"message": "Email verified successfully. You can now log in."}
+
+
+@router.post("/resend-verification")
+async def resend_verification(
+    request: ForgotPasswordRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Resend the registration verification email.
+
+    Hidden if the account does not exist or the address is already
+    verified to prevent email enumeration.
+    """
+    result = await db.execute(select(User).where(User.email == request.email))
+    user = result.scalars().first()
+
+    if user and not user.is_verified:
+        verification_token = create_email_verification_token(
+            data={"sub": str(user.id)}
+        )
+        sent = await email_service.send_verification_email(
+            to_email=user.email,
+            verification_token=verification_token,
+            frontend_url=_frontend_url(),
+        )
+        if not sent:
+            import logging as _logging
+            _logging.getLogger(__name__).warning(
+                "Verification email not sent (check SMTP config). "
+                "DEV VERIFY LINK for %s: %s/verify-email?token=%s",
+                user.email, _frontend_url(), verification_token,
+            )
+        await db.commit()
+
+    return {
+        "message": "If the account exists and needs verification, a new confirmation email has been sent."
+    }
 
 
 @router.post(
@@ -103,15 +245,13 @@ async def register_admin(
             detail="Invalid admin registration key",
         )
 
-    existing_user = await db.execute(
-        select(User).where(
-            (User.email == user_data.email) | (User.username == user_data.username)
-        )
+    conflict_detail = await _registration_conflict_detail(
+        db, str(user_data.email), user_data.username
     )
-    if existing_user.scalars().first():
+    if conflict_detail:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Email or username already registered",
+            detail=conflict_detail,
         )
 
     hashed_password = get_password_hash(user_data.password)
@@ -123,12 +263,27 @@ async def register_admin(
         is_verified=True,
         hashed_password=hashed_password,
     )
-    db.add(new_user)
-    await db.flush()
+    try:
+        db.add(new_user)
+        await db.flush()
 
-    # Admins also start on Mentora Pro.
-    db.add(Subscription.create_default(new_user.id))
-    await db.commit()
+        # Admins also start on Mentora Pro.
+        db.add(Subscription.create_default(new_user.id))
+        await db.commit()
+    except IntegrityError as exc:
+        await db.rollback()
+        conflict_detail = await _registration_conflict_detail(
+            db, str(user_data.email), user_data.username
+        )
+        if conflict_detail:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=conflict_detail,
+            ) from exc
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Unable to create account. Please check your registration details and try again.",
+        ) from exc
     await db.refresh(new_user)
     return new_user
 
@@ -154,6 +309,12 @@ async def login(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="User account is inactive",
+        )
+
+    if not user.is_verified:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Please verify your email before logging in.",
         )
 
     access_token = create_access_token(
@@ -239,10 +400,7 @@ async def forgot_password(
 
     if user:
         reset_token = create_password_reset_token(data={"sub": str(user.id)})
-        frontend_url = (settings.FRONTEND_URL or "").strip() or (
-            settings.ALLOWED_ORIGINS[0] if settings.ALLOWED_ORIGINS else "http://localhost:5173"
-        )
-        frontend_url = frontend_url.rstrip("/")
+        frontend_url = _frontend_url()
 
         # Generate 6-digit OTP, store hashed, expire in 10 minutes
         otp_plain = f"{secrets.randbelow(900000) + 100000:06d}"

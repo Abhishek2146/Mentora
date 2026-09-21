@@ -13,6 +13,7 @@ import {
   AlertCircle,
 } from "lucide-react";
 import { voiceService } from "@/services/voiceService";
+import { getApiBase } from "@/lib/api";
 import { syllabusService } from "@/services/syllabusService";
 
 interface Message {
@@ -178,7 +179,7 @@ export default function VoiceLearning() {
           setMessages((prev) => [...prev, userMsg, assistantMsg]);
 
           if (result.audio_url) {
-            const baseUrl = import.meta.env.VITE_API_URL ?? "";
+            const baseUrl = getApiBase();
             playAudio(`${baseUrl}${result.audio_url}`);
           }
         } catch (e: any) {
@@ -244,8 +245,8 @@ export default function VoiceLearning() {
       };
       setMessages((prev) => [...prev, assistantMsg]);
 
-      if (result.audio_url) {
-        const baseUrl = import.meta.env.VITE_API_URL ?? "";
+if (result.audio_url) {
+        const baseUrl = getApiBase();
         playAudio(`${baseUrl}${result.audio_url}`);
       }
     } catch {
@@ -354,7 +355,7 @@ export default function VoiceLearning() {
                 {m.role === "assistant" && m.audioUrl && (
                   <button
                     onClick={() => {
-                      const baseUrl = import.meta.env.VITE_API_URL ?? "";
+const baseUrl = getApiBase();
                       const url = m.audioUrl!.startsWith("http") ? m.audioUrl! : `${baseUrl}${m.audioUrl}`;
                       if (playingAudio === url) {
                         audioRef.current?.pause();
@@ -366,13 +367,13 @@ export default function VoiceLearning() {
                     className="mt-2 flex items-center gap-1.5 text-xs text-primary-600 dark:text-primary-400 hover:text-primary-700 transition-colors"
                   >
                     {playingAudio ===
-                    `${import.meta.env.VITE_API_URL ?? ""}${m.audioUrl}` ? (
+                    `${getApiBase()}${m.audioUrl}` ? (
                       <Pause className="w-3.5 h-3.5" />
                     ) : (
                       <Play className="w-3.5 h-3.5" />
                     )}
                     {playingAudio ===
-                    `${import.meta.env.VITE_API_URL ?? ""}${m.audioUrl}`
+                    `${getApiBase()}${m.audioUrl}`
                       ? "Playing..."
                       : "Play audio"}
                   </button>
