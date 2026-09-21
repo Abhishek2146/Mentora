@@ -99,6 +99,14 @@ class StudyPlan(BaseModel):
         nullable=True,
     )
 
+    # Exam date: the target deadline the plan should count toward.
+    # When set, the study-plan generator uses it as the effective end_date
+    # when no explicit end_date is provided.
+    exam_date = Column(
+        Date,
+        nullable=True,
+    )
+
     syllabus_id = Column(
         Integer,
         ForeignKey("syllabuses.id"),

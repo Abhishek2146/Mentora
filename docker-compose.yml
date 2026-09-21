@@ -5,6 +5,9 @@ services:
     build:
       context: .
       dockerfile: docker/frontend.Dockerfile
+      args:
+        - VITE_API_URL=http://backend:8000
+        - VITE_APP_NAME=Mentora
     container_name: mentora_frontend
     restart: unless-stopped
     ports:
@@ -46,6 +49,7 @@ services:
       - POSTGRES_USER=mentora
       - POSTGRES_PASSWORD=mentora123
       - POSTGRES_DB=mentora
+      - TZ=UTC
     volumes:
       - postgres_data:/var/lib/postgresql/data
     networks:

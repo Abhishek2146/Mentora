@@ -51,9 +51,13 @@ export default function Register() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
+    if (!isGmailAddress(form.email)) {
+      setError("Please enter a valid Gmail address ending in @gmail.com.");
+      return;
+    }
     try {
       await register(form);
-      navigate("/dashboard");
+      setRegisteredEmail(form.email);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Registration failed. Please try again.");
     }

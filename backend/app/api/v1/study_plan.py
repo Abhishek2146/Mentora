@@ -7,10 +7,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 from app.core.auth import get_current_user_id
+from app.core.logger import get_logger
 from app.database.database import get_db
 from app.models.study_plan import StudyPlan, StudyTask
 from app.schemas.study_plan import StudyPlanCreate, StudyPlanOut, StudyPlanUpdate, StudyTaskCreate, StudyTaskOut, StudyTaskUpdate
 from app.services.studyplan_service import StudyPlanService
+logger = get_logger(__name__)
 router = APIRouter()
 study_plan_service = StudyPlanService()
 @router.post("/", response_model=StudyPlanOut, status_code=status.HTTP_201_CREATED)
@@ -26,10 +28,17 @@ async def create_study_plan(
                 syllabus_id=plan_data.syllabus_id,
                 start_date=plan_data.start_date.strftime("%Y-%m-%d"),
                 end_date=plan_data.end_date.strftime("%Y-%m-%d") if plan_data.end_date else None,
+                exam_date=plan_data.exam_date.strftime("%Y-%m-%d") if plan_data.exam_date else None,
                 db=db,
             )
         except ValueError as e:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+        except Exception as e:
+            logger.error("Failed to generate study plan: %s", str(e)[:300])
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to generate study plan: {str(e)[:200]}",
+            )
     new_plan = StudyPlan(
         user_id=user_id,
         **plan_data.dict(exclude={"is_ai_generated"}),
@@ -79,13 +88,33 @@ async def update_study_plan(
     plan = result.scalars().first()
     if not plan:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Study plan not found")
+
+    effective_start = plan_data.start_date or plan.start_date
+    if plan_data.exam_date and effective_start and plan_data.exam_date < effective_start:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Exam date cannot be before the plan start date.",
+        )
+    if plan_data.end_date and effective_start and plan_data.end_date < effective_start:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="End date cannot be before the plan start date.",
+        )
+
     update_data = plan_data.dict(exclude_unset=True)
     for field, value in update_data.items():
         setattr(plan, field, value)
     db.add(plan)
     await db.commit()
     await db.refresh(plan)
-    return plan
+
+    res = await db.execute(
+        select(StudyPlan)
+        .where(StudyPlan.id == plan_id)
+        .options(selectinload(StudyPlan.tasks))
+    )
+    fetched = res.scalars().first()
+    return fetched or plan
 @router.delete("/{plan_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_study_plan(
     plan_id: int,

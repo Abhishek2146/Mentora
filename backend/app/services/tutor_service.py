@@ -211,6 +211,38 @@ class TutorService:
             f"history_messages={len(history)}"
         )
 
+        # Detect broad overview queries that need more context than a
+        # single-unit question.  These phrases typically require the
+        # course-level overview document (all units + credit hours).
+        _OVERVIEW_PATTERNS = (
+            r"credit\s*hour",
+            r"main\s+topic",
+            r"all\s+topic",
+            r"all\s+unit",
+            r"list\s+(of\s+)?(topic|unit|chapter|subject)",
+            r"topics?\s+covered",
+            r"units?\s+covered",
+            r"chapters?\s+covered",
+            r"course\s+(topic|unit|chapter|content|overview|structure|outline|summary)",
+            r"syllabus\s+(topic|unit|chapter|content|overview|structure|outline|summary)",
+            r"what.*topic",
+            r"what.*unit",
+            r"what.*chapter",
+            r"overview",
+        )
+        _msg_lower = message.lower()
+        is_overview_query = any(
+            re.search(pat, _msg_lower) for pat in _OVERVIEW_PATTERNS
+        )
+        # Overview queries get a higher k to pull in the course overview
+        # document even when many per-unit chunks score higher.
+        retrieval_k = settings.RAG_TOP_K * 3 if is_overview_query else settings.RAG_TOP_K
+        if is_overview_query:
+            logger.info(
+                "[Tutor] Detected broad overview query; using retrieval_k=%d",
+                retrieval_k,
+            )
+
         context = ""
         context_docs = []
         syllabus: Optional[Syllabus] = None
@@ -231,6 +263,7 @@ class TutorService:
                 context_docs = self.vector_service.retrieve_context(
                     collection_name,
                     retrieval_query,
+                    k=retrieval_k,
                     filter={
                         "$and": [
                             {"user_id": user_id},
@@ -240,7 +273,14 @@ class TutorService:
                 )
             context = self.vector_service.format_context(context_docs)
 
-        context = self._truncate_context(context, settings.TUTOR_MAX_CONTEXT_CHARS)
+        # Overview queries get a larger context budget so the full course
+        # summary (all units + topics) fits within the system prompt.
+        max_context_chars = (
+            settings.TUTOR_MAX_CONTEXT_CHARS * 2
+            if is_overview_query
+            else settings.TUTOR_MAX_CONTEXT_CHARS
+        )
+        context = self._truncate_context(context, max_context_chars)
 
         logger.info(f"TUTOR CONTEXT: retrieved_docs={len(context_docs)} context_length={len(context)}")
 

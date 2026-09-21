@@ -1,6 +1,20 @@
 import axios, { AxiosInstance, AxiosResponse, InternalAxiosRequestConfig } from "axios";
 import { Token } from "@/types";
 
+// Resolve the backend API base URL. Prefers VITE_API_URL; otherwise derive it
+// from the hostname the page is opened on so LAN/IP access works (a friend
+// opening http://<lan-ip>:5173 hits http://<lan-ip>:8000, not their own localhost).
+export function getApiBase(): string {
+  const configured = import.meta.env.VITE_API_URL;
+  if (configured) return configured;
+  const hostname =
+    typeof window !== "undefined" ? window.location.hostname : "localhost";
+  if (hostname === "localhost" || hostname === "127.0.0.1") {
+    return "http://localhost:8000";
+  }
+  return `http://${hostname}:8000`;
+}
+
 class ApiClient {
   private client: AxiosInstance;
 

@@ -12,6 +12,7 @@ from app.models.revision import RevisionSchedule, RevisionItem
 from app.models.chat_history import ChatSession, ChatMessage, VoiceSession, WeeklyReport
 from app.models.analytics import AnalyticsSummary, ActivityLog, ExamSimulation
 from app.models.notification import Notification, NotificationType, NotificationPriority
+from app.models.note import Note
 from app.models.subscription import (
     Subscription,
     Usage,
@@ -22,6 +23,10 @@ from app.models.subscription import (
 )
 from app.models.payment import Payment, PaymentStatus
 from app.models.otp import PasswordResetOTP
+from app.models.study_group import StudyGroup, StudyGroupMember, StudyGroupMessage, StudyGroupInvitation
+from app.models.study_streak import UserStreak, DailyStudySummary
+
+from app.models.mindmap import MindMap
 
 __all__ = [
     "User", "UserRole",
@@ -35,8 +40,12 @@ __all__ = [
     "ChatSession", "ChatMessage", "VoiceSession", "WeeklyReport",
     "AnalyticsSummary", "ActivityLog", "ExamSimulation",
     "Notification", "NotificationType", "NotificationPriority",
+    "Note",
     "Subscription", "Usage",
     "PlanType", "BillingCycle", "SubscriptionStatus", "UsageType",
     "Payment", "PaymentStatus",
     "PasswordResetOTP",
+    "StudyGroup", "StudyGroupMember", "StudyGroupMessage", "StudyGroupInvitation",
+    "UserStreak", "DailyStudySummary",
+    "MindMap",
 ]

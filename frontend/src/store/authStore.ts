@@ -2,7 +2,7 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import axios from "axios";
 import { User, Token, UserRole } from "@/types";
-import apiClient from "@/lib/api";
+import apiClient, { getApiBase } from "@/lib/api";
 
 // Marker for frontend-only test sessions (no backend involved).
 export const TEST_ACCESS_TOKEN = "test-access-token";
@@ -53,6 +53,8 @@ interface AuthState {
   resendOtp: (email: string) => Promise<void>;
   resetPassword: (token: string, password: string) => Promise<void>;
   changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
+  verifyEmail: (token: string) => Promise<void>;
+  resendVerification: (email: string) => Promise<void>;
   logout: () => void;
   checkAuth: () => Promise<void>;
   updateUser: (data: Partial<User>) => Promise<void>;
@@ -124,14 +126,11 @@ export const useAuthStore = create<AuthState>()(
         } catch (error) {
           set({ isLoading: false });
           throw getApiError(error);
-        }
-        try {
-          await get().login(userData.email, userData.password);
-        } catch {
-          // Account created; let the user sign in with their new credentials.
         } finally {
           set({ isLoading: false });
         }
+        // Account is created but dormant — a confirmation email is sent to
+        // the user's address. They only log in after verifying their email.
       },
 
       registerAdmin: async (userData) => {
@@ -257,6 +256,35 @@ export const useAuthStore = create<AuthState>()(
             const error = await response.json();
             throw new Error(error.detail || "Failed to change password");
           }
+        } catch (error) {
+          set({ isLoading: false });
+          throw getApiError(error);
+        }
+        set({ isLoading: false });
+      },
+
+      verifyEmail: async (token: string) => {
+        set({ isLoading: true });
+        try {
+          const apiUrl = getApiBase();
+          const response = await fetch(
+            `${apiUrl}/api/v1/auth/verify-email?token=${encodeURIComponent(token)}`
+          );
+          if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.detail || "Failed to verify email");
+          }
+        } catch (error) {
+          set({ isLoading: false });
+          throw getApiError(error);
+        }
+        set({ isLoading: false });
+      },
+
+      resendVerification: async (email: string) => {
+        set({ isLoading: true });
+        try {
+          await apiClient.post("/api/v1/auth/resend-verification", { email });
         } catch (error) {
           set({ isLoading: false });
           throw getApiError(error);

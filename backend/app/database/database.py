@@ -116,6 +116,75 @@ async def _provision_pro_for_existing_users(conn) -> None:
         )
 
 
+async def _migrate_user_roles(conn) -> None:
+    """Ensure the users.role column accepts 'super_admin'.
+
+    PostgreSQL ENUM columns require ALTER TYPE to add new values.
+    This is idempotent — it checks before adding.
+    """
+    result = await conn.execute(
+        text(
+            "SELECT t.typname, e.enumlabel "
+            "FROM pg_type t "
+            "JOIN pg_enum e ON t.oid = e.enumtypid "
+            "WHERE t.typname = 'userrole'"
+        )
+    )
+    rows = result.fetchall()
+
+    if rows:
+        # Column is a PostgreSQL ENUM type — add super_admin if missing.
+        existing_labels = {row[1] for row in rows}
+        if "super_admin" not in existing_labels:
+            await conn.execute(
+                text("ALTER TYPE userrole ADD VALUE IF NOT EXISTS 'super_admin'")
+            )
+            logger.info("Added 'super_admin' to userrole ENUM type")
+    else:
+        # Column is VARCHAR (not an ENUM type) — no DDL needed.
+        # The Python enum handles validation; existing rows keep their values.
+        pass
+
+
+async def _fix_column_types(conn) -> None:
+    """Upgrade specific columns that were created with an incorrect VARCHAR(255)
+    type and need to be TEXT to handle long AI-generated content.
+
+    This is idempotent: it checks the current column type before issuing
+    any ALTER TABLE so it is safe to run on every startup.
+    """
+    upgrades = [
+        # table_name, column_name
+        ("study_tasks", "description"),
+        ("study_plans", "description"),
+        ("notes", "content"),
+        ("notes", "ai_summary"),
+    ]
+    for table_name, column_name in upgrades:
+        result = await conn.execute(
+            text(
+                "SELECT data_type FROM information_schema.columns "
+                "WHERE table_name = :t AND column_name = :c"
+            ).bindparams(t=table_name, c=column_name)
+        )
+        row = result.fetchone()
+        if row is None:
+            continue  # column doesn't exist yet
+        current_type = (row[0] or "").lower()
+        if "character varying" in current_type or current_type == "varchar":
+            await conn.execute(
+                text(
+                    f'ALTER TABLE "{table_name}" '
+                    f'ALTER COLUMN "{column_name}" TYPE TEXT'
+                )
+            )
+            logger.info(
+                "Upgraded column '%s.%s' from VARCHAR to TEXT",
+                table_name,
+                column_name,
+            )
+
+
 async def _run_migrations(conn) -> None:
     """Idempotently add columns to existing tables that are defined in
     the SQLAlchemy models but missing from the live database.
@@ -125,6 +194,15 @@ async def _run_migrations(conn) -> None:
     gap so model changes (e.g. adding ``estimated_hours`` to
     ``chapters``) are applied without a separate migration tool.
     """
+    # Columns handled by specific migrations below — skip in the generic loop.
+    _specific_migration_columns = {
+        ("study_groups", "memory"),
+        ("study_group_messages", "edited_at"),
+        ("study_group_messages", "deleted_at"),
+        ("study_group_messages", "reply_to_message_id"),
+        ("study_group_messages", "forwarded_from_id"),
+    }
+
     # Iterate over every registered model and check each column.
     for table in Base.metadata.tables.values():
         table_name = table.name
@@ -132,6 +210,10 @@ async def _run_migrations(conn) -> None:
             # Skip base columns (id, created_at, updated_at) which are
             # always present on existing tables.
             if column.name in ("id", "created_at", "updated_at"):
+                continue
+
+            # Skip columns handled by specific migrations.
+            if (table_name, column.name) in _specific_migration_columns:
                 continue
 
             result = await conn.execute(
@@ -176,6 +258,198 @@ async def _run_migrations(conn) -> None:
                 table_name,
             )
 
+    # Specific migration for JSONB columns that the generic handler may not
+    # produce valid DDL for (DefaultClause.__str__ wraps the value).
+    jsonb_migrations = [
+        (
+            "study_groups",
+            "memory",
+            "ALTER TABLE study_groups ADD COLUMN IF NOT EXISTS memory JSONB NOT NULL DEFAULT '{}'::jsonb",
+        ),
+    ]
+    for table_name, col_name, ddl in jsonb_migrations:
+        result = await conn.execute(
+            text(
+                "SELECT 1 FROM information_schema.columns "
+                "WHERE table_name = :t AND column_name = :c"
+            ).bindparams(t=table_name, c=col_name),
+        )
+        if not result.fetchone():
+            await conn.execute(text(ddl))
+            logger.info("Added JSONB column '%s' to table '%s'", col_name, table_name)
+
+    # Migration: add invite_token column to study_groups
+    result = await conn.execute(
+        text(
+            "SELECT 1 FROM information_schema.columns "
+            "WHERE table_name = 'study_groups' AND column_name = 'invite_token'"
+        )
+    )
+    if not result.fetchone():
+        await conn.execute(
+            text(
+                "ALTER TABLE study_groups ADD COLUMN invite_token VARCHAR(64) UNIQUE"
+            )
+        )
+        logger.info("Added invite_token column to study_groups")
+
+        # Backfill existing groups with tokens
+        import secrets
+        rows = await conn.execute(text("SELECT id FROM study_groups WHERE invite_token IS NULL"))
+        for row in rows.fetchall():
+            token = secrets.token_urlsafe(32)
+            await conn.execute(
+                text("UPDATE study_groups SET invite_token = :token WHERE id = :id"),
+                {"token": token, "id": row[0]},
+            )
+        logger.info("Backfilled invite_token for existing study_groups")
+
+    # Migration: make invite_code nullable (old system kept for backward compat)
+    result = await conn.execute(
+        text(
+            "SELECT is_nullable FROM information_schema.columns "
+            "WHERE table_name = 'study_groups' AND column_name = 'invite_code'"
+        )
+    )
+    row = result.fetchone()
+    if row and row[0].upper() == "NO":
+        await conn.execute(
+            text("ALTER TABLE study_groups ALTER COLUMN invite_code DROP NOT NULL")
+        )
+        logger.info("Made invite_code column nullable in study_groups")
+
+    # Migration: add messenger-like feature columns to study_group_messages
+    msg_columns = [
+        ("edited_at", "ALTER TABLE study_group_messages ADD COLUMN IF NOT EXISTS edited_at TIMESTAMPTZ"),
+        ("deleted_at", "ALTER TABLE study_group_messages ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ"),
+        ("reply_to_message_id", "ALTER TABLE study_group_messages ADD COLUMN IF NOT EXISTS reply_to_message_id INTEGER REFERENCES study_group_messages(id) ON DELETE SET NULL"),
+        ("forwarded_from_id", "ALTER TABLE study_group_messages ADD COLUMN IF NOT EXISTS forwarded_from_id INTEGER REFERENCES study_group_messages(id) ON DELETE SET NULL"),
+    ]
+    for col_name, ddl in msg_columns:
+        result = await conn.execute(
+            text(
+                "SELECT 1 FROM information_schema.columns "
+                "WHERE table_name = 'study_group_messages' AND column_name = :c"
+            ).bindparams(c=col_name),
+        )
+        if not result.fetchone():
+            await conn.execute(text(ddl))
+            logger.info("Added column '%s' to study_group_messages", col_name)
+
+
+async def _ensure_unique_constraints(conn) -> None:
+    """Idempotently add unique constraints that are defined in models
+    but may be missing from existing tables."""
+    # study_group_members: unique (group_id, user_id)
+    result = await conn.execute(
+        text(
+            "SELECT 1 FROM information_schema.table_constraints "
+            "WHERE table_name = 'study_group_members' "
+            "AND constraint_name = 'uq_study_group_member_group_user'"
+        )
+    )
+    if not result.fetchone():
+        await conn.execute(
+            text(
+                "ALTER TABLE study_group_members "
+                "ADD CONSTRAINT uq_study_group_member_group_user "
+                "UNIQUE (group_id, user_id)"
+            )
+        )
+        logger.info("Added unique constraint uq_study_group_member_group_user")
+
+    # Column-level UNIQUE constraints are case-sensitive in PostgreSQL. These
+    # expression indexes make the identity rule durable for requests that race
+    # past the application-level duplicate lookup (and cover legacy schemas).
+    if conn.dialect.name == "postgresql":
+        for index_name, expression in (
+            ("uq_users_email_lower", "LOWER(email)"),
+            ("uq_users_username_lower", "LOWER(username)"),
+        ):
+            try:
+                await conn.execute(
+                    text(
+                        f"CREATE UNIQUE INDEX IF NOT EXISTS {index_name} "
+                        f"ON users ({expression})"
+                    )
+                )
+                logger.info("Ensured unique identity index %s", index_name)
+            except Exception as exc:
+                # Existing case-variant duplicates must not be deleted or
+                # silently changed during startup. The API lookup still
+                # rejects all future duplicates until the legacy rows are
+                # manually reconciled and the index can be created.
+                logger.error(
+                    "Could not create %s. Resolve existing duplicate users "
+                    "before enabling the database index: %s",
+                    index_name,
+                    exc,
+                )
+
+
+async def _fix_broken_timestamps(conn) -> None:
+    """Fix study_group_messages timestamps that were created with the broken
+    server_default='now()' string literal.  Messages within each group that
+    all share the exact same timestamp are spaced out 1 minute apart based
+    on their id order so the chat timeline looks realistic."""
+    # First, fix the column defaults on existing tables so new rows get proper now()
+    alter_sqls = [
+        "ALTER TABLE study_group_messages ALTER COLUMN created_at SET DEFAULT now()",
+        "ALTER TABLE study_group_messages ALTER COLUMN updated_at SET DEFAULT now()",
+        "ALTER TABLE study_groups ALTER COLUMN created_at SET DEFAULT now()",
+        "ALTER TABLE study_groups ALTER COLUMN updated_at SET DEFAULT now()",
+        "ALTER TABLE study_group_members ALTER COLUMN joined_at SET DEFAULT now()",
+    ]
+    for sql in alter_sqls:
+        try:
+            await conn.execute(text(sql))
+        except Exception:
+            pass  # column may not exist yet or default already correct
+
+    # Check if there are any messages at all
+    count_result = await conn.execute(text("SELECT COUNT(*) FROM study_group_messages"))
+    total = count_result.scalar()
+    if total == 0:
+        return
+
+    # Find groups where all messages share the same created_at (broken default)
+    result = await conn.execute(
+        text(
+            """
+            SELECT group_id, COUNT(*) as msg_count, MIN(created_at) as shared_ts
+            FROM study_group_messages
+            GROUP BY group_id
+            HAVING COUNT(DISTINCT created_at) = 1 AND COUNT(*) > 1
+            """
+        )
+    )
+    broken_groups = result.fetchall()
+    if not broken_groups:
+        return
+
+    for group_id, msg_count, shared_ts in broken_groups:
+        # Update each message: space them 1 minute apart based on id order
+        rows = await conn.execute(
+            text(
+                "SELECT id FROM study_group_messages "
+                "WHERE group_id = :gid ORDER BY id ASC"
+            ).bindparams(gid=group_id),
+        )
+        msg_ids = [r[0] for r in rows.fetchall()]
+        for idx, msg_id in enumerate(msg_ids):
+            offset = len(msg_ids) - 1 - idx
+            await conn.execute(
+                text(
+                    f"UPDATE study_group_messages "
+                    f"SET created_at = NOW() - INTERVAL '{offset} minutes', "
+                    f"updated_at = NOW() - INTERVAL '{offset} minutes' "
+                    f"WHERE id = {msg_id}"
+                ),
+            )
+        logger.info(
+            "Fixed %s broken timestamps in group %s", msg_count, group_id
+        )
+
 
 # --------------------------------------------------
 # Initialize Database
@@ -187,8 +461,12 @@ async def init_db() -> None:
         async with engine.begin() as conn:
             await conn.execute(text("SELECT 1"))
             await conn.run_sync(Base.metadata.create_all)
+            await _fix_column_types(conn)
             await _run_migrations(conn)
+            await _ensure_unique_constraints(conn)
+            await _fix_broken_timestamps(conn)
             await _provision_pro_for_existing_users(conn)
+            await _migrate_user_roles(conn)
         logger.info("Database initialized successfully")
     except Exception as exc:
         logger.exception("Database initialization failed: %s", exc)

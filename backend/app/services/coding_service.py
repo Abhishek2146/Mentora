@@ -150,10 +150,10 @@ class CodingService:
             actual = self._normalize_output(run.get("stdout", ""))
             if actual == expected:
                 passed_count += 1
-                details.append(f"Test {index}: passed")
+                details.append(f"Test {index}: ✓ passed")
             else:
                 details.append(
-                    f"Test {index}: failed\n"
+                    f"Test {index}: ✗ failed\n"
                     f"  Expected: {expected!r}\n"
                     f"  Got:      {actual!r}"
                 )
@@ -182,7 +182,13 @@ class CodingService:
         stdin: str,
     ) -> Dict[str, Any]:
         ext = lang_info["ext"]
-        file_path = os.path.join(tmpdir, self._get_source_filename(language, ext))
+
+        if language == "java":
+            # Extract the public class name so the filename matches.
+            class_name = self._extract_java_class_name(code)
+            file_path = os.path.join(tmpdir, f"{class_name}.java")
+        else:
+            file_path = os.path.join(tmpdir, f"main.{ext}")
 
         with open(file_path, "w", encoding="utf-8") as source_file:
             source_file.write(code)
@@ -192,17 +198,18 @@ class CodingService:
                 [lang_info["cmd"][0], file_path],
                 capture_output=True,
                 text=True,
-                timeout=10,
+                timeout=15,
                 cwd=tmpdir,
             )
             if compile_result.returncode != 0:
+                err = (compile_result.stdout or "") + (compile_result.stderr or "")
                 return {
                     "status": "error",
-                    "output": (compile_result.stdout or "") + (compile_result.stderr or ""),
+                    "output": err,
                     "stdout": "",
                     "error_message": compile_result.stderr or "Compilation failed",
                 }
-            run_cmd = ["java", "Main"]
+            run_cmd = ["java", class_name]
 
         elif language == "cpp":
             executable = os.path.join(tmpdir, "main.exe" if self.is_windows else "main")
@@ -210,13 +217,14 @@ class CodingService:
                 [lang_info["cmd"][0], "-std=c++17", file_path, "-o", executable],
                 capture_output=True,
                 text=True,
-                timeout=10,
+                timeout=15,
                 cwd=tmpdir,
             )
             if compile_result.returncode != 0:
+                err = (compile_result.stdout or "") + (compile_result.stderr or "")
                 return {
                     "status": "error",
-                    "output": (compile_result.stdout or "") + (compile_result.stderr or ""),
+                    "output": err,
                     "stdout": "",
                     "error_message": compile_result.stderr or "Compilation failed",
                 }
@@ -228,13 +236,14 @@ class CodingService:
                 [lang_info["cmd"][0], file_path, "-o", executable],
                 capture_output=True,
                 text=True,
-                timeout=10,
+                timeout=15,
                 cwd=tmpdir,
             )
             if compile_result.returncode != 0:
+                err = (compile_result.stdout or "") + (compile_result.stderr or "")
                 return {
                     "status": "error",
-                    "output": (compile_result.stdout or "") + (compile_result.stderr or ""),
+                    "output": err,
                     "stdout": "",
                     "error_message": compile_result.stderr or "Compilation failed",
                 }
@@ -246,13 +255,14 @@ class CodingService:
                 [lang_info["cmd"][0], "build", "-o", executable, file_path],
                 capture_output=True,
                 text=True,
-                timeout=10,
+                timeout=15,
                 cwd=tmpdir,
             )
             if compile_result.returncode != 0:
+                err = (compile_result.stdout or "") + (compile_result.stderr or "")
                 return {
                     "status": "error",
-                    "output": (compile_result.stdout or "") + (compile_result.stderr or ""),
+                    "output": err,
                     "stdout": "",
                     "error_message": compile_result.stderr or "Compilation failed",
                 }
@@ -264,13 +274,14 @@ class CodingService:
                 [lang_info["cmd"][0], file_path, "-o", executable],
                 capture_output=True,
                 text=True,
-                timeout=10,
+                timeout=15,
                 cwd=tmpdir,
             )
             if compile_result.returncode != 0:
+                err = (compile_result.stdout or "") + (compile_result.stderr or "")
                 return {
                     "status": "error",
-                    "output": (compile_result.stdout or "") + (compile_result.stderr or ""),
+                    "output": err,
                     "stdout": "",
                     "error_message": compile_result.stderr or "Compilation failed",
                 }
@@ -298,10 +309,18 @@ class CodingService:
 
         stdout = result.stdout or ""
         stderr = result.stderr or ""
-        output = stdout + stderr
-        passed = result.returncode == 0
+        output = stdout + (f"\n{stderr}" if stderr else "")
+        # A non-zero exit code means a runtime error, but if the program
+        # exited cleanly we report "passed" so the grader can compare output.
+        if result.returncode != 0:
+            return {
+                "status": "error",
+                "output": output,
+                "stdout": stdout,
+                "error_message": stderr or "Runtime error",
+            }
         return {
-            "status": "passed" if passed else "failed",
+            "status": "passed",
             "output": output,
             "stdout": stdout,
             "error_message": stderr or None,
@@ -309,7 +328,34 @@ class CodingService:
 
     @staticmethod
     def _normalize_output(value: str) -> str:
-        return re.sub(r"\s+", " ", value.strip())
+        """Normalize output for comparison.
+
+        Standard judge behaviour:
+        - Strip leading/trailing whitespace from each line.
+        - Collapse runs of blank lines into a single blank line.
+        - Strip leading/trailing whitespace from the whole result.
+        This preserves intentional newlines while removing incidental
+        trailing spaces that compilers / print statements often emit.
+        """
+        lines = value.splitlines()
+        stripped = [line.strip() for line in lines]
+        # Remove trailing empty lines, then rejoin
+        while stripped and stripped[-1] == "":
+            stripped.pop()
+        return "\n".join(stripped).strip()
+
+    @staticmethod
+    def _extract_java_class_name(code: str) -> str:
+        """Return the public class name from Java source, defaulting to 'Main'."""
+        # Look for: public class ClassName
+        match = re.search(r"\bpublic\s+class\s+(\w+)", code)
+        if match:
+            return match.group(1)
+        # Fallback: first class declaration
+        match = re.search(r"\bclass\s+(\w+)", code)
+        if match:
+            return match.group(1)
+        return "Main"
 
     @staticmethod
     def _error_result(
@@ -332,12 +378,6 @@ class CodingService:
     def _command_exists(command: str) -> bool:
         from shutil import which
         return which(command) is not None
-
-    @staticmethod
-    def _get_source_filename(language: str, extension: str) -> str:
-        if language == "java":
-            return "Main.java"
-        return f"main.{extension}"
 
     # ============================================================
     # AI Coding Problem Generation
@@ -387,8 +427,6 @@ class CodingService:
             ai_explanation=generated.get("explanation"),
             is_active=True,
         )
-        if syllabus_id:
-            problem.subject_id = None
 
         db.add(problem)
         await db.commit()
@@ -409,12 +447,16 @@ class CodingService:
             f"Syllabus context: {syllabus_context}\n" if syllabus_context else ""
         )
 
+        # Provide a language-specific stdin hint so the LLM generates
+        # runnable starter/solution code for the target platform.
+        stdin_hint = self._stdin_hint(language)
+
         prompt = f"""
 Generate a {difficulty} coding practice problem about "{topic}".
 {context_line}
 Target language: {language}
 
-Return ONLY valid JSON (no markdown fences) with this structure:
+Return ONLY valid JSON (no markdown fences, no extra text) with this structure:
 {{
   "title": "Short problem title",
   "description": "Clear problem statement with requirements",
@@ -440,26 +482,126 @@ Return ONLY valid JSON (no markdown fences) with this structure:
 Rules:
 - Problems must be solvable by reading from stdin and writing to stdout.
 - test_cases must have at least 3 entries with exact expected output strings.
-- starter_code must compile/run in {language}.
-- Do not include markdown code fences.
+- starter_code and solution must compile/run in {language}.
+{stdin_hint}- Do NOT include markdown code fences or any text outside the JSON object.
 """
 
         try:
             response = await llm.generate(prompt, temperature=0.4)
-            cleaned = (
-                response.replace("```json", "").replace("```", "").strip()
-            )
-            data = json.loads(cleaned)
-            if not isinstance(data.get("test_cases"), list):
+            data = self._parse_llm_json(response)
+
+            # Validate and normalise required fields
+            if not isinstance(data.get("test_cases"), list) or len(data["test_cases"]) == 0:
+                logger.warning("LLM returned no test_cases; generating empty list.")
                 data["test_cases"] = []
             if not isinstance(data.get("examples"), list):
                 data["examples"] = []
+            if not data.get("title"):
+                data["title"] = topic
+            if not data.get("description"):
+                raise ValueError("AI returned a problem without a description. Please try again.")
+            if not data.get("starter_code"):
+                data["starter_code"] = self._default_starter_code(language)
+
+            # Sanitise JavaScript code: replace /dev/stdin with the
+            # cross-platform process.stdin.fd equivalent.
+            if language == "javascript":
+                for field in ("starter_code", "solution"):
+                    if data.get(field):
+                        data[field] = data[field].replace(
+                            "'/dev/stdin'", "process.stdin.fd"
+                        ).replace(
+                            '"/dev/stdin"', "process.stdin.fd"
+                        )
+
             return data
+        except ValueError:
+            raise
+        except Exception as exc:
+            logger.exception("Failed to generate coding problem: %s", exc)
+            raise
+
+    @staticmethod
+    def _parse_llm_json(response: str) -> Dict[str, Any]:
+        """Robustly parse JSON that may be wrapped in markdown fences or have
+        leading/trailing prose."""
+        text = response.strip()
+
+        # 1. Strip markdown fences: ```json ... ``` or ``` ... ```
+        fenced = re.sub(r"^```(?:json)?\s*", "", text, flags=re.IGNORECASE)
+        fenced = re.sub(r"\s*```$", "", fenced).strip()
+        try:
+            return json.loads(fenced)
+        except json.JSONDecodeError:
+            pass
+
+        # 2. Extract first {...} block (handles leading/trailing prose)
+        match = re.search(r"\{.*\}", fenced, re.DOTALL)
+        if match:
+            try:
+                return json.loads(match.group(0))
+            except json.JSONDecodeError:
+                pass
+
+        # 3. Try the raw response
+        try:
+            return json.loads(text)
         except json.JSONDecodeError:
             logger.warning("LLM returned invalid JSON for coding problem.")
             raise ValueError(
                 "AI returned an invalid problem format. Please try again."
             ) from None
-        except Exception as exc:
-            logger.exception("Failed to generate coding problem: %s", exc)
-            raise
+
+    @staticmethod
+    def _default_starter_code(language: str) -> str:
+        """Return a minimal stdin-reading starter template for a language."""
+        templates: Dict[str, str] = {
+            "python": "# Read input and print output\nline = input()\nprint(line)\n",
+            "javascript": (
+                "const lines = require('fs').readFileSync(process.stdin.fd, 'utf8').trim().split('\\n');\n"
+                "console.log(lines[0]);\n"
+            ),
+            "java": (
+                "import java.util.Scanner;\n\npublic class Main {\n"
+                "    public static void main(String[] args) {\n"
+                "        Scanner sc = new Scanner(System.in);\n"
+                "        System.out.println(sc.nextLine());\n"
+                "    }\n}\n"
+            ),
+            "cpp": (
+                "#include <iostream>\nusing namespace std;\n\nint main() {\n"
+                "    string line;\n    cin >> line;\n    cout << line << endl;\n    return 0;\n}\n"
+            ),
+            "c": (
+                "#include <stdio.h>\n\nint main() {\n"
+                "    char line[1024];\n    scanf(\"%s\", line);\n    printf(\"%s\\n\", line);\n    return 0;\n}\n"
+            ),
+            "go": (
+                "package main\n\nimport (\n    \"bufio\"\n    \"fmt\"\n    \"os\"\n)\n\n"
+                "func main() {\n    reader := bufio.NewReader(os.Stdin)\n"
+                "    line, _ := reader.ReadString('\\n')\n    fmt.Print(line)\n}\n"
+            ),
+            "rust": (
+                "use std::io::{self, BufRead};\n\nfn main() {\n"
+                "    let stdin = io::stdin();\n"
+                "    let line = stdin.lock().lines().next().unwrap().unwrap();\n"
+                "    println!(\"{}\", line);\n}\n"
+            ),
+        }
+        return templates.get(language, "# Write your solution here\n")
+
+    @staticmethod
+    def _stdin_hint(language: str) -> str:
+        """Return a language-specific rule for the LLM prompt so the generated
+        starter/solution code reads stdin correctly on all platforms."""
+        hints: Dict[str, str] = {
+            "javascript": (
+                "- For JavaScript use: "
+                "require('fs').readFileSync(process.stdin.fd, 'utf8') "
+                "to read stdin. Do NOT use '/dev/stdin' or 'readline'.\n"
+            ),
+            "python": (
+                "- For Python use input() or sys.stdin for reading.\n"
+            ),
+        }
+        return hints.get(language, "")

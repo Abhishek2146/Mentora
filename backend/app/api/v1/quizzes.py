@@ -47,6 +47,7 @@ class GenerateMCQRequest(BaseModel):
     topic: Optional[str] = None
     difficulty: str = Field("medium", pattern="^(easy|medium|hard)$")
     count: int = Field(5, ge=1, le=20)
+    syllabus_id: Optional[int] = None
 
 
 class SubmitQuizRequest(BaseModel):
@@ -198,6 +199,7 @@ async def generate_mcq(
             difficulty=req.difficulty,
             count=req.count,
             db=db,
+            syllabus_id=req.syllabus_id,
         )
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))

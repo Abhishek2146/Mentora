@@ -10,10 +10,10 @@ from datetime import date
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.auth import get_current_user, get_current_user_id, require_admin
+from app.core.auth import get_current_user, get_current_user_id, require_super_admin
 from app.core.config import settings
 from app.database.database import get_db
 from app.models.payment import Payment
@@ -233,7 +233,7 @@ async def list_subscriptions(
     plan_type: Optional[PlanType] = None,
     status: Optional[SubscriptionStatus] = None,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_admin),
+    _: User = Depends(require_super_admin),
 ):
     """List all subscriptions with optional filters."""
     query = select(Subscription).order_by(Subscription.id)
@@ -250,7 +250,7 @@ async def list_subscriptions(
 async def admin_get_subscription(
     user_id: int,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_admin),
+    _: User = Depends(require_super_admin),
 ):
     subscription = await subscription_service.get_or_create_subscription(
         db, user_id
@@ -264,7 +264,7 @@ async def admin_activate_subscription(
     user_id: int,
     payload: AdminActivateRequest,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_admin),
+    _: User = Depends(require_super_admin),
 ):
     """Activate a paid SUBSCRIPTION plan for a user."""
     return await subscription_service.activate_subscription(
@@ -279,7 +279,7 @@ async def admin_activate_subscription(
 async def admin_cancel_subscription(
     user_id: int,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_admin),
+    _: User = Depends(require_super_admin),
 ):
     """Cancel a user's subscription immediately."""
     return await subscription_service.cancel_subscription(db, user_id)
@@ -289,7 +289,7 @@ async def admin_cancel_subscription(
 async def admin_expire_subscription(
     user_id: int,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_admin),
+    _: User = Depends(require_super_admin),
 ):
     """Force-expire a user's subscription."""
     return await subscription_service.expire_subscription(db, user_id)
@@ -409,6 +409,22 @@ async def khalti_list_payments(
 ):
     """List the authenticated user's recent Khalti payments."""
     return await khalti_service.list_user_payments(db, user.id, limit=limit)
+
+
+@khalti_router.delete("/payments")
+async def khalti_delete_payments(
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Delete the authenticated user's visible payment history only.
+
+    This does not change subscription state or contact Khalti. It removes the
+    local history rows belonging to the current user and is intentionally
+    scoped by user_id so one account cannot affect another account's records.
+    """
+    result = await db.execute(delete(Payment).where(Payment.user_id == user.id))
+    await db.commit()
+    return {"deleted_count": result.rowcount or 0}
 
 
 @khalti_router.get("/config")

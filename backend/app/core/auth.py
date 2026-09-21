@@ -65,3 +65,15 @@ async def require_admin(
             detail="Admin privileges required",
         )
     return user
+
+
+async def require_super_admin(
+    user: User = Depends(get_current_user),
+) -> User:
+    """Restrict an endpoint to super admin users only."""
+    if user.role != UserRole.SUPER_ADMIN.value:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Super admin privileges required",
+        )
+    return user

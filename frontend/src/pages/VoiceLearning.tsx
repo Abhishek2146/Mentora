@@ -13,6 +13,7 @@ import {
   AlertCircle,
 } from "lucide-react";
 import { voiceService } from "@/services/voiceService";
+import { getApiBase } from "@/lib/api";
 import { syllabusService } from "@/services/syllabusService";
 
 interface Message {

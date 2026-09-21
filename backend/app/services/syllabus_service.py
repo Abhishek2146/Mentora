@@ -23,6 +23,7 @@ from app.services.ocr_service import OCRService
 from app.services.embedding_service import EmbeddingService
 from app.services.vector_service import VectorService
 from app.services.syllabus_structure import (
+    build_course_overview_document,
     build_unit_rag_documents,
     clean_parsed_syllabus,
     try_regex_parse,
@@ -745,6 +746,37 @@ class SyllabusService:
                 extracted_text, base_metadata
             )
 
+        # Prepend a course-level overview document that aggregates all
+        # unit names, topic lists, and credit hours into a single chunk.
+        # This ensures broad queries like "what are the main topics covered?"
+        # or "how many credit hours?" retrieve relevant context even when
+        # RAG_TOP_K is small.
+        subjects_for_overview = (parsed_data or {}).get("subjects") or []
+        if subjects_for_overview:
+            credit_hours: Optional[int] = getattr(syllabus, "credits", None)
+            if credit_hours == 0:
+                credit_hours = None
+            overview_raw = build_course_overview_document(
+                syllabus_id=syllabus.id,
+                user_id=syllabus.user_id,
+                subjects=subjects_for_overview,
+                source_name=base_metadata.get("source", "syllabus"),
+                credit_hours=credit_hours,
+            )
+            if overview_raw:
+                overview_doc = Document(
+                    page_content=overview_raw["content"],
+                    metadata=overview_raw["metadata"],
+                )
+                # Insert at the front so it gets index 0 (chunk_index assigned below)
+                documents = [overview_doc] + list(documents)
+                logger.info(
+                    "[Syllabus] Course overview document added for syllabus %s "
+                    "(%d chars)",
+                    syllabus.id,
+                    len(overview_raw["content"]),
+                )
+
         try:
             chunks = documents
 
@@ -804,15 +836,38 @@ class SyllabusService:
             if syllabus.file_path
             else "syllabus"
         )
+
+        # Extract credit hours from the syllabus object if available
+        credit_hours: Optional[int] = getattr(syllabus, "credits", None)
+        if credit_hours == 0:
+            credit_hours = None
+
+        # Course-level overview: one document that answers "what are the main
+        # topics?" and "how many credit hours?" without requiring many per-unit
+        # chunks to be assembled.
+        overview_doc = build_course_overview_document(
+            syllabus_id=syllabus.id,
+            user_id=syllabus.user_id,
+            subjects=subjects,
+            source_name=source_name,
+            credit_hours=credit_hours,
+        )
+
         unit_docs = build_unit_rag_documents(
             syllabus_id=syllabus.id,
             user_id=syllabus.user_id,
             subjects=subjects,
             source_name=source_name,
         )
+
+        all_raw_docs = []
+        if overview_doc:
+            all_raw_docs.append(overview_doc)
+        all_raw_docs.extend(unit_docs)
+
         chunks = [
             Document(page_content=d["content"], metadata=d["metadata"])
-            for d in unit_docs
+            for d in all_raw_docs
         ]
         for idx, chunk in enumerate(chunks):
             chunk.metadata["chunk_index"] = idx

@@ -16,6 +16,7 @@ from app.database.database import init_db
 
 from app.api.v1 import (
     auth,
+    ai_detection,
     users,
     syllabus,
     study_plan,
@@ -34,7 +35,13 @@ from app.api.v1 import (
     exams,
     notifications,
     subscriptions,
+    study_groups,
+    study_streak,
+    notes,
+    mindmap,
 )
+
+from app.websocket.ws_handler import router as ws_router
 
 from app.middleware.rate_limit import RateLimitMiddleware
 
@@ -138,6 +145,12 @@ app.include_router(
 )
 
 app.include_router(
+    ai_detection.router,
+    prefix=f"{settings.API_PREFIX}/ai-detection",
+    tags=["ai-detection"],
+)
+
+app.include_router(
     users.router,
     prefix=f"{settings.API_PREFIX}/users",
     tags=["users"],
@@ -210,6 +223,18 @@ app.include_router(
 )
 
 app.include_router(
+    study_groups.router,
+    prefix=f"{settings.API_PREFIX}/study-groups",
+    tags=["study-groups"],
+)
+
+app.include_router(
+    study_streak.router,
+    prefix=f"{settings.API_PREFIX}/study-streak",
+    tags=["study-streak"],
+)
+
+app.include_router(
     reports.router,
     prefix=f"{settings.API_PREFIX}/reports",
     tags=["reports"],
@@ -255,6 +280,25 @@ app.include_router(
     subscriptions.usage_router,
     prefix=f"{settings.API_PREFIX}/usage",
     tags=["usage"],
+)
+
+app.include_router(
+    notes.router,
+    prefix=f"{settings.API_PREFIX}/notes",
+    tags=["notes"],
+)
+
+app.include_router(
+    mindmap.router,
+    prefix=f"{settings.API_PREFIX}/mindmap",
+    tags=["mindmap"],
+)
+
+# WebSocket routes (no API prefix - WebSockets have their own path)
+app.include_router(
+    ws_router,
+    prefix=f"{settings.API_PREFIX}/study-groups",
+    tags=["study-groups-ws"],
 )
 
 

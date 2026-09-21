@@ -22,11 +22,23 @@ export function AdminRoute({ children }: { children: ReactNode }) {
   return <>{children}</>;
 }
 
+export function SuperAdminRoute({ children }: { children: ReactNode }) {
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const role = useAuthStore((s) => s.user?.role);
+  if (!isAuthenticated) {
+    return <Navigate to="/login" replace />;
+  }
+  if (role !== "super_admin") {
+    return <Navigate to="/dashboard" replace />;
+  }
+  return <>{children}</>;
+}
+
 export function PublicRoute({ children }: { children: ReactNode }) {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const role = useAuthStore((s) => s.user?.role);
   if (isAuthenticated) {
-    if (role === "admin") return <Navigate to="/admin/dashboard" replace />;
+    if (role === "admin" || role === "super_admin") return <Navigate to="/admin/dashboard" replace />;
     return <Navigate to="/dashboard" replace />;
   }
   return <>{children}</>;

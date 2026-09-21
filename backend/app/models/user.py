@@ -46,6 +46,7 @@ class UserRole(str, Enum):
 
     STUDENT = "student"
     ADMIN = "admin"
+    SUPER_ADMIN = "super_admin"
 
 
 class User(BaseModel):
@@ -131,6 +132,42 @@ class User(BaseModel):
     # Subscription (one-to-one; a Mentora Pro row is created at registration)
     subscription = relationship(
         "Subscription",
+        back_populates="user",
+        uselist=False,
+        cascade="all, delete-orphan",
+    )
+
+    # Study group memberships for this user
+    group_memberships = relationship(
+        "StudyGroupMember",
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
+
+    # Study groups owned by this user
+    study_groups = relationship(
+        "StudyGroup",
+        back_populates="owner",
+        cascade="all, delete-orphan",
+    )
+
+    # Daily study summaries for this user
+    daily_summaries = relationship(
+        "DailyStudySummary",
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
+
+    # Messages sent by this user in study groups
+    sent_messages = relationship(
+        "StudyGroupMessage",
+        back_populates="sender",
+        cascade="all, delete-orphan",
+    )
+
+    # User streak record
+    streak = relationship(
+        "UserStreak",
         back_populates="user",
         uselist=False,
         cascade="all, delete-orphan",
