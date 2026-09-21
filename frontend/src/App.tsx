@@ -19,7 +19,6 @@ import SettingsPage from "@/pages/Settings";
 import ProgressPage from "@/pages/Progress";
 import SubscriptionPage from "@/pages/Subscription";
 import StudyGroupPage from "@/pages/StudyGroup";
-import StudyGroupJoinPage from "@/pages/StudyGroupJoin";
 import StudyStreakPage from "@/pages/StudyStreak";
 import RegisterPage from "@/pages/Register";
 import LoginPage from "@/pages/Login";
@@ -42,9 +41,7 @@ import VoiceLearning from "./pages/VoiceLearning";
 import Profile from "./pages/Profile";
 import Settings from "./pages/Settings";
 import Progress from "./pages/Progress";
-import MindMapPage from "@/pages/MindMap";
-
-const AIDetectionPage = lazy(() => import("@/pages/AIDetection"));
+import AboutPage from "@/pages/About";
 
 export default function App() {
   useEffect(() => {
@@ -55,6 +52,7 @@ export default function App() {
     <BrowserRouter>
 <Routes>
         <Route path="/" element={<HomePage />} />
+        <Route path="/about" element={<AboutPage />} />
         <Route path="/dashboard" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
         <Route path="/search" element={<ProtectedRoute><SearchPage /></ProtectedRoute>} />
         <Route path="/notifications" element={<ProtectedRoute><NotificationsPage /></ProtectedRoute>} />
@@ -64,7 +62,6 @@ export default function App() {
         <Route path="/flashcards" element={<ProtectedRoute><FlashcardsPage /></ProtectedRoute>} />
         <Route path="/study-plan" element={<ProtectedRoute><StudyPlanPage /></ProtectedRoute>} />
         <Route path="/notes" element={<ProtectedRoute><NotesPage /></ProtectedRoute>} />
-        <Route path="/mindmap" element={<ProtectedRoute><MindMapPage /></ProtectedRoute>} />
         <Route path="/analytics" element={<ProtectedRoute><AnalyticsPage /></ProtectedRoute>} />
         <Route path="/daily-quiz" element={<ProtectedRoute><DailyQuizPage /></ProtectedRoute>} />
         <Route path="/mcq" element={<ProtectedRoute><MCQPage /></ProtectedRoute>} />
@@ -78,7 +75,6 @@ export default function App() {
         <Route path="/settings" element={<ProtectedRoute><SettingsPage /></ProtectedRoute>} />
         <Route path="/progress" element={<ProtectedRoute><ProgressPage /></ProtectedRoute>} />
         <Route path="/study-groups" element={<ProtectedRoute><StudyGroupPage /></ProtectedRoute>} />
-        <Route path="/study-groups/join/:token" element={<ProtectedRoute><StudyGroupJoinPage /></ProtectedRoute>} />
         <Route path="/study-streak" element={<ProtectedRoute><StudyStreakPage /></ProtectedRoute>} />
         <Route path="/subscription" element={<ProtectedRoute><SubscriptionPage /></ProtectedRoute>} />
         <Route path="/register" element={<PublicRoute><RegisterPage /></PublicRoute>} />

@@ -1,22 +1,20 @@
 import apiClient from "@/lib/api";
 import type { SyllabusSearchParams, SyllabusSearchResponse } from "@/types/api";
+export type { Syllabus } from "@/types";
 
 const PROCESSING_TIMEOUT = 300000;
 
-export interface Syllabus {
-  id: number;
-  user_id: number;
-  title: string;
-  description?: string;
-  file_path?: string;
-  file_type?: string;
-  status: string;
-  is_processed: boolean;
-  is_ai_processed: boolean;
-  ai_summary?: string;
-  processing_error?: string;
-  created_at: string;
-  updated_at: string;
+// Simple event emitter for syllabus changes
+type SyllabusChangeListener = () => void;
+const listeners = new Set<SyllabusChangeListener>();
+
+function notifySyllabusChange() {
+  listeners.forEach((fn) => fn());
+}
+
+export function onSyllabusChange(fn: SyllabusChangeListener) {
+  listeners.add(fn);
+  return () => listeners.delete(fn);
 }
 
 export const syllabusService = {
@@ -30,6 +28,7 @@ export const syllabusService = {
       formData,
       { timeout: PROCESSING_TIMEOUT }
     );
+    notifySyllabusChange();
     return res.data;
   },
 
@@ -47,6 +46,7 @@ export const syllabusService = {
 
   async deleteSyllabus(syllabusId: number) {
     await apiClient.delete(`/api/v1/syllabus/${syllabusId}`);
+    notifySyllabusChange();
   },
 
   async searchSyllabi(params: SyllabusSearchParams): Promise<SyllabusSearchResponse> {

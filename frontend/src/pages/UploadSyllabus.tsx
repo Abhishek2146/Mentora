@@ -128,6 +128,12 @@ export default function UploadSyllabus() {
                 </div>
               ))}
             </div>
+
+            <div className="flex flex-wrap gap-3 pt-3 border-t border-slate-200 dark:border-slate-700">
+              <button onClick={handleRetry} className="btn-primary btn-md w-full">
+                Upload Another Syllabus
+              </button>
+            </div>
           </div>
         )}
       </div>
