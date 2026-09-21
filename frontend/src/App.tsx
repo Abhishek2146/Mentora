@@ -23,6 +23,7 @@ import StudyGroupJoinPage from "@/pages/StudyGroupJoin";
 import StudyStreakPage from "@/pages/StudyStreak";
 import RegisterPage from "@/pages/Register";
 import LoginPage from "@/pages/Login";
+import VerifyEmailPage from "@/pages/VerifyEmail";
 import ForgotPasswordPage from "@/pages/ForgotPassword";
 import ResetPasswordPage from "@/pages/ResetPassword";
 import VerifyOtpPage from "@/pages/VerifyOtp";
@@ -82,6 +83,7 @@ export default function App() {
         <Route path="/subscription" element={<ProtectedRoute><SubscriptionPage /></ProtectedRoute>} />
         <Route path="/register" element={<PublicRoute><RegisterPage /></PublicRoute>} />
         <Route path="/login" element={<PublicRoute><LoginPage /></PublicRoute>} />
+        <Route path="/verify-email" element={<PublicRoute><VerifyEmailPage /></PublicRoute>} />
         <Route path="/forgot-password" element={<PublicRoute><ForgotPasswordPage /></PublicRoute>} />
         <Route path="/reset-password" element={<PublicRoute><ResetPasswordPage /></PublicRoute>} />
         <Route path="/verify-otp" element={<PublicRoute><VerifyOtpPage /></PublicRoute>} />

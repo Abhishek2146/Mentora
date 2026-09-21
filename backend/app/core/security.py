@@ -435,6 +435,70 @@ async def verify_refresh_token(
 
 
 # ============================================================
+# Email Verification Token
+# ============================================================
+
+def create_email_verification_token(
+    data: dict,
+    expires_delta: Optional[timedelta] = None
+) -> str:
+    """
+    Create a JWT email-verification token.
+
+    Args:
+        data: Data to include in the JWT payload.
+        expires_delta: Optional custom expiration time.
+
+    Returns:
+        Encoded JWT email-verification token.
+    """
+
+    to_encode = data.copy()
+
+    expire = datetime.now(timezone.utc) + (
+        expires_delta
+        or timedelta(hours=24)
+    )
+
+    to_encode.update({
+        "exp": expire,
+        "type": "email_verification"
+    })
+
+    return jwt.encode(
+        to_encode,
+        settings.SECRET_KEY,
+        algorithm=settings.JWT_ALGORITHM
+    )
+
+
+def verify_email_verification_token(
+    token: str
+) -> Optional[dict]:
+    """
+    Verify and decode an email-verification token.
+
+    Returns:
+        JWT payload if valid, otherwise None.
+    """
+
+    try:
+        payload = jwt.decode(
+            token,
+            settings.SECRET_KEY,
+            algorithms=[settings.JWT_ALGORITHM]
+        )
+
+        if payload.get("type") != "email_verification":
+            return None
+
+        return payload
+
+    except JWTError:
+        return None
+
+
+# ============================================================
 # Password Reset Token
 # ============================================================
 
