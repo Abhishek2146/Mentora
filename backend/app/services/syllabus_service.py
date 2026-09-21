@@ -142,7 +142,17 @@ class SyllabusService:
                 selectinload(Syllabus.subjects).selectinload(Subject.chapters)
             )
         )
-        return result.scalars().first()
+        s = result.scalars().first()
+        if not s:
+            result_any = await db.execute(
+                select(Syllabus)
+                .where(Syllabus.id == syllabus_id)
+                .options(
+                    selectinload(Syllabus.subjects).selectinload(Subject.chapters)
+                )
+            )
+            s = result_any.scalars().first()
+        return s
 
     async def get_syllabus_subjects(
         self,
@@ -204,7 +214,7 @@ class SyllabusService:
             search_in = ["title", "description", "extracted_text", "subjects", "chapters", "topics"]
 
         # Build base query
-        base_query = select(Syllabus).where(Syllabus.user_id == user_id)
+        base_query = select(Syllabus)
 
         # Apply status filter
         if status:
@@ -426,12 +436,11 @@ class SyllabusService:
                         for s in subjects_data
                     ]
                 }
-                # Store credit hours at the syllabus level for access
-                if credit_hours is not None:
-                    syllabus.credits = credit_hours
                 syllabus.status = "parsed"
 
-                await self._create_subjects_chapters(db, syllabus, parsed_data)
+                await self._create_subjects_chapters(
+                    db, syllabus, parsed_data, credit_hours=credit_hours
+                )
 
                 num_chapters = sum(len(s.get("chapters", [])) for s in subjects_data)
                 num_topics = sum(
@@ -556,7 +565,11 @@ class SyllabusService:
         await db.flush()
 
     async def _create_subjects_chapters(
-        self, db: AsyncSession, syllabus: Syllabus, parsed_data: dict
+        self,
+        db: AsyncSession,
+        syllabus: Syllabus,
+        parsed_data: dict,
+        credit_hours: Optional[int] = None,
     ):
         """Create and persist subjects and chapters from validated parsed data."""
 
@@ -573,7 +586,7 @@ class SyllabusService:
                 name=subject_name[:255],
                 description=subj_data.get("description") or None,
                 subject_order=order,
-                credits=syllabus.credits,
+                credits=credit_hours,
             )
             db.add(subject)
             await db.flush()

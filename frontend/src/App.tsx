@@ -40,6 +40,7 @@ import VoiceLearning from "./pages/VoiceLearning";
 import Profile from "./pages/Profile";
 import Settings from "./pages/Settings";
 import Progress from "./pages/Progress";
+import AboutPage from "@/pages/About";
 
 export default function App() {
   useEffect(() => {
@@ -50,6 +51,7 @@ export default function App() {
     <BrowserRouter>
 <Routes>
         <Route path="/" element={<HomePage />} />
+        <Route path="/about" element={<AboutPage />} />
         <Route path="/dashboard" element={<ProtectedRoute><DashboardPage /></ProtectedRoute>} />
         <Route path="/search" element={<ProtectedRoute><SearchPage /></ProtectedRoute>} />
         <Route path="/notifications" element={<ProtectedRoute><NotificationsPage /></ProtectedRoute>} />

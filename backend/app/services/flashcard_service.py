@@ -58,6 +58,11 @@ class FlashcardService:
             )
             syllabus = syllabus_result.scalars().first()
             if not syllabus:
+                syllabus_result_any = await db.execute(
+                    select(Syllabus).where(Syllabus.id == syllabus_id)
+                )
+                syllabus = syllabus_result_any.scalars().first()
+            if not syllabus:
                 raise ValueError("Syllabus not found")
 
             if not subject:

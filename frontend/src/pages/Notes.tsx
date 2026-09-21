@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { Link } from "react-router-dom";
 import AppLayout from "@/components/layout/AppLayout";
 import {
   FileText,
@@ -10,15 +11,13 @@ import {
   Sparkles,
   Loader2,
   BookOpen,
-  Download,
   Search,
   Printer,
-  FileCode,
   GraduationCap,
-  CheckCircle2,
+  Type,
 } from "lucide-react";
 import { notesService, Note } from "@/services/notesService";
-import { syllabusService, Syllabus } from "@/services/syllabusService";
+import { syllabusService, Syllabus, onSyllabusChange } from "@/services/syllabusService";
 
 // ------------------------------------------------------------------ Markdown Stripper
 
@@ -35,6 +34,22 @@ export function stripMarkdown(text: string | null | undefined): string {
   clean = clean.replace(/^\s*[-*]\s+/gm, "• ");
   clean = clean.replace(/^\s*>\s+/gm, "");
   return clean.trim();
+}
+
+// ------------------------------------------------------------------ Font styles
+
+export const FONT_STYLES: Record<string, { label: string; family: string }> = {
+  inter: { label: "Inter", family: '"Inter", "system-ui", "sans-serif"' },
+  jakarta: { label: "Plus Jakarta Sans", family: '"Plus Jakarta Sans", "Inter", "sans-serif"' },
+  caveat: { label: "Caveat", family: '"Caveat", "cursive"' },
+  kalam: { label: "Kalam", family: '"Kalam", "cursive"' },
+  patrick: { label: "Patrick Hand", family: '"Patrick Hand", "cursive"' },
+  serif: { label: "Merriweather", family: '"Merriweather", "Georgia", "serif"' },
+  mono: { label: "JetBrains Mono", family: '"JetBrains Mono", "ui-monospace", "monospace"' },
+};
+
+export function fontFamilyFor(style: string | null | undefined): string {
+  return FONT_STYLES[style || "inter"]?.family || FONT_STYLES.inter.family;
 }
 
 // ------------------------------------------------------------------ AI Summary section
@@ -247,6 +262,21 @@ export default function Notes() {
   const [genGenerating, setGenGenerating] = useState(false);
   const [genError, setGenError] = useState<string | null>(null);
 
+
+  async function openSyllabusModal() {
+    setGenError(null);
+    setShowSyllabusModal(true);
+    try {
+      const freshSyllabi = await syllabusService.getAllSyllabi();
+      setSyllabi(freshSyllabi);
+      if (freshSyllabi && freshSyllabi.length > 0) {
+        setGenSyllabusId((prev) => (prev ? prev : freshSyllabi[0].id));
+      }
+    } catch (e) {
+      // ignore silently
+    }
+  }
+
   // Inline note content editing
   const [editingContent, setEditingContent] = useState(false);
   const [contentDraft, setContentDraft] = useState("");
@@ -255,6 +285,12 @@ export default function Notes() {
 
   useEffect(() => {
     loadData();
+    const unsubscribe = onSyllabusChange(() => {
+      syllabusService.getAllSyllabi().then(setSyllabi).catch(() => {});
+    });
+    return () => {
+      if (typeof unsubscribe === "function") unsubscribe();
+    };
   }, []);
 
   async function loadData() {
@@ -269,6 +305,20 @@ export default function Notes() {
       setSyllabi(syllabiData);
       if (notesData.length > 0 && !selectedNote) {
         setSelectedNote(notesData[0]);
+      }
+
+      // Check URL parameters for syllabus_id / auto-generate
+      const searchParams = new URLSearchParams(window.location.search);
+      const urlSyllabusId = searchParams.get("syllabus_id");
+      const autoGenerate = searchParams.get("generate");
+      if (urlSyllabusId) {
+        const sId = Number(urlSyllabusId);
+        setGenSyllabusId(sId);
+        if (autoGenerate === "true") {
+          setShowSyllabusModal(true);
+        }
+      } else if (syllabiData.length > 0) {
+        setGenSyllabusId(syllabiData[0].id);
       }
     } catch (e: any) {
       setError(e?.response?.data?.detail || "Failed to load data.");
@@ -329,6 +379,7 @@ export default function Notes() {
     }
   }
 
+
   async function handleGenerateFromSyllabus() {
     if (!genSyllabusId) {
       setGenError("Please select a syllabus.");
@@ -352,6 +403,7 @@ export default function Notes() {
       setGenGenerating(false);
     }
   }
+
 
   async function handleDelete(noteId: number) {
     if (!confirm("Are you sure you want to delete this note?")) return;
@@ -384,6 +436,21 @@ export default function Notes() {
     }
   }
 
+  async function handleFontChange(font: string) {
+    if (!selectedNote) return;
+    const current = selectedNote;
+    // Optimistic update for snappy UI
+    setSelectedNote({ ...current, font_style: font });
+    setNotes((prev) => prev.map((n) => (n.id === current.id ? { ...n, font_style: font } : n)));
+    try {
+      const updated = await notesService.updateNote(current.id, { font_style: font });
+      setSelectedNote(updated);
+      setNotes((prev) => prev.map((n) => (n.id === updated.id ? updated : n)));
+    } catch (e: any) {
+      setError(e?.response?.data?.detail || "Failed to save font preference.");
+    }
+  }
+
   function handleSummaryChange(summary: string | null) {
     if (!selectedNote) return;
     const updated = { ...selectedNote, ai_summary: summary };
@@ -391,127 +458,21 @@ export default function Notes() {
     setNotes((prev) => prev.map((n) => (n.id === updated.id ? updated : n)));
   }
 
-  function handleExportPDF(note: Note) {
-    const printWindow = window.open("", "_blank");
-    if (!printWindow) {
-      alert("Please allow popups to export PDF.");
-      return;
+  async function handleExportPDF(note: Note) {
+    try {
+      const blob = await notesService.downloadPdf(note.id);
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `${note.title.replace(/[^a-z0-9]/gi, "_")}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    } catch (e) {
+      console.error("PDF download failed:", e);
+      alert("Failed to download PDF. Please try again.");
     }
-
-    const syllabusName = syllabi.find((s) => s.id === note.syllabus_id)?.title || "General";
-    const dateStr = note.created_at ? new Date(note.created_at).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" }) : new Date().toLocaleDateString();
-
-    const htmlContent = `
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <title>${note.title} - Mentora Study Notes</title>
-          <style>
-            body {
-              font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-              color: #1e293b;
-              margin: 40px;
-              line-height: 1.6;
-            }
-            .header {
-              border-bottom: 2px solid #6366f1;
-              padding-bottom: 16px;
-              margin-bottom: 24px;
-              display: flex;
-              justify-content: space-between;
-              align-items: flex-end;
-            }
-            .brand {
-              font-size: 24px;
-              font-weight: 800;
-              color: #4f46e5;
-            }
-            .meta {
-              font-size: 12px;
-              color: #64748b;
-              text-align: right;
-            }
-            .title {
-              font-size: 22px;
-              font-weight: 700;
-              color: #0f172a;
-              margin-bottom: 8px;
-            }
-            .tag {
-              display: inline-block;
-              background-color: #e0e7ff;
-              color: #3730a3;
-              font-size: 11px;
-              font-weight: 600;
-              padding: 3px 8px;
-              border-radius: 4px;
-              margin-bottom: 20px;
-            }
-            .summary-box {
-              background-color: #f5f3ff;
-              border: 1px solid #ddd6fe;
-              border-radius: 8px;
-              padding: 16px;
-              margin-bottom: 24px;
-            }
-            .summary-title {
-              font-size: 13px;
-              font-weight: 700;
-              color: #6d28d9;
-              margin-bottom: 8px;
-              text-transform: uppercase;
-              letter-spacing: 0.5px;
-            }
-            .summary-content {
-              font-size: 13px;
-              color: #4c1d95;
-              white-space: pre-wrap;
-            }
-            .content {
-              font-size: 14px;
-              white-space: pre-wrap;
-              color: #334155;
-            }
-            @media print {
-              body { margin: 20px; }
-            }
-          </style>
-        </head>
-        <body>
-          <div class="header">
-            <div>
-              <div class="brand">Mentora</div>
-              <div style="font-size: 12px; color: #64748b;">AI Academic Study Notes</div>
-            </div>
-            <div class="meta">
-              <div><strong>Course/Syllabus:</strong> ${syllabusName}</div>
-              <div><strong>Date:</strong> ${dateStr}</div>
-            </div>
-          </div>
-
-          <div class="title">${note.title}</div>
-          <div class="tag">Syllabus: ${syllabusName}</div>
-
-          ${note.ai_summary ? `
-            <div class="summary-box">
-              <div class="summary-title">★ AI Study Summary</div>
-              <div class="summary-content">${stripMarkdown(note.ai_summary)}</div>
-            </div>
-          ` : ""}
-
-          <div class="content">${stripMarkdown(note.content) || "No content."}</div>
-
-          <script>
-            window.onload = function() {
-              window.print();
-            };
-          </script>
-        </body>
-      </html>
-    `;
-
-    printWindow.document.write(htmlContent);
-    printWindow.document.close();
   }
 
   const filteredNotes = notes.filter((n) => {
@@ -536,7 +497,7 @@ export default function Notes() {
           </div>
           <div className="flex flex-wrap gap-2">
             <button
-              onClick={() => { setGenError(null); setShowSyllabusModal(true); }}
+              onClick={openSyllabusModal}
               className="btn-primary btn-sm bg-gradient-to-r from-secondary-600 to-primary-600 hover:from-secondary-700 hover:to-primary-700 border-0"
             >
               <Sparkles className="w-4 h-4" /> Generate Notes from Syllabus
@@ -579,7 +540,7 @@ export default function Notes() {
                     {searchQuery ? "No matching notes found." : "No notes yet."}
                   </p>
                   <button
-                    onClick={() => { setGenError(null); setShowSyllabusModal(true); }}
+                    onClick={openSyllabusModal}
                     className="btn-primary btn-sm mx-auto"
                   >
                     <Sparkles className="w-4 h-4" /> Generate from Syllabus
@@ -730,7 +691,7 @@ export default function Notes() {
                         <button
                           onClick={() => handleExportPDF(selectedNote)}
                           className="btn-secondary btn-sm text-xs"
-                          title="Export note as formatted PDF"
+                          title="Export note as PDF"
                         >
                           <Printer className="w-3.5 h-3.5" /> Export PDF
                         </button>
@@ -753,22 +714,42 @@ export default function Notes() {
 
                     {/* Note Content Area */}
                     <div>
-                      <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
                         <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
                           Note Content
                         </span>
-                        {!editingContent && (
-                          <button
-                            onClick={() => {
-                              setContentDraft(selectedNote.content || "");
-                              setEditingContent(true);
-                              setTimeout(() => contentRef.current?.focus(), 50);
-                            }}
-                            className="text-xs text-primary-600 hover:text-primary-700 font-medium flex items-center gap-1"
+                        <div className="flex items-center gap-2">
+                          <label
+                            className="flex items-center gap-1.5 text-xs font-medium text-slate-500"
+                            title="Choose the font style for this note"
                           >
-                            <Pencil className="w-3 h-3" /> Edit content
-                          </button>
-                        )}
+                            <Type className="w-3.5 h-3.5 text-[#6F4FB1]" />
+                            <select
+                              value={selectedNote.font_style || "inter"}
+                              onChange={(e) => handleFontChange(e.target.value)}
+                              className="input py-1 px-2 text-xs w-auto text-[#252525] dark:text-[#F8F7F4]"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              {Object.entries(FONT_STYLES).map(([key, f]) => (
+                                <option key={key} value={key} style={{ fontFamily: f.family }}>
+                                  {f.label}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                          {!editingContent && (
+                            <button
+                              onClick={() => {
+                                setContentDraft(selectedNote.content || "");
+                                setEditingContent(true);
+                                setTimeout(() => contentRef.current?.focus(), 50);
+                              }}
+                              className="text-xs text-primary-600 hover:text-primary-700 font-medium flex items-center gap-1"
+                            >
+                              <Pencil className="w-3 h-3" /> Edit content
+                            </button>
+                          )}
+                        </div>
                       </div>
 
                       {editingContent ? (
@@ -779,6 +760,7 @@ export default function Notes() {
                             onChange={(e) => setContentDraft(e.target.value)}
                             rows={12}
                             className="input resize-none font-sans w-full leading-relaxed"
+                            style={{ fontFamily: fontFamilyFor(selectedNote.font_style) }}
                             autoFocus
                           />
                           <div className="flex gap-2 justify-end">
@@ -815,7 +797,10 @@ export default function Notes() {
                           }`}
                         >
                           {selectedNote.content ? (
-                            <pre className="whitespace-pre-wrap text-sm font-sans text-slate-700 dark:text-slate-200 leading-relaxed">
+                            <pre
+                              className="whitespace-pre-wrap text-sm text-slate-700 dark:text-slate-200 leading-relaxed"
+                              style={{ fontFamily: fontFamilyFor(selectedNote.font_style) }}
+                            >
                               {stripMarkdown(selectedNote.content)}
                             </pre>
                           ) : (
@@ -837,18 +822,20 @@ export default function Notes() {
                   </div>
                 </>
               ) : (
-                <div className="card p-12 text-center space-y-4">
-                  <BookOpen className="w-12 h-12 mx-auto text-slate-300" />
-                  <div>
-                    <p className="font-semibold text-slate-700 dark:text-slate-200">No note selected</p>
-                    <p className="text-xs text-slate-400 mt-1">Select a note from the sidebar or generate one from a syllabus.</p>
+                <div className="space-y-4">
+                  <div className="card p-12 text-center space-y-4">
+                    <BookOpen className="w-12 h-12 mx-auto text-slate-300" />
+                    <div>
+                      <p className="font-semibold text-slate-700 dark:text-slate-200">No note selected</p>
+                      <p className="text-xs text-slate-400 mt-1">Select a note from the sidebar or generate one from a syllabus.</p>
+                    </div>
+                    <button
+                      onClick={openSyllabusModal}
+                      className="btn-primary btn-sm mx-auto bg-gradient-to-r from-secondary-600 to-primary-600"
+                    >
+                      <Sparkles className="w-4 h-4" /> Generate Notes from Syllabus
+                    </button>
                   </div>
-                  <button
-                    onClick={() => { setGenError(null); setShowSyllabusModal(true); }}
-                    className="btn-primary btn-sm mx-auto bg-gradient-to-r from-secondary-600 to-primary-600"
-                  >
-                    <Sparkles className="w-4 h-4" /> Generate Notes from Syllabus
-                  </button>
                 </div>
               )}
 
@@ -886,9 +873,17 @@ export default function Notes() {
               )}
 
               <div>
-                <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
-                  Select Syllabus *
-                </label>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                    Select Syllabus *
+                  </label>
+                  <Link
+                    to="/upload-syllabus"
+                    className="text-xs font-semibold text-primary-600 hover:text-primary-700 flex items-center gap-1"
+                  >
+                    <Plus className="w-3.5 h-3.5" /> Upload New Syllabus
+                  </Link>
+                </div>
                 <select
                   value={genSyllabusId}
                   onChange={(e) => setGenSyllabusId(Number(e.target.value) || "")}
@@ -903,9 +898,15 @@ export default function Notes() {
                   ))}
                 </select>
                 {syllabi.length === 0 && (
-                  <p className="text-xs text-amber-600 mt-1">
-                    No syllabi found. Please upload a syllabus first from the Upload Syllabus page.
-                  </p>
+                  <div className="mt-2 p-3 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 text-xs text-amber-700 dark:text-amber-300 space-y-1.5">
+                    <p className="font-semibold">No syllabi found in your library yet.</p>
+                    <Link
+                      to="/upload-syllabus"
+                      className="inline-flex items-center gap-1 font-bold text-primary-600 dark:text-primary-400 hover:underline"
+                    >
+                      <Plus className="w-3.5 h-3.5" /> Click here to upload a syllabus on the Upload Syllabus page first
+                    </Link>
+                  </div>
                 )}
               </div>
 

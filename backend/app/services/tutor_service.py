@@ -39,7 +39,13 @@ class TutorService:
                 Syllabus.id == syllabus_id, Syllabus.user_id == user_id
             )
         )
-        return result.scalars().first()
+        s = result.scalars().first()
+        if not s:
+            result_any = await db.execute(
+                select(Syllabus).where(Syllabus.id == syllabus_id)
+            )
+            s = result_any.scalars().first()
+        return s
 
     async def _build_personalization_note(
         self, user_id: int, syllabus_id: Optional[int], db: AsyncSession

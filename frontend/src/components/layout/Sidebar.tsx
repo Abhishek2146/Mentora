@@ -3,12 +3,13 @@ import {
   LayoutDashboard, Brain, CreditCard, CalendarDays, BarChart3,
   ClipboardList, BookOpen, Trophy, AlertTriangle, RotateCcw,
   Upload, Code2, Mic, User, Settings, ChevronLeft, ChevronRight, X,
-  GraduationCap, TrendingUp, ShieldCheck, Users, Crown, Flame, FileText,
+  TrendingUp, ShieldCheck, Users, Crown, Flame, FileText,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useUIStore } from "@/store/uiStore";
 import { useAuthStore } from "@/store/authStore";
 import { getInitials } from "@/lib/utils";
+import logo from "@/assets/logo.png";
 
 const navGroups = [
   {
@@ -89,7 +90,7 @@ export default function Sidebar() {
       <aside
         className={cn(
           "fixed top-0 left-0 h-full z-50 flex flex-col transition-all duration-300 ease-in-out w-64 overflow-hidden",
-          "bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-700/50",
+          "bg-white dark:bg-[#222120] border-r border-[#E7E5E0] dark:border-[#383533]",
           // Mobile: off-canvas drawer that slides in.
           mobileNavOpen ? "translate-x-0 shadow-2xl" : "-translate-x-full",
           // Desktop: persistent rail based on collapse state.
@@ -98,21 +99,23 @@ export default function Sidebar() {
         )}
       >
         {/* Logo */}
-        <div className="flex items-center justify-between px-4 py-5 border-b border-slate-100 dark:border-slate-700/50">
-          <Link to="/dashboard" onClick={handleNavClick} className="flex items-center gap-2.5 min-w-0">
-            <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-primary-500 to-secondary-500 flex items-center justify-center shadow-glow-primary flex-shrink-0">
-              <GraduationCap className="w-5 h-5 text-white" />
+        <div className="flex items-center justify-between px-4 py-4 border-b border-[#E7E5E0] dark:border-[#383533]">
+          <Link to="/dashboard" onClick={handleNavClick} className="flex items-center gap-3 min-w-0 group">
+            <div className="w-9 h-9 rounded-xl bg-white dark:bg-[#222120] flex items-center justify-center shadow-sm flex-shrink-0 overflow-hidden group-hover:scale-105 transition-transform duration-200">
+              <img src={logo} alt="Mentora logo" className="w-8 h-8 object-contain" />
             </div>
-            <span className={cn(
-              "font-bold text-lg bg-gradient-to-r from-primary-600 to-secondary-600 bg-clip-text text-transparent whitespace-nowrap",
-              !sidebarOpen && "lg:hidden"
-            )}>
-              Mentora
-            </span>
+            <div className={cn("min-w-0 transition-opacity duration-200", !sidebarOpen && "lg:hidden")}>
+              <span className="font-bold text-lg tracking-tight text-[#252525] dark:text-[#F8F7F4] block">
+                Mentora
+              </span>
+              <span className="text-[10px] font-medium tracking-wider text-[#6B6B6B] block -mt-1 uppercase">
+                AI Learning
+              </span>
+            </div>
           </Link>
           <button
             onClick={() => setMobileNavOpen(false)}
-            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-700 transition-all lg:hidden"
+            className="p-1.5 rounded-lg text-[#6B6B6B] hover:text-[#252525] hover:bg-[#EBE5F6]/40 dark:hover:bg-[#383533] transition-all lg:hidden"
             aria-label="Close menu"
           >
             <X className="w-4 h-4" />
@@ -120,8 +123,8 @@ export default function Sidebar() {
           <button
             onClick={() => setSidebarOpen(!sidebarOpen)}
             className={cn(
-              "hidden lg:block p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-700 transition-all",
-              !sidebarOpen && "absolute -right-3 top-5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 shadow-sm rounded-full"
+              "hidden lg:flex items-center justify-center w-7 h-7 rounded-lg text-[#6B6B6B] hover:text-[#252525] dark:hover:text-[#F8F7F4] hover:bg-[#EBE5F6]/40 dark:hover:bg-[#383533] transition-all",
+              !sidebarOpen && "absolute -right-3 top-5 bg-white dark:bg-[#222120] border border-[#E7E5E0] dark:border-[#383533] shadow-sm rounded-full z-10"
             )}
             aria-label="Toggle sidebar"
           >
@@ -130,57 +133,80 @@ export default function Sidebar() {
         </div>
 
         {/* Navigation */}
-        <nav className="flex-1 overflow-y-auto py-4 px-2 no-scrollbar">
+        <nav className="flex-1 overflow-y-auto py-3 px-2.5 space-y-4 no-scrollbar">
           {groups.map((group) => (
-            <div key={group.label} className="mb-4">
+            <div key={group.label}>
               <p className={cn(
-                "text-[10px] font-semibold uppercase tracking-widest text-slate-400 dark:text-slate-500 px-3 mb-1.5 truncate whitespace-nowrap",
+                "text-[10px] font-bold uppercase tracking-wider text-[#6B6B6B]/80 dark:text-[#A8A5A0] px-3 mb-1 truncate whitespace-nowrap select-none",
                 !sidebarOpen && "lg:opacity-0 lg:pointer-events-none"
               )}>
                 {group.label}
               </p>
-              {group.items.map((item) => {
-                const isActive = pathname === item.path;
-                return (
-                  <Link
-                    key={item.path}
-                    to={item.path}
-                    onClick={handleNavClick}
-                    title={!sidebarOpen ? item.label : undefined}
-                    className={cn(
-                      "sidebar-item mb-0.5",
-                      isActive && "active",
-                      !sidebarOpen && "lg:justify-center lg:px-2"
-                    )}
-                  >
-                    <item.icon className={cn("w-4.5 h-4.5 flex-shrink-0", isActive ? "text-primary-600 dark:text-primary-400" : "")} style={{ width: 18, height: 18 }} />
-                    <span className={cn("truncate", !sidebarOpen && "lg:hidden")}>{item.label}</span>
-                  </Link>
-                );
-              })}
+              <div className="space-y-0.5">
+                {group.items.map((item) => {
+                  const isActive = pathname === item.path;
+                  return (
+                    <Link
+                      key={item.path}
+                      to={item.path}
+                      onClick={handleNavClick}
+                      title={!sidebarOpen ? item.label : undefined}
+                      className={cn(
+                        "sidebar-item relative group",
+                        isActive && "active",
+                        !sidebarOpen && "lg:justify-center lg:px-2"
+                      )}
+                    >
+                      {isActive && (
+                        <span className="absolute left-0 top-1.5 bottom-1.5 w-1 rounded-r-full bg-[#6F4FB1]" />
+                      )}
+                      <item.icon
+                        className={cn(
+                          "w-4 h-4 flex-shrink-0 transition-colors duration-150",
+                          isActive
+                            ? "text-[#6F4FB1]"
+                            : "text-[#6B6B6B] dark:text-[#A8A5A0] group-hover:text-[#252525] dark:group-hover:text-[#F8F7F4]"
+                        )}
+                      />
+                      <span className={cn("truncate font-medium text-xs sm:text-sm", !sidebarOpen && "lg:hidden")}>
+                        {item.label}
+                      </span>
+                    </Link>
+                  );
+                })}
+              </div>
             </div>
           ))}
         </nav>
 
-        {/* User */}
-        <div className="border-t border-slate-100 dark:border-slate-700/50 p-3">
-          <Link to="/profile" onClick={handleNavClick} className={cn(
-            "flex items-center gap-3 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-700/50 transition-colors px-3 py-2",
-            !sidebarOpen && "lg:justify-center lg:px-2"
-          )}>
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-primary-500 to-secondary-500 flex items-center justify-center text-white text-sm font-bold shadow-md flex-shrink-0">
+        {/* User Card */}
+        <div className="border-t border-[#E7E5E0] dark:border-[#383533] p-2.5 bg-[#F8F7F4]/60 dark:bg-[#1A1918]/60">
+          <Link
+            to="/profile"
+            onClick={handleNavClick}
+            className={cn(
+              "flex items-center gap-3 rounded-xl p-2 hover:bg-white dark:hover:bg-[#222120] border border-transparent hover:border-[#E7E5E0] dark:hover:border-[#383533] transition-all duration-150",
+              !sidebarOpen && "lg:justify-center lg:p-1.5"
+            )}
+          >
+            <div className="w-8 h-8 rounded-lg bg-[#6F4FB1] flex items-center justify-center text-white text-xs font-bold shadow-sm flex-shrink-0">
               {user?.full_name ? getInitials(user.full_name) : user?.username?.[0]?.toUpperCase() ?? "U"}
             </div>
-            <div className={cn("leading-tight min-w-0", !sidebarOpen && "lg:hidden")}>
-              <p className="text-sm font-bold text-slate-800 dark:text-slate-100 truncate">{userName}</p>
-              <p className="text-[11px] text-slate-400 capitalize">{user?.role || "student"}</p>
+            <div className={cn("leading-tight min-w-0 flex-1", !sidebarOpen && "lg:hidden")}>
+              <div className="flex items-center justify-between gap-1">
+                <p className="text-xs font-semibold text-[#252525] dark:text-[#F8F7F4] truncate">{userName}</p>
+                <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-[#EBE5F6] text-[#6F4FB1] border border-[#6F4FB1]/20 uppercase tracking-wider">
+                  {user?.role === "admin" ? "ADMIN" : "PRO"}
+                </span>
+              </div>
+              <p className="text-[11px] text-[#6B6B6B] truncate mt-0.5">{user?.email || "student"}</p>
             </div>
           </Link>
         </div>
 
         {/* Footer */}
-        <div className={cn("hidden lg:block p-4 border-t border-slate-100 dark:border-slate-700/50", !sidebarOpen && "lg:hidden")}>
-          <div className="text-[10px] text-slate-400 text-center">Mentora v1.0</div>
+        <div className={cn("hidden lg:block p-3 border-t border-[#E7E5E0] dark:border-[#383533]", !sidebarOpen && "lg:hidden")}>
+          <div className="text-[10px] text-[#6B6B6B] text-center">Mentora v1.0</div>
         </div>
       </aside>
     </>

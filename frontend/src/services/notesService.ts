@@ -6,6 +6,7 @@ export interface Note {
   title: string;
   content: string;
   syllabus_id: number | null;
+  font_style: string;
   ai_summary: string | null;
   summary_generated_at: string | null;
   created_at: string | null;
@@ -34,6 +35,7 @@ export const notesService = {
     title: string;
     content: string;
     syllabus_id?: number | null;
+    font_style?: string;
   }): Promise<Note> {
     const res = await apiClient.post("/api/v1/notes/", data);
     return res.data;
@@ -41,7 +43,7 @@ export const notesService = {
 
   async updateNote(
     noteId: number,
-    data: { title?: string; content?: string; syllabus_id?: number | null; ai_summary?: string | null }
+    data: { title?: string; content?: string; syllabus_id?: number | null; ai_summary?: string | null; font_style?: string }
   ): Promise<Note> {
     const res = await apiClient.put(`/api/v1/notes/${noteId}`, data);
     return res.data;
@@ -72,5 +74,13 @@ export const notesService = {
   /** Delete the AI summary from a note without deleting the note itself. */
   async deleteSummary(noteId: number): Promise<void> {
     await apiClient.delete(`/api/v1/notes/${noteId}/summary`);
+  },
+
+  /** Download note as PDF. */
+  async downloadPdf(noteId: number): Promise<Blob> {
+    const res = await apiClient.get(`/api/v1/notes/${noteId}/pdf`, {
+      responseType: "blob",
+    });
+    return res.data;
   },
 };

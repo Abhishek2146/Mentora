@@ -3,9 +3,56 @@ Application Configuration.
 """
 
 import os
-from typing import List
+from typing import List, Optional
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+def normalize_database_url(url: str) -> str:
+    """Normalize a database connection string for SQLAlchemy + asyncpg compatibility.
+
+    Neon (and standard libpq) connection URLs typically start with 'postgresql://' or 'postgres://'
+    and often specify query parameters like 'sslmode=require' or 'channel_binding=require'.
+    asyncpg requires:
+    1. Scheme 'postgresql+asyncpg://'
+    2. SSL argument named 'ssl' (e.g. 'ssl=require') instead of 'sslmode'
+    3. Removal of libpq-only parameters (like 'channel_binding' or 'options') that asyncpg rejects.
+    """
+    if not url or not isinstance(url, str):
+        return url
+
+    url = url.strip().strip("'\"")
+
+    parts = urlsplit(url)
+    scheme = parts.scheme
+    if scheme in ("postgresql", "postgres"):
+        scheme = "postgresql+asyncpg"
+
+    query_params = parse_qsl(parts.query, keep_blank_values=True)
+    clean_params = []
+    has_ssl = False
+
+    for k, v in query_params:
+        if k == "sslmode":
+            clean_params.append(("ssl", v))
+            has_ssl = True
+        elif k == "ssl":
+            clean_params.append(("ssl", v))
+            has_ssl = True
+        elif k in ("channel_binding", "options"):
+            # libpq parameters unsupported by asyncpg.connect()
+            continue
+        else:
+            clean_params.append((k, v))
+
+    # Auto-enable ssl=require for Neon or cloud endpoints if no SSL specified
+    if ("neon.tech" in parts.netloc.lower() or "-pooler" in parts.netloc.lower()) and not has_ssl:
+        clean_params.append(("ssl", "require"))
+
+    new_query = urlencode(clean_params)
+    return urlunsplit((scheme, parts.netloc, parts.path, new_query, parts.fragment))
 
 
 class Settings(BaseSettings):
@@ -49,8 +96,23 @@ class Settings(BaseSettings):
     DATABASE_URL: str = (
         "postgresql+asyncpg://mentora:mentora123@localhost:5432/mentora"
     )
+    NEON_DATABASE_URL: Optional[str] = None
 
     DB_ECHO: bool = False
+    DB_POOL_SIZE: int = 10
+    DB_MAX_OVERFLOW: int = 10
+    DB_POOL_RECYCLE: int = 300  # 5 minutes, handles Neon serverless idle compute suspension
+    DB_POOL_TIMEOUT: int = 30
+    DB_STATEMENT_CACHE_SIZE: Optional[int] = None  # None = auto (0 for Neon/pooler, 1000 for standard)
+
+    @field_validator("DATABASE_URL", mode="before")
+    @classmethod
+    def validate_database_url(cls, v: Optional[str]) -> str:
+        neon_url = os.getenv("NEON_DATABASE_URL")
+        target_url = neon_url if neon_url else v
+        if not target_url:
+            target_url = "postgresql+asyncpg://mentora:mentora123@localhost:5432/mentora"
+        return normalize_database_url(target_url)
 
     # ============================================================
     # Redis

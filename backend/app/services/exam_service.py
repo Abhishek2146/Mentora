@@ -89,9 +89,7 @@ class ExamService:
         syllabus = None
         if syllabus_id:
             res = await db.execute(
-                select(Syllabus).where(
-                    Syllabus.id == syllabus_id, Syllabus.user_id == user_id
-                )
+                select(Syllabus).where(Syllabus.id == syllabus_id)
             )
             syllabus = res.scalars().first()
             if not syllabus:
@@ -99,7 +97,6 @@ class ExamService:
         else:
             res = await db.execute(
                 select(Syllabus)
-                .where(Syllabus.user_id == user_id)
                 .order_by(Syllabus.id.desc())
                 .limit(1)
             )

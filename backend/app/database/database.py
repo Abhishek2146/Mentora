@@ -2,6 +2,7 @@
 Database connection and initialization
 """
 
+import asyncio
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy import text
@@ -16,17 +17,52 @@ from app import models  # noqa: F401
 logger = get_logger(__name__)
 
 
+def is_neon_or_pooler_url(url: str) -> bool:
+    """Check if the database URL points to a Neon or PgBouncer pooled endpoint."""
+    lowered = (url or "").lower()
+    return "neon.tech" in lowered or "-pooler" in lowered or "pooler" in lowered
+
+
 # --------------------------------------------------
 # Database Engine
 # --------------------------------------------------
 
-engine: AsyncEngine = create_async_engine(
-    settings.DATABASE_URL,
-    echo=settings.DB_ECHO,
-    pool_pre_ping=True,
-    pool_size=20,
-    max_overflow=10,
-)
+def create_db_engine() -> AsyncEngine:
+    """Create and configure the SQLAlchemy AsyncEngine with Neon / serverless optimizations."""
+    is_sqlite = "sqlite" in settings.DATABASE_URL.lower()
+    is_neon_or_pooler = is_neon_or_pooler_url(settings.DATABASE_URL)
+
+    if is_sqlite:
+        return create_async_engine(
+            settings.DATABASE_URL,
+            echo=settings.DB_ECHO,
+        )
+
+    connect_args = {}
+
+    # When connecting to Neon (especially through its PgBouncer pooler endpoint),
+    # asyncpg's prepared statement caching causes DuplicatePreparedStatementError
+    # across pooled transactions. Disabling statement cache (statement_cache_size=0)
+    # is the officially recommended Neon and asyncpg configuration.
+    if settings.DB_STATEMENT_CACHE_SIZE is not None:
+        connect_args["statement_cache_size"] = settings.DB_STATEMENT_CACHE_SIZE
+    elif is_neon_or_pooler:
+        logger.info("Neon / PgBouncer pooler detected: setting statement_cache_size=0 for asyncpg.")
+        connect_args["statement_cache_size"] = 0
+
+    return create_async_engine(
+        settings.DATABASE_URL,
+        echo=settings.DB_ECHO,
+        pool_pre_ping=True,
+        pool_size=settings.DB_POOL_SIZE,
+        max_overflow=settings.DB_MAX_OVERFLOW,
+        pool_recycle=settings.DB_POOL_RECYCLE,
+        pool_timeout=settings.DB_POOL_TIMEOUT,
+        connect_args=connect_args,
+    )
+
+
+engine: AsyncEngine = create_db_engine()
 
 
 # --------------------------------------------------
@@ -165,7 +201,7 @@ async def _run_migrations(conn) -> None:
     ``chapters``) are applied without a separate migration tool.
     """
     # Columns handled by specific migrations below — skip in the generic loop.
-    _specific_migration_columns = {("study_groups", "memory")}
+    _specific_migration_columns = {("study_groups", "memory"), ("notes", "font_style")}
 
     # Iterate over every registered model and check each column.
     for table in Base.metadata.tables.values():
@@ -241,6 +277,27 @@ async def _run_migrations(conn) -> None:
         if not result.fetchone():
             await conn.execute(text(ddl))
             logger.info("Added JSONB column '%s' to table '%s'", col_name, table_name)
+
+    # Specific migration for the notes font_style column so the string
+    # default is properly quoted (the generic handler would emit an
+    # unquoted, invalid DEFAULT for string defaults).
+    string_default_migrations = [
+        (
+            "notes",
+            "font_style",
+            "ALTER TABLE notes ADD COLUMN IF NOT EXISTS font_style VARCHAR(50) NOT NULL DEFAULT 'inter'",
+        ),
+    ]
+    for table_name, col_name, ddl in string_default_migrations:
+        result = await conn.execute(
+            text(
+                "SELECT 1 FROM information_schema.columns "
+                "WHERE table_name = :t AND column_name = :c"
+            ).bindparams(t=table_name, c=col_name),
+        )
+        if not result.fetchone():
+            await conn.execute(text(ddl))
+            logger.info("Added column '%s' to table '%s'", col_name, table_name)
 
 
 async def _ensure_unique_constraints(conn) -> None:
@@ -333,21 +390,51 @@ async def _fix_broken_timestamps(conn) -> None:
 # Initialize Database
 # --------------------------------------------------
 
-async def init_db() -> None:
-    """Create application tables and verify the database connection."""
-    try:
-        async with engine.begin() as conn:
-            await conn.execute(text("SELECT 1"))
-            await conn.run_sync(Base.metadata.create_all)
-            await _fix_column_types(conn)
-            await _run_migrations(conn)
-            await _ensure_unique_constraints(conn)
-            await _fix_broken_timestamps(conn)
-            await _provision_pro_for_existing_users(conn)
-        logger.info("Database initialized successfully")
-    except Exception as exc:
-        logger.exception("Database initialization failed: %s", exc)
-        raise
+async def init_db(max_retries: int = 3, retry_delay: float = 2.0) -> None:
+    """Create application tables and verify the database connection.
+
+    Includes retry logic to gracefully accommodate Neon serverless cold starts
+    (when compute wakes up from scale-to-zero suspension).
+    """
+    is_neon = is_neon_or_pooler_url(settings.DATABASE_URL)
+    attempt = 0
+
+    while attempt < max_retries:
+        attempt += 1
+        try:
+            if is_neon and attempt > 1:
+                logger.info(
+                    "Connecting to Neon database (attempt %d/%d, compute may be waking up)...",
+                    attempt,
+                    max_retries,
+                )
+            async with engine.begin() as conn:
+                await conn.execute(text("SELECT 1"))
+                await conn.run_sync(Base.metadata.create_all)
+                await _fix_column_types(conn)
+                await _run_migrations(conn)
+                await _ensure_unique_constraints(conn)
+                await _fix_broken_timestamps(conn)
+                await _provision_pro_for_existing_users(conn)
+            logger.info("Database initialized successfully")
+            return
+        except Exception as exc:
+            if attempt < max_retries:
+                logger.warning(
+                    "Database connection attempt %d/%d failed (%s). Retrying in %.1fs...",
+                    attempt,
+                    max_retries,
+                    exc,
+                    retry_delay,
+                )
+                await asyncio.sleep(retry_delay)
+            else:
+                logger.exception(
+                    "Database initialization failed after %d attempts: %s",
+                    max_retries,
+                    exc,
+                )
+                raise
 
 
 # --------------------------------------------------

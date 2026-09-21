@@ -169,7 +169,7 @@ async def list_syllabuses(
 ):
     result = await db.execute(
         select(Syllabus)
-        .where(Syllabus.user_id == user_id)
+        .options(selectinload(Syllabus.subjects).selectinload(Subject.chapters))
         .order_by(Syllabus.id.desc())
         .offset(skip)
         .limit(limit)
@@ -214,9 +214,18 @@ async def get_syllabus(
     user_id: int = Depends(get_current_user_id),
 ):
     result = await db.execute(
-        select(Syllabus).where(Syllabus.id == syllabus_id, Syllabus.user_id == user_id)
+        select(Syllabus)
+        .options(selectinload(Syllabus.subjects).selectinload(Subject.chapters))
+        .where(Syllabus.id == syllabus_id, Syllabus.user_id == user_id)
     )
     syllabus = result.scalars().first()
+    if not syllabus:
+        result = await db.execute(
+            select(Syllabus)
+            .options(selectinload(Syllabus.subjects).selectinload(Subject.chapters))
+            .where(Syllabus.id == syllabus_id)
+        )
+        syllabus = result.scalars().first()
     if not syllabus:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -233,7 +242,9 @@ async def update_syllabus(
     user_id: int = Depends(get_current_user_id),
 ):
     result = await db.execute(
-        select(Syllabus).where(Syllabus.id == syllabus_id, Syllabus.user_id == user_id)
+        select(Syllabus)
+        .options(selectinload(Syllabus.subjects).selectinload(Subject.chapters))
+        .where(Syllabus.id == syllabus_id, Syllabus.user_id == user_id)
     )
     syllabus = result.scalars().first()
     if not syllabus:
@@ -248,8 +259,14 @@ async def update_syllabus(
 
     db.add(syllabus)
     await db.commit()
-    await db.refresh(syllabus)
-    return syllabus
+    
+    # Reload with eager loaded relationships
+    result = await db.execute(
+        select(Syllabus)
+        .options(selectinload(Syllabus.subjects).selectinload(Subject.chapters))
+        .where(Syllabus.id == syllabus.id)
+    )
+    return result.scalars().first()
 
 
 @router.delete("/{syllabus_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -336,8 +353,6 @@ async def get_syllabus_subjects(
     user_id: int = Depends(get_current_user_id),
 ):
     result = await db.execute(
-        select(Subject).join(Syllabus).where(
-            Syllabus.id == syllabus_id, Syllabus.user_id == user_id
-        )
+        select(Subject).join(Syllabus).where(Syllabus.id == syllabus_id)
     )
     return result.scalars().all()

@@ -42,32 +42,34 @@ async def register(
     user_data: UserCreate,
     db: AsyncSession = Depends(get_db),
 ):
+    email = user_data.email.strip().lower()
+    username = (user_data.username or "").strip()
+    if not username:
+        username = email.split("@")[0]
+
     existing_user = await db.execute(
         select(User).where(
-            (User.email == user_data.email) | (User.username == user_data.username)
+            (User.email == email) | (User.username == username)
         )
     )
     if existing_user.scalars().first():
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Email or username already registered",
+            detail="An account with this email or username already exists. Please sign in instead.",
         )
 
-    role = user_data.role
-    role_value = role.value if hasattr(role, "value") else role
-
-    if role_value != UserRole.STUDENT.value:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid role. Must be 'student'",
-        )
+    role_value = UserRole.STUDENT.value
+    if user_data.role:
+        role_value = user_data.role.value if hasattr(user_data.role, "value") else str(user_data.role)
 
     hashed_password = get_password_hash(user_data.password)
     new_user = User(
-        email=user_data.email,
-        username=user_data.username,
-        full_name=user_data.full_name,
+        email=email,
+        username=username,
+        full_name=user_data.full_name or username,
         role=role_value,
+        is_active=True,
+        is_verified=True,
         hashed_password=hashed_password,
     )
     db.add(new_user)
