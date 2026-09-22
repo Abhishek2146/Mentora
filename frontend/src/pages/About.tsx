@@ -19,8 +19,8 @@ const contributors = [
     name: "Abhishek",
     role: "Backend Developer",
     image: abhishekImg,
-    bio: "Builds the robust APIs and services that power everything behind the scenes — from auth to the study-engine pipelines.",
-    tags: ["Node.js", "APIs", "Database"],
+    bio: "Builds the robust APIs and services that power everything behind the scenes from auth to the study-engine pipelines.",
+    tags: ["FastAPI", "APIs", "Database"],
   },
   {
     name: "Saroj",
@@ -33,7 +33,7 @@ const contributors = [
 
 const values = [
   { icon: Sparkles, title: "Student-first", desc: "Every feature starts with a real study problem, not a shiny gimmick." },
-  { icon: Target, title: "Evidence-based", desc: "We lean on spaced repetition and active recall — the methods proven to stick." },
+  { icon: Target, title: "Evidence-based", desc: "We lean on spaced repetition and active recall the methods proven to stick." },
   { icon: Heart, title: "Free to learn", desc: "Great education shouldn't be paywalled. Our core tools stay free, forever." },
 ];
 
@@ -77,7 +77,7 @@ export default function About() {
             <span className="bg-gradient-to-r from-primary-500 via-secondary-500 to-primary-600 bg-clip-text text-transparent">Mentora</span>
           </h1>
           <p className="text-lg sm:text-xl text-slate-600 dark:text-slate-400 max-w-2xl mx-auto mb-10 leading-relaxed">
-            We're a small team of students and engineers who were tired of studying harder — so we built something smarter.
+            We're a small team of students and engineers who were tired of studying harder so we built something smarter.
             Mentora turns any syllabus into flashcards, quizzes, and a personalised study plan.
           </p>
         </div>

@@ -219,6 +219,11 @@ class QuizService:
         )
         syllabus_rows = candidates.scalars().all()
         if not syllabus_rows:
+            candidates_all = await db.execute(
+                select(Syllabus).order_by(Syllabus.id.desc())
+            )
+            syllabus_rows = candidates_all.scalars().all()
+        if not syllabus_rows:
             raise ValueError("Upload a syllabus first to generate quizzes.")
 
         syllabus = None
@@ -412,29 +417,13 @@ class QuizService:
         syllabus = None
         if syllabus_id:
             s_res = await db.execute(
-                select(Syllabus).where(Syllabus.id == syllabus_id, Syllabus.user_id == user_id)
+                select(Syllabus).where(Syllabus.id == syllabus_id)
             )
             syllabus = s_res.scalars().first()
-            if not syllabus:
-                raise ValueError("Selected syllabus not found.")
 
         if not syllabus:
-            # Pick latest valid syllabus with content
             latest_res = await db.execute(
                 select(Syllabus)
-                .where(
-                    Syllabus.user_id == user_id,
-                    Syllabus.status.in_(["rag_ready", "parsed", "uploaded", "embedding_failed", "processed"]),
-                )
-                .order_by(Syllabus.id.desc())
-            )
-            syllabus = latest_res.scalars().first()
-
-        if not syllabus:
-            # Fallback to any user syllabus
-            latest_res = await db.execute(
-                select(Syllabus)
-                .where(Syllabus.user_id == user_id)
                 .order_by(Syllabus.id.desc())
             )
             syllabus = latest_res.scalars().first()

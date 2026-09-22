@@ -78,7 +78,7 @@ export const useAuthStore = create<AuthState>()(
           formData.append("username", emailOrUsername);
           formData.append("password", password);
 
-          const apiUrl = import.meta.env.VITE_API_URL ?? "";
+const apiUrl = getApiBase();
           const response = await fetch(`${apiUrl}/api/v1/auth/login`, {
             method: "POST",
             body: formData,
@@ -167,7 +167,7 @@ export const useAuthStore = create<AuthState>()(
           return;
         }
         try {
-          const apiUrl = import.meta.env.VITE_API_URL ?? "";
+const apiUrl = getApiBase();
           const response = await fetch(`${apiUrl}/api/v1/auth/me`, {
             headers: { Authorization: `Bearer ${tokens.access_token}` },
           });
@@ -243,7 +243,7 @@ export const useAuthStore = create<AuthState>()(
         try {
           const tokens = get().tokens;
           if (!tokens) throw new Error("Not authenticated");
-          const apiUrl = import.meta.env.VITE_API_URL ?? "";
+          const apiUrl = getApiBase();
           const response = await fetch(`${apiUrl}/api/v1/auth/change-password`, {
             method: "POST",
             headers: {

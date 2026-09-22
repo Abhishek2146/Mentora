@@ -14,8 +14,18 @@ export default function AppLayout({ children, title }: AppLayoutProps) {
 
   return (
     <div className="min-h-screen bg-[#F8F7F4] dark:bg-[#1A1918] text-[#252525] dark:text-[#F8F7F4] relative selection:bg-[#6F4FB1]/20">
-      {/* Soft ambient background glow in Calm Lavender and Soft Sage */}
-      <div className="fixed inset-0 pointer-events-none overflow-hidden -z-10">
+      {/* Soft background grid + ambient glow (paint over the layout bg, like the global body::before grid) */}
+      <div className="fixed inset-0 pointer-events-none overflow-hidden z-0">
+        <div
+          className="absolute inset-0"
+          style={{
+            backgroundImage:
+              "linear-gradient(to right, rgba(111,79,177,0.07) 1px, transparent 1px), linear-gradient(to bottom, rgba(111,79,177,0.07) 1px, transparent 1px)",
+            backgroundSize: "40px 40px",
+            filter: "blur(0.4px)",
+          }}
+        />
+        {/* Soft ambient background glow in Calm Lavender and Soft Sage */}
         <div className="absolute -top-32 right-1/4 w-96 h-96 rounded-full bg-[#6F4FB1]/5 blur-3xl" />
         <div className="absolute top-1/3 -left-20 w-80 h-80 rounded-full bg-[#8FAF9A]/5 blur-3xl" />
       </div>

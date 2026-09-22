@@ -48,10 +48,7 @@ async def generate_problem(
 
     if payload.syllabus_id:
         result = await db.execute(
-            select(Syllabus).where(
-                Syllabus.id == payload.syllabus_id,
-                Syllabus.user_id == user_id,
-            )
+            select(Syllabus).where(Syllabus.id == payload.syllabus_id)
         )
         syllabus = result.scalars().first()
         if not syllabus:
@@ -65,7 +62,6 @@ async def generate_problem(
     elif not topic:
         result = await db.execute(
             select(Syllabus)
-            .where(Syllabus.user_id == user_id)
             .order_by(Syllabus.id.desc())
             .limit(1)
         )

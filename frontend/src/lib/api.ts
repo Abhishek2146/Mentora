@@ -20,7 +20,7 @@ class ApiClient {
 
   constructor() {
     this.client = axios.create({
-      baseURL: import.meta.env.VITE_API_URL ?? "",
+      baseURL: getApiBase(),
       timeout: 30000,
     });
 

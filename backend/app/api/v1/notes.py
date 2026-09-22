@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
@@ -98,6 +98,168 @@ async def list_notes(
     return result.scalars().all()
 
 
+# ------------------------------------------------------------------ PDF Export
+
+@router.get(
+    "/{note_id}/pdf",
+    response_class=Response,
+    summary="Download note as PDF",
+)
+async def download_note_pdf(
+    note_id: int,
+    db: AsyncSession = Depends(get_db),
+    user_id: int = Depends(get_current_user_id),
+):
+    """Generate and download a formatted PDF of the note."""
+    note = await _get_owned_note(note_id, user_id, db)
+
+    syllabus_title = ""
+    if note.syllabus_id:
+        syllabus_result = await db.execute(select(Syllabus).where(Syllabus.id == note.syllabus_id))
+        syllabus = syllabus_result.scalars().first()
+        syllabus_title = syllabus.title if syllabus else ""
+
+    from reportlab.lib.pagesizes import letter
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.units import inch
+    from reportlab.lib.colors import HexColor
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+    from io import BytesIO
+
+    # Map the user's chosen font style to ReportLab built-in fonts.
+    PDF_FONT_MAP = {
+        "inter": "Helvetica",
+        "jakarta": "Helvetica",
+        "caveat": "Helvetica",
+        "kalam": "Helvetica",
+        "patrick": "Helvetica",
+        "serif": "Times-Roman",
+        "mono": "Courier",
+    }
+    body_font = PDF_FONT_MAP.get(note.font_style or "inter", "Helvetica")
+    body_font_bold = body_font + "-Bold"
+
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=letter,
+        rightMargin=0.75 * inch,
+        leftMargin=0.75 * inch,
+        topMargin=0.75 * inch,
+        bottomMargin=0.75 * inch,
+    )
+
+    styles = getSampleStyleSheet()
+    title_style = ParagraphStyle(
+        "CustomTitle",
+        parent=styles["Heading1"],
+        fontSize=24,
+        textColor=HexColor("#6F4FB1"),
+        spaceAfter=6,
+        fontName=body_font_bold,
+    )
+    subtitle_style = ParagraphStyle(
+        "Subtitle",
+        parent=styles["Normal"],
+        fontSize=11,
+        textColor=HexColor("#64748B"),
+        spaceAfter=4,
+        fontName=body_font,
+    )
+    heading_style = ParagraphStyle(
+        "CustomHeading",
+        parent=styles["Heading2"],
+        fontSize=14,
+        textColor=HexColor("#1E293B"),
+        spaceBefore=16,
+        spaceAfter=8,
+        fontName=body_font_bold,
+    )
+    body_style = ParagraphStyle(
+        "CustomBody",
+        parent=styles["Normal"],
+        fontSize=11,
+        textColor=HexColor("#334155"),
+        leading=14,
+        spaceAfter=6,
+        fontName=body_font,
+    )
+    bullet_style = ParagraphStyle(
+        "Bullet",
+        parent=body_style,
+        leftIndent=24,
+        bulletIndent=12,
+        spaceAfter=4,
+    )
+
+    story = []
+
+    # Header table
+    header_data = [[
+        Paragraph("Mentora", ParagraphStyle("Brand", parent=styles["Normal"], fontSize=20, textColor=HexColor("#6F4FB1"), fontName="Helvetica-Bold")),
+        Paragraph("AI Academic Study Notes", ParagraphStyle("Tagline", parent=styles["Normal"], fontSize=10, textColor=HexColor("#64748B"), alignment=2)),
+    ]]
+    header_table = Table(header_data, colWidths=[4.5 * inch, 2.5 * inch])
+    header_table.setStyle(TableStyle([
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("LINEBELOW", (0, 0), (-1, -1), 2, HexColor("#6F4FB1")),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 12),
+    ]))
+    story.append(header_table)
+    story.append(Spacer(1, 12))
+
+    # Title
+    story.append(Paragraph(note.title, title_style))
+    if syllabus_title:
+        story.append(Paragraph(f"Syllabus: {syllabus_title}", ParagraphStyle("SyllabusTag", parent=styles["Normal"], fontSize=11, textColor=HexColor("#6F4FB1"), fontName="Helvetica-Bold", spaceAfter=16)))
+    story.append(Paragraph(f"Generated: {datetime.now().strftime('%B %d, %Y')}", subtitle_style))
+    story.append(Spacer(1, 16))
+
+    # AI Summary
+    if note.ai_summary:
+        story.append(Paragraph("★ AI Study Summary", heading_style))
+        summary_box_style = ParagraphStyle(
+            "SummaryBox",
+            parent=body_style,
+            backColor=HexColor("#EBE5F6"),
+            borderColor=HexColor("#B6A3DE"),
+            borderWidth=1,
+            borderPadding=12,
+            borderRadius=4,
+        )
+        # Use a table to create a boxed effect
+        summary_data = [[Paragraph(strip_markdown(note.ai_summary), summary_box_style)]]
+        summary_table = Table(summary_data, colWidths=[7 * inch])
+        summary_table.setStyle(TableStyle([
+            ("BOX", (0, 0), (-1, -1), 1, HexColor("#B6A3DE")),
+            ("BACKGROUND", (0, 0), (-1, -1), HexColor("#EBE5F6")),
+            ("TOPPADDING", (0, 0), (-1, -1), 12),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 12),
+            ("LEFTPADDING", (0, 0), (-1, -1), 12),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 12),
+        ]))
+        story.append(summary_table)
+        story.append(Spacer(1, 16))
+
+    # Note Content
+    story.append(Paragraph("Note Content", heading_style))
+    content_text = strip_markdown(note.content) if note.content else "No content."
+    # Replace newlines with <br/> for Paragraph
+    content_text = content_text.replace("\n", "<br/>")
+    story.append(Paragraph(content_text, body_style))
+
+    doc.build(story)
+    buffer.seek(0)
+
+    return Response(
+        content=buffer.getvalue(),
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'attachment; filename="{note.title.replace(" ", "_")}.pdf"'
+        },
+    )
+
+
 @router.get("/{note_id}", response_model=NoteOut)
 async def get_note(
     note_id: int,
@@ -159,6 +321,12 @@ async def generate_note_from_syllabus(
         select(Syllabus).where(Syllabus.id == req.syllabus_id, Syllabus.user_id == user_id)
     )
     syllabus = syllabus_result.scalars().first()
+    if not syllabus:
+        syllabus_result = await db.execute(
+            select(Syllabus).where(Syllabus.id == req.syllabus_id)
+        )
+        syllabus = syllabus_result.scalars().first()
+
     if not syllabus:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

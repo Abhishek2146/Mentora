@@ -262,8 +262,7 @@ export default function Notes() {
   const [genGenerating, setGenGenerating] = useState(false);
   const [genError, setGenError] = useState<string | null>(null);
 
-
-  async function openSyllabusModal() {
+async function openSyllabusModal() {
     setGenError(null);
     setShowSyllabusModal(true);
     try {
@@ -276,6 +275,9 @@ export default function Notes() {
       // ignore silently
     }
   }
+
+  // Delete confirmation modal
+  const [deleteConfirmNoteId, setDeleteConfirmNoteId] = useState<number | null>(null);
 
   // Inline note content editing
   const [editingContent, setEditingContent] = useState(false);
@@ -406,7 +408,13 @@ export default function Notes() {
 
 
   async function handleDelete(noteId: number) {
-    if (!confirm("Are you sure you want to delete this note?")) return;
+    setDeleteConfirmNoteId(noteId);
+  }
+
+  async function confirmDeleteNote() {
+    if (deleteConfirmNoteId === null) return;
+    const noteId = deleteConfirmNoteId;
+    setDeleteConfirmNoteId(null);
     try {
       await notesService.deleteNote(noteId);
       const remaining = notes.filter((n) => n.id !== noteId);
@@ -482,6 +490,7 @@ export default function Notes() {
   });
 
   return (
+    <>
     <AppLayout title="Notes & Summaries">
       <div className="max-w-6xl mx-auto space-y-4">
 
@@ -950,5 +959,39 @@ export default function Notes() {
 
       </div>
     </AppLayout>
+
+    {/* ---- Delete Confirmation Modal ---- */}
+    {deleteConfirmNoteId !== null && (
+      <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4">
+        <div className="card p-6 max-w-sm w-full space-y-4 shadow-xl border-0">
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-xl bg-danger-100 dark:bg-danger-900/30 text-danger-600 dark:text-danger-400 flex-shrink-0">
+              <Trash2 className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="font-bold text-slate-800 dark:text-slate-100">Delete note?</h3>
+              <p className="text-xs text-slate-500 mt-0.5">
+                This note will be permanently deleted. This cannot be undone.
+              </p>
+            </div>
+          </div>
+          <div className="flex gap-3 pt-1">
+            <button
+              onClick={confirmDeleteNote}
+              className="btn-sm flex-1 bg-danger-600 hover:bg-danger-700 text-white rounded-xl disabled:opacity-40"
+            >
+              <Trash2 className="w-3.5 h-3.5" /> Delete
+            </button>
+            <button
+              onClick={() => setDeleteConfirmNoteId(null)}
+              className="btn-ghost btn-sm flex-1"
+            >
+              <X className="w-3.5 h-3.5" /> Cancel
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+    </>
   );
 }

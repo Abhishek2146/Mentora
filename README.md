@@ -110,11 +110,47 @@ Copy `.env.example` to `.env` and configure:
 
 | Variable             | Description                     | Default                          |
 |----------------------|---------------------------------|----------------------------------|
-| `DATABASE_URL`       | PostgreSQL connection string    | `postgresql+asyncpg://mentora:mentora123@postgres:5432/mentora` |
+| `DATABASE_URL`       | PostgreSQL / Neon connection URL| `postgresql+asyncpg://mentora:mentora123@postgres:5432/mentora` |
+| `NEON_DATABASE_URL`  | Neon connection URL override    | (empty)                          |
 | `REDIS_URL`          | Redis connection string         | `redis://redis:6379/0`           |
 | `OPENAI_API_KEY`     | OpenAI API key                  | (empty)                          |
 | `SECRET_KEY`         | JWT secret key                  | `supersecretkeychangeinproduction`|
 | `ALLOWED_ORIGINS`    | CORS allowed origins            | `http://localhost:5173`          |
+
+---
+
+## Neon Serverless Database Setup
+
+Mentora has built-in support for [Neon Serverless PostgreSQL](https://neon.tech):
+
+1. **Create a Neon Project**:
+   Sign up at [neon.tech](https://neon.tech) and create a new project.
+2. **Copy Connection String**:
+   From your Neon project dashboard, copy the connection string under **Connection Details**:
+   - **Pooled connection (`-pooler`) [Recommended]**: Best for serverless backends and scaling.
+     ```
+     postgresql://neondb_owner:YOUR_PASSWORD@ep-xyz-pooler.us-east-2.aws.neon.tech/neondb?sslmode=require
+     ```
+   - **Direct connection**: Best for direct compute access.
+     ```
+     postgresql://neondb_owner:YOUR_PASSWORD@ep-xyz.us-east-2.aws.neon.tech/neondb?sslmode=require
+     ```
+3. **Configure `.env`**:
+   Paste the copied URL directly into your `.env` file as `DATABASE_URL`:
+   ```env
+   DATABASE_URL=postgresql://neondb_owner:YOUR_PASSWORD@ep-xyz-pooler.us-east-2.aws.neon.tech/neondb?sslmode=require
+   ```
+   > **Note**: Mentora automatically converts `postgresql://` $\rightarrow$ `postgresql+asyncpg://`, translates `sslmode=require` $\rightarrow$ `ssl=require`, disables PgBouncer statement cache conflicts (`statement_cache_size=0`), and handles Neon scale-to-zero cold start wakeups automatically.
+
+4. **Verify Your Connection**:
+   Use the built-in diagnostic CLI tool:
+   ```bash
+   # Test connection and view diagnostics
+   python backend/verify_neon.py
+
+   # Test connection and initialize all tables/migrations
+   python backend/verify_neon.py --init-db
+   ```
 
 ---
 

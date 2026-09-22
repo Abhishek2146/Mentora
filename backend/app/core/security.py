@@ -265,17 +265,22 @@ def verify_password(
     hashed_password: str
 ) -> bool:
     """
-    Verify a plain-text password against its hashed version.
+    Verify a plain-text password against its hashed version (Argon2 with bcrypt fallback).
     """
+    if not hashed_password or not plain_password:
+        return False
 
     try:
-        password_hasher.verify(
-            hashed_password,
-            plain_password
-        )
+        password_hasher.verify(hashed_password, plain_password)
         return True
+    except Exception:
+        pass
 
-    except (InvalidHashError, VerifyMismatchError, VerificationError):
+    try:
+        from passlib.context import CryptContext
+        pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+        return pwd_context.verify(plain_password, hashed_password)
+    except Exception:
         return False
 
 

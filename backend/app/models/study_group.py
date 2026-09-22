@@ -7,6 +7,7 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     Integer,
+    JSON,
     String,
     Text,
     UniqueConstraint,
@@ -37,7 +38,7 @@ class StudyGroup(Base):
     invite_code = Column(String(10), unique=True, nullable=True, index=True)
     invite_token = Column(String(64), unique=True, nullable=True, index=True)
     is_active = Column(Boolean, default=True, nullable=False)
-    memory = Column(JSONB, nullable=False, server_default="{}")
+    memory = Column(JSON().with_variant(JSONB, "postgresql"), nullable=False, server_default="{}")
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=True

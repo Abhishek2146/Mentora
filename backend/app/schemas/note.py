@@ -11,6 +11,7 @@ class NoteBase(BaseModel):
     title: str = Field(..., max_length=255)
     content: str = Field(default="")
     syllabus_id: Optional[int] = None
+    font_style: str = Field(default="inter", max_length=50)
 
 
 class NoteCreate(NoteBase):
@@ -22,6 +23,7 @@ class NoteUpdate(BaseModel):
     content: Optional[str] = None
     syllabus_id: Optional[int] = None
     ai_summary: Optional[str] = None
+    font_style: Optional[str] = Field(None, max_length=50)
 
 
 class SyllabusNoteGenerateRequest(BaseModel):

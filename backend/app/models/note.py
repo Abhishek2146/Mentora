@@ -36,6 +36,9 @@ class Note(BaseModel):
     title = Column(String(255), nullable=False)
     content = Column(Text, nullable=False, default="")
 
+    # Typography preference for rendering the note content
+    font_style = Column(String(50), nullable=False, default="inter", server_default="inter")
+
     # AI-generated summary (generated on demand)
     ai_summary = Column(Text, nullable=True)
 

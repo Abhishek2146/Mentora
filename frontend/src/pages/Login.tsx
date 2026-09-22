@@ -6,11 +6,12 @@ import logo from "@/assets/logo.png";
 
 export default function Login() {
   const navigate = useNavigate();
-  const { login, isLoading } = useAuthStore();
+const { login, resendVerification, isLoading } = useAuthStore();
   const [email, setEmail]       = useState("");
   const [password, setPassword] = useState("");
   const [showPw, setShowPw]     = useState(false);
   const [error, setError]       = useState("");
+  const [resendMsg, setResendMsg] = useState("");
   const [focused, setFocused]   = useState<string | null>(null);
   const [visible, setVisible]   = useState(false);
 
