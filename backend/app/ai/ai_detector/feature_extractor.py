@@ -161,7 +161,14 @@ def personal_voice(window_text: str, words: List[str]) -> Optional[Feature]:
         + len(_COLLOQUIAL_RE.findall(window_text))
     )
     density = markers / len(words)
-    score = _linear_map(density, 0.05, 0.012, 0.08, 0.92)
+    # The map is deliberately asymmetric: even two or three stray pronouns in
+    # a 60-word window (density ~0.05) are still characteristic of machine
+    # prose and must NOT zero this signal (that used to let a single "we" or
+    # "our" collapse an entire AI window through the resolution gate below).
+    # Only genuinely personal text (density >= ~0.12, real contractions,
+    # first-person narration, informal filler) drops the score into human
+    # territory.
+    score = _linear_map(density, 0.12, 0.04, 0.2, 0.88)
     return Feature(
         name="Absence of personal voice",
         explanation=(

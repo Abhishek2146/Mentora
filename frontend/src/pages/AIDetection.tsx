@@ -576,7 +576,7 @@ export default function AIDetection() {
                   ) : (
                     <ResultsPanel
                       result={textResult}
-                      text={text}
+                      text={text.trim()}
                       selected={selectedSpan}
                       onSelect={setSelectedSpan}
                     />

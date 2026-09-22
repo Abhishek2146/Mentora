@@ -140,8 +140,19 @@ def _resolve_window_score(score: float, features: List[Feature]) -> float:
     rhythm = by_name.get("Uniform sentence rhythm")
     voice = by_name.get("Absence of personal voice")
     clause = by_name.get("Uniform clause length")
+    scaffold = by_name.get("Formulaic scaffolding", 0.0)
     if None not in (rhythm, voice, clause):
-        if rhythm >= 0.75 and voice >= 0.55 and clause >= 0.5:
+        # Uniform rhythm + no personal voice + mid-length regularity is NOT
+        # enough on its own: dry but genuinely human academic prose shares
+        # all three (cf. FORMAL_HUMAN-style passages).  Only *boost* the
+        # window toward "potentially AI-generated" when there is explicit
+        # essay-template evidence (scaffold/connector phrases) on top.
+        if (
+            rhythm >= 0.75
+            and voice >= 0.55
+            and (clause >= 0.5 or rhythm >= 0.92)
+            and scaffold >= 0.35
+        ):
             return max(score, 0.68)
         if voice <= 0.35:
             return min(score, 0.3)

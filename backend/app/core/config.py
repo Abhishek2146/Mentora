@@ -278,6 +278,13 @@ class Settings(BaseSettings):
     # Minimum analyzable prose words before a verdict is returned; below
     # this the response reports "Insufficient text for reliable detection".
     AI_DETECTION_MIN_WORDS: int = 40
+    # When the statistical detector finds no explicit spans on analysable
+    # text, use an LLM stylistic reviewer to locate machine-written
+    # sentences and surface them as highlighted spans.  This catches
+    # natural-sounding generated prose that stylometric signals alone
+    # cannot separate from formal human writing.  Only active when a Groq
+    # key is configured.
+    AI_DETECTION_LLM_HIGHLIGHT_ENABLED: bool = True
 
     # Optional ML model blending (default OFF so the app runs offline).
     AI_DETECTOR_MODEL_ENABLED: bool = False
@@ -389,6 +396,7 @@ class Settings(BaseSettings):
         "CODING_PROBLEM_GENERATION": 3,
         "SYLLABUS_ANALYSIS": 2,
         "AI_DETECTION": 3,
+        "AI_HUMANIZE": 3,
     }
 
     SUBSCRIPTION_DAILY_LIMITS: dict = {
@@ -400,6 +408,7 @@ class Settings(BaseSettings):
         "CODING_PROBLEM_GENERATION": 30,
         "SYLLABUS_ANALYSIS": 20,
         "AI_DETECTION": 30,
+        "AI_HUMANIZE": 30,
     }
 
     # Per-plan Redis request rate limits (requests per minute).
