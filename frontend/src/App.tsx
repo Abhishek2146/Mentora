@@ -31,7 +31,7 @@ import SetNewPasswordPage from "@/pages/SetNewPassword";
 import SearchPage from "@/pages/Search";
 import SyllabusDetailPage from "@/pages/SyllabusDetail";
 import NotificationsPage from "@/pages/Notifications";
-import { ProtectedRoute, PublicRoute, AdminRoute, SuperAdminRoute } from "@/components/ProtectedRoute";
+import { ProtectedRoute, PublicRoute, AdminRoute } from "@/components/ProtectedRoute";
 import { useAuthStore } from "@/store/authStore";
 import HomePage from "@/pages/HomePage";
 import AdminRegisterPage from "@/pages/AdminRegister";
@@ -46,6 +46,7 @@ import AboutPage from "@/pages/About";
 import MindMapPage from "@/pages/MindMap";
 
 const AIDetectionPage = lazy(() => import("@/pages/AIDetection"));
+const HumanizePage = lazy(() => import("@/pages/Humanize"));
 
 export default function App() {
   useEffect(() => {
@@ -63,6 +64,7 @@ export default function App() {
         <Route path="/syllabus/:id" element={<ProtectedRoute><SyllabusDetailPage /></ProtectedRoute>} />
         <Route path="/ai-tutor" element={<ProtectedRoute><AiTutorPage /></ProtectedRoute>} />
         <Route path="/ai-detection" element={<ProtectedRoute><Suspense fallback={<RouteFallback />}><AIDetectionPage /></Suspense></ProtectedRoute>} />
+        <Route path="/humanize" element={<ProtectedRoute><Suspense fallback={<RouteFallback />}><HumanizePage /></Suspense></ProtectedRoute>} />
         <Route path="/flashcards" element={<ProtectedRoute><FlashcardsPage /></ProtectedRoute>} />
         <Route path="/study-plan" element={<ProtectedRoute><StudyPlanPage /></ProtectedRoute>} />
         <Route path="/notes" element={<ProtectedRoute><NotesPage /></ProtectedRoute>} />
@@ -91,7 +93,7 @@ export default function App() {
         <Route path="/verify-otp" element={<PublicRoute><VerifyOtpPage /></PublicRoute>} />
         <Route path="/set-new-password" element={<PublicRoute><SetNewPasswordPage /></PublicRoute>} />
         <Route path="/admin/register" element={<AdminRegisterPage />} />
-        <Route path="/admin/dashboard" element={<SuperAdminRoute><AdminDashboardPage /></SuperAdminRoute>} />
+        <Route path="/admin/dashboard" element={<AdminRoute><AdminDashboardPage /></AdminRoute>} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>

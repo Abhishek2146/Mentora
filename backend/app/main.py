@@ -17,6 +17,7 @@ from app.database.database import init_db
 from app.api.v1 import (
     auth,
     ai_detection,
+    humanize,
     users,
     syllabus,
     study_plan,
@@ -148,6 +149,12 @@ app.include_router(
     ai_detection.router,
     prefix=f"{settings.API_PREFIX}/ai-detection",
     tags=["ai-detection"],
+)
+
+app.include_router(
+    humanize.router,
+    prefix=f"{settings.API_PREFIX}/humanize",
+    tags=["humanize"],
 )
 
 app.include_router(

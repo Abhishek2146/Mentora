@@ -4,6 +4,7 @@ import {
   ClipboardList, BookOpen, Trophy, AlertTriangle, RotateCcw,
   Upload, Code2, Mic, User, Settings, ChevronLeft, ChevronRight, X,
   GraduationCap, TrendingUp, ShieldCheck, Users, Crown, Flame, FileText, Network,
+  MessageSquareHeart,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useUIStore } from "@/store/uiStore";
@@ -18,6 +19,7 @@ const navGroups = [
       { label: "Dashboard",       icon: LayoutDashboard, path: "/dashboard" },
       { label: "AI Tutor",        icon: Brain,           path: "/ai-tutor" },
       { label: "AI Detection",    icon: ShieldCheck,     path: "/ai-detection" },
+      { label: "Humanize",        icon: MessageSquareHeart, path: "/humanize" },
       { label: "Flashcards",      icon: CreditCard,      path: "/flashcards" },
       { label: "Study Plan",      icon: CalendarDays,    path: "/study-plan" },
       { label: "Notes",           icon: FileText,        path: "/notes" },
