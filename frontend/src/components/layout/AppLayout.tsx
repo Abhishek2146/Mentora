@@ -14,8 +14,8 @@ export default function AppLayout({ children, title }: AppLayoutProps) {
 
   return (
     <div className="min-h-screen bg-[#F8F7F4] dark:bg-[#1A1918] text-[#252525] dark:text-[#F8F7F4] relative selection:bg-[#6F4FB1]/20">
-      {/* Soft background grid (matches the global grid from index.css) */}
-      <div className="fixed inset-0 pointer-events-none overflow-hidden -z-10">
+      {/* Soft background grid + ambient glow (paint over the layout bg, like the global body::before grid) */}
+      <div className="fixed inset-0 pointer-events-none overflow-hidden z-0">
         <div
           className="absolute inset-0"
           style={{
