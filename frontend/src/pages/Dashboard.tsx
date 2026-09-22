@@ -115,101 +115,72 @@ export default function Dashboard() {
   return (
     <AppLayout title="Dashboard">
       <div className="max-w-7xl mx-auto space-y-5 sm:space-y-6">
-        {/* Hero Banner */}
+        {/* Hero */}
         <section className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#2D283E] via-[#3E3655] to-[#252033] text-white shadow-soft border border-[#6F4FB1]/30">
-          <div className="absolute -top-20 -right-16 w-72 h-72 rounded-full bg-[#6F4FB1]/30 blur-3xl pointer-events-none animate-float" />
-          <div className="absolute -bottom-24 left-1/3 w-64 h-64 rounded-full bg-[#B6A3DE]/15 blur-3xl pointer-events-none animate-float" />
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(182,163,222,0.14),transparent_55%)] pointer-events-none" />
+          <div className="absolute -top-16 -right-12 w-56 h-56 rounded-full bg-[#6F4FB1]/30 blur-3xl pointer-events-none" />
+          <div className="absolute -bottom-16 left-1/3 w-44 h-44 rounded-full bg-[#B6A3DE]/15 blur-3xl pointer-events-none" />
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(182,163,222,0.12),transparent_55%)] pointer-events-none" />
 
-          <div className="relative z-10 p-6 sm:p-8">
-            <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-6">
-              <div className="space-y-2 max-w-2xl">
-                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 backdrop-blur-md border border-white/15 text-xs font-semibold text-[#EBE5F6]">
-                  <span className="relative flex h-2 w-2">
+          <div className="relative z-10 p-5 sm:p-6">
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+              <div className="space-y-2 min-w-0 max-w-2xl">
+                <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/10 backdrop-blur-md border border-white/15 text-[11px] font-semibold text-[#EBE5F6]">
+                  <span className="relative flex h-1.5 w-1.5">
                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#B6A3DE] opacity-75" />
-                    <span className="relative inline-flex rounded-full h-2 w-2 bg-[#B6A3DE]" />
+                    <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-[#B6A3DE]" />
                   </span>
-                  <span>AI Study Assistant Ready</span>
+                  AI Study Assistant Ready
                 </div>
-                <h2 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold tracking-tight">
+                <h2 className="text-lg sm:text-2xl font-extrabold tracking-tight">
                   {getGreeting()},{" "}
                   <span className="bg-gradient-to-r from-[#EBE5F6] via-white to-[#B6A3DE] bg-clip-text text-transparent">{firstName}</span>!
                 </h2>
-                <p className="text-sm text-[#D6CBEC] leading-relaxed">
+                <p className="text-xs sm:text-sm text-[#D6CBEC] leading-relaxed">
                   You have <span className="font-semibold text-white">{cards?.tasks_due_today ?? 0} tasks</span> scheduled for today. Ready to continue your learning journey?
                 </p>
               </div>
 
-              <div className="grid grid-cols-2 gap-3 lg:w-[340px] flex-shrink-0">
-                <div className="rounded-2xl bg-white/10 backdrop-blur-xl border border-white/15 p-4 hover:bg-white/15 transition-colors">
-                  <div className="flex items-center gap-2 text-[#D6CBEC]">
-                    <Flame className="w-4 h-4 text-[#D1B47C]" />
-                    <span className="text-xs font-medium">Study Time</span>
+              <div className="flex items-center gap-2 lg:gap-3 flex-shrink-0">
+                <div className="flex items-center gap-2.5 rounded-2xl bg-white/10 backdrop-blur-xl border border-white/15 px-3.5 py-2.5 hover:bg-white/15 transition-colors">
+                  <Flame className="w-4 h-4 text-[#D1B47C]" />
+                  <div>
+                    <p className="text-base font-extrabold text-white leading-none">{cards?.study_hours.week_change ?? 0}h</p>
+                    <p className="text-[10px] text-[#B6A3DE] mt-0.5">this week</p>
                   </div>
-                  <p className="mt-1.5 text-xl font-extrabold text-white">{cards?.study_hours.week_change ?? 0}h</p>
-                  <p className="text-[11px] text-[#B6A3DE]">this week</p>
                 </div>
-                <div className="rounded-2xl bg-white/10 backdrop-blur-xl border border-white/15 p-4 hover:bg-white/15 transition-colors">
-                  <div className="flex items-center gap-2 text-[#D6CBEC]">
-                    <CalendarCheck className="w-4 h-4 text-[#B6A3DE]" />
-                    <span className="text-xs font-medium">Due Today</span>
+                <div className="flex items-center gap-2.5 rounded-2xl bg-white/10 backdrop-blur-xl border border-white/15 px-3.5 py-2.5 hover:bg-white/15 transition-colors">
+                  <CalendarCheck className="w-4 h-4 text-[#B6A3DE]" />
+                  <div>
+                    <p className="text-base font-extrabold text-white leading-none">{cards?.tasks_due_today ?? 0}</p>
+                    <p className="text-[10px] text-[#B6A3DE] mt-0.5">due today</p>
                   </div>
-                  <p className="mt-1.5 text-xl font-extrabold text-white">{cards?.tasks_due_today ?? 0}</p>
-                  <p className="text-[11px] text-[#B6A3DE]">tasks</p>
                 </div>
               </div>
             </div>
 
-            {/* Quick Actions */}
-            <div className="mt-6 grid grid-cols-1 sm:grid-cols-3 gap-3">
+            {/* Actions */}
+            <div className="mt-4 flex flex-wrap items-center gap-2">
+              <Link
+                to="/upload-syllabus"
+                className="group inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-[#7C5AC2] to-[#6F4FB1] border border-white/15 text-xs font-bold text-white shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all"
+              >
+                <Upload className="w-3.5 h-3.5 group-hover:scale-110 transition-transform" />
+                Upload syllabus
+                <Sparkles className="w-3 h-3 text-[#F7F0E2] animate-pulse" />
+              </Link>
               {quickActions.map((a) => (
                 <Link
                   key={a.path}
                   to={a.path}
-                  className="group relative flex items-center gap-3 p-3.5 rounded-2xl bg-white/5 hover:bg-white/15 backdrop-blur-md border border-white/10 hover:border-white/25 transition-all duration-200 hover:-translate-y-0.5 overflow-hidden"
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-white/5 hover:bg-white/15 backdrop-blur-md border border-white/10 hover:border-white/25 text-xs font-semibold text-white transition-all"
                 >
-                  <div className="w-10 h-10 rounded-xl bg-[#6F4FB1]/30 border border-white/15 flex items-center justify-center text-white group-hover:scale-110 transition-transform">
-                    <a.icon className="w-[18px] h-[18px] text-[#EBE5F6] group-hover:text-white" />
-                  </div>
-                  <div className="text-left min-w-0 flex-1">
-                    <p className="text-sm font-bold text-white">{a.label}</p>
-                    <span className="text-[11px] text-[#D6CBEC]">{a.desc}</span>
-                  </div>
-                  <ArrowRight className="w-4 h-4 text-[#D6CBEC] opacity-0 -translate-x-1 group-hover:opacity-100 group-hover:translate-x-0 transition-all" />
+                  <a.icon className="w-3.5 h-3.5 text-[#EBE5F6]" />
+                  {a.label}
                 </Link>
               ))}
             </div>
           </div>
         </section>
-
-        {/* Highlighted Animated Upload CTA */}
-        <Link
-          to="/upload-syllabus"
-          className="group relative overflow-hidden rounded-3xl p-6 sm:p-7 flex flex-col sm:flex-row sm:items-center justify-between gap-5 text-white shadow-soft hover:shadow-glow-primary transition-shadow duration-300 bg-gradient-to-r from-[#6F4FB1] via-[#7C5AC2] to-[#4B2E83] bg-[length:200%_200%] animate-gradient-x border border-white/10"
-        >
-          <span className="pointer-events-none absolute inset-y-0 left-0 w-1/3 bg-gradient-to-r from-transparent via-white/25 to-transparent skew-x-[-20deg] animate-shimmer" />
-          <div className="absolute -top-16 -right-10 w-64 h-64 rounded-full bg-white/10 blur-3xl pointer-events-none" />
-
-          <div className="relative z-10 flex items-center gap-4">
-            <div className="w-14 h-14 rounded-2xl bg-white/15 border border-white/20 flex items-center justify-center flex-shrink-0 shadow-sm group-hover:animate-wiggle">
-              <Upload className="w-7 h-7 text-white" />
-            </div>
-            <div className="min-w-0">
-              <h3 className="text-lg sm:text-xl font-extrabold tracking-tight flex items-center gap-2">
-                Upload your syllabus
-                <Sparkles className="w-4 h-4 text-[#F7F0E2] animate-pulse" />
-              </h3>
-              <p className="text-sm text-[#EBE5F6] mt-0.5">
-                Turn any PDF into AI notes, quizzes, flashcards and a personalized study plan.
-              </p>
-            </div>
-          </div>
-
-          <div className="relative z-10 inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-white text-[#5D3F9C] text-sm font-bold flex-shrink-0 shadow-sm group-hover:gap-3 transition-all animate-glow-pulse">
-            <span>Upload now</span>
-            <ArrowRight className="w-4 h-4" />
-          </div>
-        </Link>
 
         {/* Stats KPI Row */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
