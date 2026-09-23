@@ -12,7 +12,7 @@ from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 
-from app.core.auth import require_super_admin
+from app.core.auth import require_admin
 from app.database.database import get_db
 from app.models.user import User, UserRole
 from app.models.subscription import (
@@ -68,7 +68,7 @@ class UserWithMembershipOut(BaseModel):
 @router.get("/dashboard")
 async def admin_dashboard(
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_super_admin),
+    _: User = Depends(require_admin),
 ):
     """Aggregated platform statistics for the admin dashboard."""
 
@@ -152,7 +152,7 @@ async def list_users(
     skip: int = 0,
     limit: int = 100,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_super_admin),
+    _: User = Depends(require_admin),
 ):
     """List all users, optionally filtered by role or search term."""
     query = select(User).order_by(User.created_at.desc()).offset(skip).limit(limit)
@@ -180,7 +180,7 @@ async def list_users(
 async def get_user_with_membership(
     user_id: int,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_super_admin),
+    _: User = Depends(require_admin),
 ):
     """Get a specific user with their subscription details."""
     result = await db.execute(select(User).where(User.id == user_id))
@@ -210,7 +210,7 @@ async def update_user(
     user_id: int,
     user_data: AdminUserUpdate,
     db: AsyncSession = Depends(get_db),
-    admin: User = Depends(require_super_admin),
+    admin: User = Depends(require_admin),
 ):
     result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalars().first()
@@ -248,7 +248,7 @@ async def update_user(
 async def delete_user(
     user_id: int,
     db: AsyncSession = Depends(get_db),
-    admin: User = Depends(require_super_admin),
+    admin: User = Depends(require_admin),
 ):
     result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalars().first()
@@ -278,7 +278,7 @@ async def grant_membership(
     user_id: int,
     payload: GrantMembershipRequest,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_super_admin),
+    _: User = Depends(require_admin),
 ):
     """Grant premium membership to a user. Does not change the user's role."""
     result = await db.execute(select(User).where(User.id == user_id))
@@ -302,7 +302,7 @@ async def grant_membership(
 async def revoke_membership(
     user_id: int,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_super_admin),
+    _: User = Depends(require_admin),
 ):
     """Revoke premium membership. Sets plan to FREE without deleting records."""
     result = await db.execute(select(User).where(User.id == user_id))

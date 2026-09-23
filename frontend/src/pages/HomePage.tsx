@@ -1,10 +1,13 @@
 ﻿import { Link } from "react-router-dom";
+import { useEffect, useState } from "react";
 import logo from "@/assets/logo.png";
 import {
   Brain, Zap, BarChart3, BookOpen, CreditCard, CalendarDays,
   Upload, ArrowRight, CheckCircle2, Star, GraduationCap,
   TrendingUp, Target, Users, Sparkles, ChevronRight,
 } from "lucide-react";
+import { reviewService } from "@/services/reviewService";
+import { getInitials } from "@/lib/utils";
 
 const features = [
   { icon: Brain,       color: "from-violet-500 to-purple-600", bg: "bg-violet-50 dark:bg-violet-900/20",  title: "AI Tutor",        desc: "Get instant explanations tailored to your syllabus. Ask anything, anytime." },
@@ -35,7 +38,59 @@ const testimonials = [
   { name: "Sita M.",  role: "Law student",           avatar: "SM", color: "from-emerald-500 to-teal-500", quote: "I used to spend hours re-reading notes. Mentora replaced that with 20-minute daily sessions that actually stick." },
 ];
 
+interface ReviewCard {
+  id?: number;
+  name: string;
+  role: string;
+  avatar: string;
+  color: string;
+  quote: string;
+  rating?: number;
+  created_at?: string | null;
+}
+
+const AVATAR_COLORS = [
+  "from-pink-500 to-rose-500",
+  "from-blue-500 to-indigo-600",
+  "from-emerald-500 to-teal-500",
+  "from-amber-500 to-orange-600",
+  "from-violet-500 to-purple-600",
+  "from-cyan-500 to-sky-600",
+];
+
 export default function HomePage() {
+  const [reviews, setReviews] = useState<{ id: number; rating: number; comment: string | null; user_name: string | null; created_at: string | null }[] | null>(null);
+  const [reviewSummary, setReviewSummary] = useState<{ average_rating: number; total_reviews: number } | null>(null);
+
+  useEffect(() => {
+    reviewService.getSummary().then(setReviewSummary).catch(() => {});
+    reviewService.list().then((data) => setReviews(data.length > 0 ? data : null)).catch(() => setReviews(null));
+  }, []);
+
+  const statCards = reviewSummary && reviewSummary.total_reviews > 0
+    ? stats.map((s) =>
+        s.label === "Average rating"
+          ? { ...s, value: reviewSummary.average_rating.toFixed(1) }
+          : s
+      )
+    : stats;
+
+  const reviewCards: ReviewCard[] = (reviews ?? []).map((r, i) => {
+    const name = r.user_name || "Student";
+    const initials = getInitials(name) || "S";
+    return {
+      id: r.id,
+      name,
+      role: "Verified student",
+      avatar: initials,
+      color: AVATAR_COLORS[i % AVATAR_COLORS.length],
+      quote: r.comment || "Great learning companion!",
+      rating: r.rating,
+      created_at: r.created_at,
+    };
+  });
+
+  const shown: ReviewCard[] = reviewCards && reviewCards.length > 0 ? reviewCards : testimonials.map((t) => ({ ...t, rating: 5 }));
   return (
     <div className="min-h-screen bg-white dark:bg-slate-950 overflow-x-hidden">
 
@@ -88,7 +143,7 @@ export default function HomePage() {
           </div>
           <p className="text-sm text-slate-400 mb-14">No credit card required &middot; Free forever plan</p>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 max-w-3xl mx-auto">
-            {stats.map((s) => (
+            {statCards.map((s) => (
               <div key={s.label} className="bg-white dark:bg-slate-800/60 rounded-2xl border border-slate-200 dark:border-slate-700 px-4 py-5 shadow-sm hover:shadow-md transition-shadow">
                 <div className="text-2xl sm:text-3xl font-extrabold bg-gradient-to-r from-primary-600 to-secondary-600 bg-clip-text text-transparent">{s.value}</div>
                 <div className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1 font-medium">{s.label}</div>
@@ -199,9 +254,9 @@ export default function HomePage() {
             <h2 className="text-4xl sm:text-5xl font-extrabold text-slate-900 dark:text-white mb-4">Real results, real students</h2>
           </div>
           <div className="grid sm:grid-cols-3 gap-6">
-            {testimonials.map((t) => (
-              <div key={t.name} className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 p-6 shadow-sm hover:shadow-lg transition-shadow">
-                <div className="flex gap-1 mb-4">{[1,2,3,4,5].map((s) => (<Star key={s} className="w-4 h-4 text-amber-400 fill-amber-400" />))}</div>
+            {shown.map((t) => (
+              <div key={t.id ?? t.name} className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 p-6 shadow-sm hover:shadow-lg transition-shadow">
+                <div className="flex gap-1 mb-4">{[1,2,3,4,5].map((s) => (<Star key={s} className={"w-4 h-4 " + (s <= (t.rating ?? 5) ? "text-amber-400 fill-amber-400" : "text-slate-300 dark:text-slate-600")} />))}</div>
                 <p className="text-slate-700 dark:text-slate-300 text-sm leading-relaxed mb-6">{t.quote}</p>
                 <div className="flex items-center gap-3">
                   <div className={"w-10 h-10 rounded-xl bg-gradient-to-br " + t.color + " flex items-center justify-center text-white text-sm font-bold flex-shrink-0"}>{t.avatar}</div>
@@ -210,6 +265,9 @@ export default function HomePage() {
                     <p className="text-xs text-slate-500 dark:text-slate-400">{t.role}</p>
                   </div>
                 </div>
+                {t.created_at && (
+                  <p className="mt-3 text-xs text-slate-400">{new Date(t.created_at).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" })}</p>
+                )}
               </div>
             ))}
           </div>

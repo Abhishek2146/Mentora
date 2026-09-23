@@ -27,6 +27,7 @@ from app.models.study_group import StudyGroup, StudyGroupMember, StudyGroupMessa
 from app.models.study_streak import UserStreak, DailyStudySummary
 
 from app.models.mindmap import MindMap
+from app.models.review import Review
 
 __all__ = [
     "User", "UserRole",
@@ -48,4 +49,5 @@ __all__ = [
     "StudyGroup", "StudyGroupMember", "StudyGroupMessage", "StudyGroupInvitation",
     "UserStreak", "DailyStudySummary",
     "MindMap",
+    "Review",
 ]

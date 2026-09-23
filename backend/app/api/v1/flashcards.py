@@ -101,6 +101,10 @@ async def generate_flashcards(
     # Usage is recorded only after generation succeeded.
     await record_usage(db, user_id, UsageType.FLASHCARD_GENERATION)
 
+    # Hydrate the PK before the re-query so a session with expired
+    # attributes never attempts a sync lazy-load (MissingGreenlet).
+    await db.refresh(deck)
+
     result = await db.execute(
         select(FlashcardDeck)
         .options(selectinload(FlashcardDeck.flashcards))

@@ -31,6 +31,7 @@ from app.api.v1 import (
     weak_topics,
     voice,
     reports,
+    reviews,
     dashboard,
     admin,
     exams,
@@ -287,6 +288,12 @@ app.include_router(
     subscriptions.usage_router,
     prefix=f"{settings.API_PREFIX}/usage",
     tags=["usage"],
+)
+
+app.include_router(
+    reviews.router,
+    prefix=f"{settings.API_PREFIX}/reviews",
+    tags=["reviews"],
 )
 
 app.include_router(

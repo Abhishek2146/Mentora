@@ -79,8 +79,8 @@ async def get_current_user(
 async def require_admin(
     user: User = Depends(get_current_user),
 ) -> User:
-    """Restrict an endpoint to admin users only."""
-    if user.role != UserRole.ADMIN.value:
+    """Restrict an endpoint to admin-level users (admin or super_admin)."""
+    if user.role not in (UserRole.ADMIN.value, UserRole.SUPER_ADMIN.value):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Admin privileges required",

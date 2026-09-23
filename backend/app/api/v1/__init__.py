@@ -13,6 +13,7 @@ from app.api.v1 import (
     quizzes,
     reports,
     revision,
+    reviews,
     study_groups,
     study_plan,
     study_streak,
@@ -37,6 +38,7 @@ from app.api.v1.progress import router as progress_router
 from app.api.v1.quizzes import router as quizzes_router
 from app.api.v1.reports import router as reports_router
 from app.api.v1.revision import router as revision_router
+from app.api.v1.reviews import router as reviews_router
 from app.api.v1.study_plan import router as study_plan_router
 from app.api.v1.tutor import router as tutor_router
 from app.api.v1.users import router as users_router
@@ -70,6 +72,8 @@ __all__ = [
     "quizzes_router",
     "reports",
     "reports_router",
+    "reviews",
+    "reviews_router",
     "revision",
     "revision_router",
     "study_groups",

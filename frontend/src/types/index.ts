@@ -451,4 +451,18 @@ export interface UserWithSubscription {
   subscription: AdminSubscription | null;
 }
 
+export interface Review {
+  id: number;
+  user_id: number;
+  rating: number;
+  comment: string | null;
+  user_name: string | null;
+  created_at: string | null;
+}
+
+export interface ReviewSummary {
+  average_rating: number;
+  total_reviews: number;
+}
+
 export * from "./api";

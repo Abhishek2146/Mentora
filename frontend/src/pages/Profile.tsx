@@ -1,9 +1,12 @@
 import AppLayout from "@/components/layout/AppLayout";
-import { User, Mail, GraduationCap, Calendar, Edit3, Save, X } from "lucide-react";
+import { User, Mail, GraduationCap, Calendar, Edit3, Save, X, Star, Trash2 } from "lucide-react";
 import { useAuthStore } from "@/store/authStore";
 import { getInitials } from "@/lib/utils";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { UserUpdate } from "@/types";
+import { reviewService } from "@/services/reviewService";
+
+const RATING_LABELS = ["", "Terrible", "Poor", "Okay", "Good", "Excellent"];
 
 export default function Profile() {
   const { user, updateUser, isLoading } = useAuthStore();
@@ -18,6 +21,80 @@ export default function Profile() {
   });
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+
+  // -------- Review state --------
+  const [myReview, setMyReview] = useState<{ id: number; rating: number; comment: string | null } | null>(null);
+  const [hasReview, setHasReview] = useState(false);
+  const [rating, setRating] = useState(0);
+  const [hoverRating, setHoverRating] = useState(0);
+  const [comment, setComment] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [reviewMsg, setReviewMsg] = useState<{ type: "error" | "success"; text: string } | null>(null);
+
+  useEffect(() => {
+    reviewService
+      .getMine()
+      .then((review) => {
+        setMyReview(review);
+        setHasReview(true);
+        setRating(review.rating);
+        setComment(review.comment || "");
+      })
+      .catch(() => {
+        setMyReview(null);
+        setHasReview(false);
+        setRating(0);
+        setComment("");
+      });
+  }, []);
+
+  const handleSubmitReview = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setReviewMsg(null);
+    if (rating < 1) {
+      setReviewMsg({ type: "error", text: "Please select a star rating (1 to 5)." });
+      return;
+    }
+    setSubmitting(true);
+    try {
+      const review = await reviewService.save(rating, comment.trim() || null);
+      setMyReview(review);
+      setHasReview(true);
+      setReviewMsg({ type: "success", text: "Review submitted. It now appears on the landing page." });
+    } catch (err) {
+      setReviewMsg({ type: "error", text: err instanceof Error ? err.message : "Failed to submit review." });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleDeleteReview = async () => {
+    setReviewMsg(null);
+    setSubmitting(true);
+    try {
+      await reviewService.deleteMine();
+      setMyReview(null);
+      setHasReview(false);
+      setRating(0);
+      setComment("");
+      setReviewMsg({ type: "success", text: "Your review has been removed." });
+    } catch (err) {
+      setReviewMsg({ type: "error", text: err instanceof Error ? err.message : "Failed to delete review." });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const renderStars = (fill: number) =>
+    [1, 2, 3, 4, 5].map((s) => (
+      <Star
+        key={s}
+        className={
+          "w-5 h-5 transition-colors " +
+          (s <= fill ? "text-amber-400 fill-amber-400" : "text-slate-300 dark:text-slate-600")
+        }
+      />
+    ));
 
   const handleEdit = () => {
     setForm({
@@ -159,6 +236,97 @@ export default function Profile() {
               </div>
             </div>
           ))}
+        </div>
+
+        {/* Review section */}
+        <div className="card p-5 sm:p-6 space-y-4">
+          <div>
+            <h3 className="font-bold text-slate-700 dark:text-slate-200">Leave a Review</h3>
+            <p className="text-xs text-slate-400 mt-1">Rate Mentora with up to 5 stars and share your experience. Your review is shown on the landing page.</p>
+          </div>
+
+          {reviewMsg && (
+            <div
+              className={
+                "p-3 border rounded-xl text-sm " +
+                (reviewMsg.type === "error"
+                  ? "bg-danger-50 dark:bg-danger-900/20 border-danger-200 dark:border-danger-700 text-danger-600 dark:text-danger-400"
+                  : "bg-success-50 dark:bg-success-900/20 border-success-200 dark:border-success-700 text-success-600 dark:text-success-400")
+              }
+            >
+              {reviewMsg.text}
+            </div>
+          )}
+
+          {hasReview && myReview && (
+            <div className="p-4 bg-slate-50 dark:bg-slate-700/50 rounded-xl space-y-1.5">
+              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Your current review</p>
+              <div className="flex gap-0.5">{renderStars(myReview.rating)}</div>
+              <p className="text-sm text-slate-600 dark:text-slate-300">{myReview.comment || "No comment."}</p>
+              <div className="flex items-center gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setHasReview(false)}
+                  className="btn-outline btn-sm"
+                >
+                  <Star className="w-3.5 h-3.5" /> Update
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDeleteReview}
+                  disabled={submitting}
+                  className="btn-ghost btn-sm text-danger-600 dark:text-danger-400"
+                >
+                  <Trash2 className="w-3.5 h-3.5" /> Delete
+                </button>
+              </div>
+            </div>
+          )}
+
+          {(!hasReview || !myReview) && (
+            <form onSubmit={handleSubmitReview} className="space-y-4">
+              <div>
+                <label className="text-xs text-slate-400 mb-1.5 block">
+                  {rating > 0 ? `${rating}/5 - ${RATING_LABELS[rating]}` : "Your rating"}
+                </label>
+                <div
+                  className="flex gap-1"
+                  onMouseLeave={() => setHoverRating(0)}
+                >
+                  {[1, 2, 3, 4, 5].map((s) => (
+                    <button
+                      key={s}
+                      type="button"
+                      onClick={() => setRating(s)}
+                      onMouseEnter={() => setHoverRating(s)}
+                      className="p-0.5 rounded-md focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-400"
+                      aria-label={`Rate ${s} star${s > 1 ? "s" : ""}`}
+                    >
+                      {renderStars(hoverRating || rating).find((_, i) => i === s - 1)}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <label className="text-xs text-slate-400 mb-1 block">Comment</label>
+                <textarea
+                  value={comment}
+                  onChange={(e) => setComment(e.target.value)}
+                  rows={4}
+                  maxLength={2000}
+                  className="input w-full resize-none"
+                  placeholder="Tell others what you think about Mentora... (optional)"
+                />
+              </div>
+              <button type="submit" disabled={submitting} className="btn-primary btn-md w-full">
+                {submitting ? (
+                  <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                ) : (
+                  <><Star className="w-4 h-4" /> Submit Review</>
+                )}
+              </button>
+            </form>
+          )}
         </div>
       </div>
     </AppLayout>

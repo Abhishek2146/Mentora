@@ -37,6 +37,16 @@ function getApiError(error: unknown): Error {
   return error instanceof Error ? error : new Error("Something went wrong. Please try again.");
 }
 
+async function fetchWithTimeout(url: string, init: RequestInit = {}, timeoutMs = 30000): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 interface AuthState {
   user: User | null;
   isAuthenticated: boolean;
@@ -79,7 +89,7 @@ export const useAuthStore = create<AuthState>()(
           formData.append("password", password);
 
 const apiUrl = getApiBase();
-          const response = await fetch(`${apiUrl}/api/v1/auth/login`, {
+          const response = await fetchWithTimeout(`${apiUrl}/api/v1/auth/login`, {
             method: "POST",
             body: formData,
           });
@@ -93,7 +103,7 @@ const apiUrl = getApiBase();
           apiClient.setTokensOnLogin(tokens);
           set({ tokens });
 
-          const userResponse = await fetch(`${apiUrl}/api/v1/auth/me`, {
+          const userResponse = await fetchWithTimeout(`${apiUrl}/api/v1/auth/me`, {
             headers: { Authorization: `Bearer ${tokens.access_token}` },
           });
           const user: User = await userResponse.json();
@@ -167,8 +177,8 @@ const apiUrl = getApiBase();
           return;
         }
         try {
-const apiUrl = getApiBase();
-          const response = await fetch(`${apiUrl}/api/v1/auth/me`, {
+          const apiUrl = getApiBase();
+          const response = await fetchWithTimeout(`${apiUrl}/api/v1/auth/me`, {
             headers: { Authorization: `Bearer ${tokens.access_token}` },
           });
           if (response.ok) {
@@ -244,7 +254,7 @@ const apiUrl = getApiBase();
           const tokens = get().tokens;
           if (!tokens) throw new Error("Not authenticated");
           const apiUrl = getApiBase();
-          const response = await fetch(`${apiUrl}/api/v1/auth/change-password`, {
+          const response = await fetchWithTimeout(`${apiUrl}/api/v1/auth/change-password`, {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
@@ -267,7 +277,7 @@ const apiUrl = getApiBase();
         set({ isLoading: true });
         try {
           const apiUrl = getApiBase();
-          const response = await fetch(
+          const response = await fetchWithTimeout(
             `${apiUrl}/api/v1/auth/verify-email?token=${encodeURIComponent(token)}`
           );
           if (!response.ok) {

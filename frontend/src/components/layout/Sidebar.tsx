@@ -112,9 +112,7 @@ export default function Sidebar() {
               <span className="font-bold text-lg tracking-tight text-[#252525] dark:text-[#F8F7F4] block">
                 Mentora
               </span>
-              <span className="text-[10px] font-medium tracking-wider text-[#6B6B6B] block -mt-1 uppercase">
-                AI Learning
-              </span>
+              
             </div>
           </Link>
           <button
