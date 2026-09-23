@@ -465,4 +465,12 @@ export interface ReviewSummary {
   total_reviews: number;
 }
 
+export interface PublicStats {
+  total_students: number;
+  total_flashcards: number;
+  quiz_pass_rate: number | null;
+  total_reviews: number;
+  average_rating: number | null;
+}
+
 export * from "./api";

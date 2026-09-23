@@ -32,6 +32,7 @@ from app.api.v1 import (
     voice,
     reports,
     reviews,
+    stats,
     dashboard,
     admin,
     exams,
@@ -294,6 +295,12 @@ app.include_router(
     reviews.router,
     prefix=f"{settings.API_PREFIX}/reviews",
     tags=["reviews"],
+)
+
+app.include_router(
+    stats.router,
+    prefix=f"{settings.API_PREFIX}/stats",
+    tags=["stats"],
 )
 
 app.include_router(

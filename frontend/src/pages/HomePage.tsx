@@ -7,6 +7,7 @@ import {
   TrendingUp, Target, Users, Sparkles, ChevronRight,
 } from "lucide-react";
 import { reviewService } from "@/services/reviewService";
+import { statsService } from "@/services/statsService";
 import { getInitials } from "@/lib/utils";
 
 const features = [
@@ -25,28 +26,32 @@ const steps = [
   { number: "04", icon: TrendingUp,  title: "Watch scores rise",     desc: "Mentora highlights weak spots and adjusts your plan so you improve fast." },
 ];
 
-const stats = [
-  { value: "50k+",  label: "Students" },
-  { value: "3.2M+", label: "Flashcards created" },
-  { value: "94%",   label: "Pass-rate improvement" },
-  { value: "4.9",   label: "Average rating" },
-];
+function formatCount(n: number): string {
+  if (n >= 1_000_000) {
+    const v = n / 1_000_000;
+    return `${v >= 10 ? v.toFixed(0) : v.toFixed(1)}M+`;
+  }
+  if (n >= 1000) {
+    const v = n / 1000;
+    return `${v >= 10 ? v.toFixed(0) : v.toFixed(1)}k+`;
+  }
+  return `${n}`;
+}
 
-const testimonials = [
-  { name: "Priya S.", role: "Medical student",      avatar: "PS", color: "from-pink-500 to-rose-500",    quote: "I uploaded my anatomy syllabus and had 200 flashcards ready in minutes. My marks went from 62 to 84 in one semester." },
-  { name: "Aryan K.", role: "Engineering student",  avatar: "AK", color: "from-blue-500 to-indigo-600",  quote: "The exam simulator exposed every gap in my understanding before the actual test, not during it." },
-  { name: "Sita M.",  role: "Law student",           avatar: "SM", color: "from-emerald-500 to-teal-500", quote: "I used to spend hours re-reading notes. Mentora replaced that with 20-minute daily sessions that actually stick." },
-];
+interface StatCard {
+  value: string;
+  label: string;
+}
 
 interface ReviewCard {
-  id?: number;
+  id: number;
   name: string;
   role: string;
   avatar: string;
   color: string;
   quote: string;
-  rating?: number;
-  created_at?: string | null;
+  rating: number;
+  created_at: string | null;
 }
 
 const AVATAR_COLORS = [
@@ -59,38 +64,45 @@ const AVATAR_COLORS = [
 ];
 
 export default function HomePage() {
-  const [reviews, setReviews] = useState<{ id: number; rating: number; comment: string | null; user_name: string | null; created_at: string | null }[] | null>(null);
-  const [reviewSummary, setReviewSummary] = useState<{ average_rating: number; total_reviews: number } | null>(null);
+  const [reviews, setReviews] = useState<ReviewCard[] | null>(null);
+  const [statsCards, setStatsCards] = useState<StatCard[] | null>(null);
+  const [totalStudents, setTotalStudents] = useState<number | null>(null);
 
   useEffect(() => {
-    reviewService.getSummary().then(setReviewSummary).catch(() => {});
-    reviewService.list().then((data) => setReviews(data.length > 0 ? data : null)).catch(() => setReviews(null));
+    statsService
+      .getPublicStats()
+      .then((s) => {
+        setTotalStudents(s.total_students > 0 ? s.total_students : null);
+        const cards: StatCard[] = [];
+        if (s.total_students > 0) cards.push({ value: formatCount(s.total_students), label: "Students" });
+        if (s.total_flashcards > 0) cards.push({ value: formatCount(s.total_flashcards), label: "Flashcards created" });
+        if (s.quiz_pass_rate != null) cards.push({ value: `${Math.round(s.quiz_pass_rate)}%`, label: "Quiz pass rate" });
+        if (s.average_rating != null) cards.push({ value: s.average_rating.toFixed(1), label: "Average rating" });
+        setStatsCards(cards.length > 0 ? cards : null);
+      })
+      .catch(() => {});
+
+    reviewService
+      .list()
+      .then((data) => {
+        const cards = data.map((r, i) => {
+          const name = r.user_name || "Student";
+          const initials = getInitials(name) || "S";
+          return {
+            id: r.id,
+            name,
+            role: "Verified student",
+            avatar: initials,
+            color: AVATAR_COLORS[i % AVATAR_COLORS.length],
+            quote: r.comment || "Great learning companion!",
+            rating: r.rating,
+            created_at: r.created_at,
+          };
+        });
+        setReviews(cards.length > 0 ? cards : null);
+      })
+      .catch(() => setReviews(null));
   }, []);
-
-  const statCards = reviewSummary && reviewSummary.total_reviews > 0
-    ? stats.map((s) =>
-        s.label === "Average rating"
-          ? { ...s, value: reviewSummary.average_rating.toFixed(1) }
-          : s
-      )
-    : stats;
-
-  const reviewCards: ReviewCard[] = (reviews ?? []).map((r, i) => {
-    const name = r.user_name || "Student";
-    const initials = getInitials(name) || "S";
-    return {
-      id: r.id,
-      name,
-      role: "Verified student",
-      avatar: initials,
-      color: AVATAR_COLORS[i % AVATAR_COLORS.length],
-      quote: r.comment || "Great learning companion!",
-      rating: r.rating,
-      created_at: r.created_at,
-    };
-  });
-
-  const shown: ReviewCard[] = reviewCards && reviewCards.length > 0 ? reviewCards : testimonials.map((t) => ({ ...t, rating: 5 }));
   return (
     <div className="min-h-screen bg-white dark:bg-slate-950 overflow-x-hidden">
 
@@ -142,14 +154,16 @@ export default function HomePage() {
             </Link>
           </div>
           <p className="text-sm text-slate-400 mb-14">No credit card required &middot; Free forever plan</p>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 max-w-3xl mx-auto">
-            {statCards.map((s) => (
-              <div key={s.label} className="bg-white dark:bg-slate-800/60 rounded-2xl border border-slate-200 dark:border-slate-700 px-4 py-5 shadow-sm hover:shadow-md transition-shadow">
-                <div className="text-2xl sm:text-3xl font-extrabold bg-gradient-to-r from-primary-600 to-secondary-600 bg-clip-text text-transparent">{s.value}</div>
-                <div className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1 font-medium">{s.label}</div>
-              </div>
-            ))}
-          </div>
+          {statsCards && (
+            <div className="flex flex-wrap items-center justify-center gap-4 max-w-3xl mx-auto">
+              {statsCards.map((s) => (
+                <div key={s.label} className="w-40 sm:w-44 bg-white dark:bg-slate-800/60 rounded-2xl border border-slate-200 dark:border-slate-700 px-4 py-5 shadow-sm hover:shadow-md transition-shadow">
+                  <div className="text-2xl sm:text-3xl font-extrabold bg-gradient-to-r from-primary-600 to-secondary-600 bg-clip-text text-transparent">{s.value}</div>
+                  <div className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1 font-medium">{s.label}</div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </section>
 
@@ -253,24 +267,30 @@ export default function HomePage() {
             <p className="text-sm font-semibold text-primary-600 dark:text-primary-400 uppercase tracking-widest mb-3">Student stories</p>
             <h2 className="text-4xl sm:text-5xl font-extrabold text-slate-900 dark:text-white mb-4">Real results, real students</h2>
           </div>
-          <div className="grid sm:grid-cols-3 gap-6">
-            {shown.map((t) => (
-              <div key={t.id ?? t.name} className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 p-6 shadow-sm hover:shadow-lg transition-shadow">
-                <div className="flex gap-1 mb-4">{[1,2,3,4,5].map((s) => (<Star key={s} className={"w-4 h-4 " + (s <= (t.rating ?? 5) ? "text-amber-400 fill-amber-400" : "text-slate-300 dark:text-slate-600")} />))}</div>
-                <p className="text-slate-700 dark:text-slate-300 text-sm leading-relaxed mb-6">{t.quote}</p>
-                <div className="flex items-center gap-3">
-                  <div className={"w-10 h-10 rounded-xl bg-gradient-to-br " + t.color + " flex items-center justify-center text-white text-sm font-bold flex-shrink-0"}>{t.avatar}</div>
-                  <div>
-                    <p className="font-semibold text-sm text-slate-900 dark:text-white">{t.name}</p>
-                    <p className="text-xs text-slate-500 dark:text-slate-400">{t.role}</p>
+          {reviews && reviews.length > 0 ? (
+            <div className="grid sm:grid-cols-3 gap-6">
+              {reviews.map((t) => (
+                <div key={t.id} className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 p-6 shadow-sm hover:shadow-lg transition-shadow">
+                  <div className="flex gap-1 mb-4">{[1,2,3,4,5].map((s) => (<Star key={s} className={"w-4 h-4 " + (s <= t.rating ? "text-amber-400 fill-amber-400" : "text-slate-300 dark:text-slate-600")} />))}</div>
+                  <p className="text-slate-700 dark:text-slate-300 text-sm leading-relaxed mb-6">{t.quote}</p>
+                  <div className="flex items-center gap-3">
+                    <div className={"w-10 h-10 rounded-xl bg-gradient-to-br " + t.color + " flex items-center justify-center text-white text-sm font-bold flex-shrink-0"}>{t.avatar}</div>
+                    <div>
+                      <p className="font-semibold text-sm text-slate-900 dark:text-white">{t.name}</p>
+                      <p className="text-xs text-slate-500 dark:text-slate-400">{t.role}</p>
+                    </div>
                   </div>
+                  {t.created_at && (
+                    <p className="mt-3 text-xs text-slate-400">{new Date(t.created_at).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" })}</p>
+                  )}
                 </div>
-                {t.created_at && (
-                  <p className="mt-3 text-xs text-slate-400">{new Date(t.created_at).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" })}</p>
-                )}
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-center text-slate-400 dark:text-slate-500 py-10">
+              No reviews yet &mdash; be the first to share your experience.
+            </p>
+          )}
         </div>
       </section>
 
@@ -282,7 +302,7 @@ export default function HomePage() {
             <div className="pointer-events-none absolute -bottom-20 -right-20 w-72 h-72 rounded-full bg-secondary-500/20 blur-3xl" />
             <div className="relative z-10">
               <div className="inline-flex items-center gap-2 px-4 py-1.5 mb-6 rounded-full bg-white/10 border border-white/20 text-white/80 text-sm font-medium">
-                <Users className="w-3.5 h-3.5" /> Join 50,000+ students already learning smarter
+                <Users className="w-3.5 h-3.5" /> {totalStudents ? `Join ${formatCount(totalStudents)} students already learning smarter` : "Join Mentora and start learning smarter"}
               </div>
               <h2 className="text-4xl sm:text-5xl font-extrabold text-white mb-4">Ready to ace your exams?</h2>
               <p className="text-lg text-white/70 mb-8 max-w-xl mx-auto">Upload your syllabus and get your first study plan in under 2 minutes.</p>
